@@ -18,17 +18,23 @@ struct FileRow: View {
     @State private var conformsText = false
     @State private var conformsPlist = false
     @State private var conformsZip = false
+    @State private var symlinkIsDir = true
     
     @State private var showInfo = false
     @State private var showPlistViewer = false
     @State private var showTextViewer = false
     @State private var previewURL: URL?
     
+    private var resolvedFileURL: URL {
+        file.type == .symlink ? file.destURL : file.fileURL
+    }
+    
     var body: some View {
         Group {
-            if file.type == .file {
+            if file.type == .file || (file.type == .symlink && !symlinkIsDir) {
                 Button {
-                    if conformsZip {
+                    let target = resolvedFileURL
+                    if conformsZip && file.type == .file {
                         let res = unzipFile(file.fileURL)
                         if res {
                             mgr.refreshFiles.toggle()
@@ -41,12 +47,12 @@ struct FileRow: View {
                         } else if conformsText {
                             showTextViewer.toggle()
                         } else {
-                            previewURL = file.fileURL
+                            previewURL = target
                         }
                     }
                 } label: {
                     HStack(spacing: isSolariumUI() ? 12 : 10) {
-                        Image(systemName: "doc")
+                        Image(systemName: file.type == .symlink ? "arrow.up.right.circle" : "doc")
                             .frame(width: 20, alignment: .center)
                             .foregroundStyle(file.hidden ? .secondary : .primary)
                         
@@ -79,7 +85,7 @@ struct FileRow: View {
                     .padding(.vertical, !hideDates && !file.modifiedDateStr.isEmpty && file.type == .file && !isSolariumUI() ? 1 : 0)
                 }
             } else {
-                NavigationLink(destination: FileBrowserView(path: file.destURL)) {
+                NavigationLink(destination: FileBrowserView(path: file.destURL, shouldGrant: true)) {
                     HStack(spacing: isSolariumUI() ? 12 : 10) {
                         Image(systemName: "arrow.up.right.circle")
                             .frame(width: 20, alignment: .center)
@@ -103,8 +109,20 @@ struct FileRow: View {
         }
         .foregroundStyle(Color(.label))
         .onAppear {
-            conformsText = conformsToTextViewer(file.fileURL)
-            conformsPlist = conformsToPlistViewer(file.fileURL)
+            let target = resolvedFileURL
+            if file.type == .symlink {
+                if !fm.isReadableFile(atPath: target.path) {
+                    _ = wq.grantAccess(path: target.path, requireWrite: false)
+                }
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: target.path, isDirectory: &isDir) {
+                    symlinkIsDir = isDir.boolValue
+                } else {
+                    symlinkIsDir = false
+                }
+            }
+            conformsText = conformsToTextViewer(target)
+            conformsPlist = conformsToPlistViewer(target)
             if file.uttype.conforms(to: .zip) {
                 conformsZip = true
             }
@@ -113,10 +131,10 @@ struct FileRow: View {
             InfoViewer(file)
         }
         .sheet(isPresented: $showPlistViewer) {
-            PlistViewer(file.fileURL)
+            PlistViewer(resolvedFileURL)
         }
         .sheet(isPresented: $showTextViewer) {
-            TextViewer(file.fileURL)
+            TextViewer(resolvedFileURL)
         }
         .quickLookPreview($previewURL)
         // MARK: cell actions
@@ -124,7 +142,7 @@ struct FileRow: View {
             if conformsText || conformsPlist {
                 Menu {
                     Button {
-                        previewURL = file.fileURL
+                        previewURL = resolvedFileURL
                     } label: {
                         Label("快速查看", systemImage: "eye")
                     }
@@ -149,7 +167,7 @@ struct FileRow: View {
                 }
             } else {
                 Button {
-                    previewURL = file.fileURL
+                    previewURL = resolvedFileURL
                 } label: {
                     Label("快速查看", systemImage: "eye")
                 }

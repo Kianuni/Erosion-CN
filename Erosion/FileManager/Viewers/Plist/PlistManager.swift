@@ -57,6 +57,9 @@ final class PlistManager: ObservableObject {
     func writePlistItems(newItem: PlistItem? = nil, delItem: PlistItem? = nil) -> Bool {
         if var newItem {
             newItem.isModified = true
+            if newItem.type != .data {
+                newItem.rawVal = nil
+            }
             let res = replacePlistItem(items: &plistArray, newItem: newItem)
             if !res {
                 print("(fm) failed to write plist: couldn't find \(newItem.key) in dictionary.")
@@ -111,9 +114,9 @@ final class PlistManager: ObservableObject {
         for item in items.indices {
             if items[item].id == newItem.id {
                 var updated = newItem
-                let old = items[item]
-                if old.type == updated.type && old.stringVal == updated.stringVal && old.boolVal == updated.boolVal && old.type != .dict && old.type != .array {
-                    updated.isModified = old.isModified
+                updated.isModified = true
+                if updated.type != .data {
+                    updated.rawVal = nil
                 }
                 items[item] = updated
                 return true

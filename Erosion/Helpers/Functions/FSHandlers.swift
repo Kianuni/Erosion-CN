@@ -27,7 +27,17 @@ class FSHandlers {
             print("(fs) 获取动态 Inode 基线失败，回退至预设上限: \(error.localizedDescription)")
         }
 
-        let targetMaxInode = baselineInode > 0 ? baselineInode : UInt64(max(maxInode, 15000000))
+        let userMax = UInt64(max(maxInode, 15000000))
+        let targetMaxInode: UInt64
+        if baselineInode > 0 {
+            if maxInode > 15000000 {
+                targetMaxInode = max(baselineInode + 50000, userMax)
+            } else {
+                targetMaxInode = max(baselineInode + 50000, min(baselineInode, userMax))
+            }
+        } else {
+            targetMaxInode = userMax
+        }
         print("(fs) 正在通过 pathleak 枚举目录: \(path) (上限: \(targetMaxInode))")
         let leakedPaths = pathleak(path, targetMaxInode) ?? []
         print("(fs) pathleak 枚举完成，共找到 \(leakedPaths.count) 个容器路径")

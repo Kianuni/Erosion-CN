@@ -12,6 +12,7 @@ import SwiftUI
 
 struct AppleIntelligenceCheckupCard: View {
     @ObservedObject var store: GestaltStore
+    var hasWriteAccess: Bool = true
     var onOpenInspector: () -> Void
 
     private struct FactorItem: Identifiable {
@@ -185,6 +186,7 @@ struct AppleIntelligenceCheckupCard: View {
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!hasWriteAccess && !weOnADebugBuild)
                 }
 
                 Button {

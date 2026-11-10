@@ -24,6 +24,7 @@ enum PBMsg {
 struct PosterBoardView: View {
     @AppStorage("pbContainerPath") private var pbContainerPath = ""
     @State private var isReady = false
+    @State private var hasContainerAccess = false
     @AppStorage("tendiesArray") private var tendiesArray: [TendiesObject] = []
     @AppStorage("hasShownFirstRunMsg") private var hasShownFirstRunMsg = false
     
@@ -174,8 +175,19 @@ struct PosterBoardView: View {
                         List {
                             Section {
                                 TextField("PosterBoard 容器路径", text: $pbContainerPath, axis: .vertical)
+                                    .onChange(of: pbContainerPath) { _, newPath in
+                                        let trimmed = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        hasContainerAccess = !trimmed.isEmpty && wq.grantAccess(path: trimmed).0 && fm.fileExists(atPath: trimmed)
+                                    }
                                 Button("重新获取路径") {
-                                    pbContainerPath = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
+                                    DispatchQueue.global(qos: .userInitiated).async {
+                                        let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
+                                        let access = !fetched.isEmpty && wq.grantAccess(path: fetched).0 && fm.fileExists(atPath: fetched)
+                                        DispatchQueue.main.async {
+                                            pbContainerPath = fetched
+                                            hasContainerAccess = access
+                                        }
+                                    }
                                 }
                             } header: {
                                 HeaderLabel("PosterBoard", symbol: "photo")
@@ -195,18 +207,21 @@ struct PosterBoardView: View {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
                                 Button("重置水星壁纸 (MercuryPoster)", role: .destructive) {
                                     let res = resetWallpapers(for: PBPath.mercury)
                                     if res {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
                                 Button("重置视频壁纸 (Videos)", role: .destructive) {
                                     let res = resetWallpapers(for: PBPath.photos)
                                     if res {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
                             } header: {
                                 HeaderLabel("数据管理", symbol: "loupe")
                             } footer: {
@@ -241,10 +256,10 @@ struct PosterBoardView: View {
                     func proceed() {
                         let res = applyObjects(tendiesArray.filter { $0.isOn })
                         if !res.0 {
-                            if res.1.contains("an item with the same name already exists") {
+                            if res.1.contains("an item with the same name already exists") || res.1.contains("已经存在") {
                                 Alertinator.shared.alert(title: "应用壁纸失败！", body: "所选的部分壁纸此前已添加过，请勿重复添加。")
                             } else {
-                                Alertinator.shared.alert(title: "应用壁纸失败！", body: PBMsg.corruption)
+                                Alertinator.shared.alert(title: "应用壁纸失败！", body: res.1.isEmpty ? PBMsg.corruption : res.1)
                             }
                         } else {
                             Haptic.shared.play(.soft)
@@ -253,7 +268,7 @@ struct PosterBoardView: View {
                     }
                 }
                 .disabled(tendiesArray.filter({ $0.isOn }).isEmpty)
-                .disabled(pbContainerPath.isEmpty || !fm.fileExists(atPath: AppURL.pb.path))
+                .disabled(!hasContainerAccess || pbContainerPath.isEmpty || !fm.fileExists(atPath: AppURL.pb.path))
             }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item]) { result in
@@ -265,12 +280,33 @@ struct PosterBoardView: View {
     }
     
     private func doSetupStuff() {
-        let fetchedPath: String? = pbContainerPath.isEmpty ? fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard") : nil
-        DispatchQueue.main.async {
-            if let fetchedPath, !fetchedPath.isEmpty {
-                pbContainerPath = fetchedPath
+        var resolvedPath = pbContainerPath
+        var accessOK = false
+        if !resolvedPath.isEmpty {
+            let grant = wq.grantAccess(path: resolvedPath)
+            if grant.0 && fm.fileExists(atPath: resolvedPath) {
+                accessOK = true
+            } else {
+                resolvedPath = ""
             }
-            if !fm.fileExists(atPath: AppURL.pb.path) {
+        }
+        if resolvedPath.isEmpty {
+            let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
+            if !fetched.isEmpty {
+                resolvedPath = fetched
+                let grant = wq.grantAccess(path: resolvedPath)
+                accessOK = grant.0 && fm.fileExists(atPath: resolvedPath)
+            }
+        }
+        DispatchQueue.main.async {
+            if !resolvedPath.isEmpty {
+                pbContainerPath = resolvedPath
+            }
+            hasContainerAccess = accessOK
+            if !accessOK {
+                Alertinator.shared.alert(title: "无法访问 PosterBoard 容器！", body: "未能定位或授权 com.apple.PosterBoard 容器，请检查权限或在右上角“壁纸设置”中重新获取路径。")
+            }
+            if !fm.fileExists(atPath: AppURL.pb.path) || !fm.fileExists(atPath: AppURL.pbFolders.path) {
                 do {
                     try fm.createDirIfNeeded(at: AppURL.pb)
                     try fm.createDirIfNeeded(at: AppURL.pbFolders)
@@ -283,25 +319,45 @@ struct PosterBoardView: View {
     }
     
     private func applyObjects(_ objects: [TendiesObject]) -> (Bool, String) {
+        guard !pbContainerPath.isEmpty else {
+            return (false, "未找到 PosterBoard 容器路径。")
+        }
+        let rootGrant = wq.grantAccess(path: pbContainerPath)
+        if !rootGrant.0 {
+            print("(pb) failed to grant access to container root \(pbContainerPath): \(rootGrant.2)")
+            return (false, rootGrant.2)
+        }
+        
         let descrTargets = Set(objects.map(\.targetDescr))
+        var resolvedTargetDirs: [PBPath: URL] = [:]
         for descrTarget in descrTargets {
-            let target = "\(pbContainerPath)/\(descrTarget.path)"
-            let res = wq.grantAccess(path: target)
-            if !res.0 {
-                print("(mg) failed to grant access at \(target): \(res.2)")
-                return (false, res.2)
+            let relPath = descrTarget.resolvedPath(in: pbContainerPath)
+            let targetURL = URL(fileURLWithPath: pbContainerPath).appendingPathComponent(relPath)
+            do {
+                try fm.createDirectory(at: targetURL, withIntermediateDirectories: true)
+            } catch {
+                print("(pb) failed to create target directory \(targetURL.path): \(error.localizedDescription)")
+                return (false, error.localizedDescription)
             }
+            if fm.fileExists(atPath: targetURL.path) {
+                let res = wq.grantAccess(path: targetURL.path)
+                if !res.0 {
+                    print("(pb) failed to grant access at \(targetURL.path): \(res.2)")
+                    return (false, res.2)
+                }
+            }
+            resolvedTargetDirs[descrTarget] = targetURL
         }
         
         for object in objects {
-            let container = "\(pbContainerPath)/\(object.targetDescr.path)"
+            guard let containerURL = resolvedTargetDirs[object.targetDescr] else { continue }
             for descr in object.descrNames {
                 let descrURL = AppURL.pbFolders.appendingPathComponent(object.folderName).appendingPathComponent(descr)
-                let target = object.targetDescr == .mercury ? URL(fileURLWithPath: container).appendingPathComponent(descrURL.lastPathComponent) : URL(fileURLWithPath: container).appendingPathComponent(UUID().uuidString)
+                let target = object.targetDescr == .mercury ? containerURL.appendingPathComponent(descrURL.lastPathComponent) : containerURL.appendingPathComponent(UUID().uuidString)
                 do {
                     try fm.copyItem(at: descrURL, to: target)
                 } catch {
-                    print("(mg) failed to copy descriptor (folder: \(object.folderName)): \(error.localizedDescription)")
+                    print("(pb) failed to copy descriptor (folder: \(object.folderName)): \(error.localizedDescription)")
                     return (false, error.localizedDescription)
                 }
             }
@@ -310,8 +366,26 @@ struct PosterBoardView: View {
     }
     
     private func resetWallpapers(for item: PBPath) -> Bool {
+        guard !pbContainerPath.isEmpty else {
+            Alertinator.shared.alert(title: "重置壁纸失败！", body: "未找到 PosterBoard 容器路径。")
+            return false
+        }
+        let rootGrant = wq.grantAccess(path: pbContainerPath)
+        if !rootGrant.0 {
+            Alertinator.shared.alert(title: "重置壁纸失败！", body: "无法获取 PosterBoard 容器权限：\(rootGrant.2)")
+            return false
+        }
+        let relPath = item.resolvedPath(in: pbContainerPath)
+        let target = URL(fileURLWithPath: pbContainerPath).appendingPathComponent(relPath)
+        if !fm.fileExists(atPath: target.path) {
+            return true
+        }
+        let targetGrant = wq.grantAccess(path: target.path)
+        if !targetGrant.0 {
+            Alertinator.shared.alert(title: "重置壁纸失败！", body: "无法获取目标壁纸目录权限：\(targetGrant.2)")
+            return false
+        }
         do {
-            let target = URL(fileURLWithPath: "\(pbContainerPath)/\(item.path)")
             let contents = try fm.contentsOfDirectory(at: target, includingPropertiesForKeys: nil)
             
             for url in contents {
@@ -320,6 +394,7 @@ struct PosterBoardView: View {
             return true
         } catch {
             print("(pb) failed to reset \(item.rawValue): \(error.localizedDescription)")
+            Alertinator.shared.alert(title: "重置壁纸失败！", body: error.localizedDescription)
             return false
         }
     }
@@ -337,8 +412,9 @@ struct PosterBoardView: View {
                 withAnimation {
                     tendiesArray.append(tendies)
                 }
+                return true
             }
-            return true
+            return false
         case .failure(let error):
             print("(pb) failed to import file: \(error.localizedDescription)")
             return false

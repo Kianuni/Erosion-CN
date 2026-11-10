@@ -33,7 +33,8 @@ struct CacheCleanerView: View {
         "com.jbdotparty.Erosion",
         "com.apple.PosterBoard",
         "com.apple.springboard",
-        "com.apple.Preferences"
+        "com.apple.Preferences",
+        "com.apple.mobilephone"
     ]
 
     private var filteredEntries: [ContainerCacheEntry] {
@@ -167,7 +168,7 @@ struct CacheCleanerView: View {
 
                                 HStack(spacing: 10) {
                                     NavigationLink {
-                                        FileBrowserView(path: entry.containerURL.appendingPathComponent("Library/Caches"), shouldGrant: true)
+                                        ContainerSubdirBrowserView(containerURL: entry.containerURL, relativeSubpath: "Library/Caches")
                                     } label: {
                                         Text("查看")
                                             .font(.caption2)
@@ -317,7 +318,6 @@ struct CacheCleanerView: View {
     }
 
     private static func purgeCacheContents(for entry: ContainerCacheEntry) -> Int64 {
-        let before = entry.totalCleanableBytes
         let wasActive = wq.hasActiveAccess(path: entry.containerURL.path)
         guard wq.grantAccess(path: entry.containerURL.path).0 else { return 0 }
         defer {
@@ -331,12 +331,24 @@ struct CacheCleanerView: View {
             entry.containerURL.appendingPathComponent("tmp"),
             entry.containerURL.appendingPathComponent("Library/WebKit/WebsiteData/CacheStorage")
         ]
+        var totalFreed: Int64 = 0
         for dir in dirs {
             var dirSt = stat()
             guard lstat(dir.path, &dirSt) == 0, (dirSt.st_mode & S_IFMT) == S_IFDIR else { continue }
+            let subWasActive = wq.hasActiveAccess(path: dir.path)
+            _ = wq.grantAccess(path: dir.path)
+            defer {
+                if !subWasActive {
+                    wq.releaseAccess(path: dir.path)
+                }
+            }
+            let before = AppContainerDirectoryHelper.directorySize(at: dir, maxDepth: 5)
             guard let children = try? fm.contentsOfDirectory(atPath: dir.path) else { continue }
             for child in children {
                 guard !child.contains("/"), child != ".", child != ".." else { continue }
+                if entry.bundleID == "com.apple.mobilephone" && child == "TelephonyUI-10" {
+                    continue
+                }
                 let childURL = dir.appendingPathComponent(child)
                 var childSt = stat()
                 guard lstat(childURL.path, &childSt) == 0 else { continue }
@@ -346,7 +358,9 @@ struct CacheCleanerView: View {
                     try? fm.removeItem(at: childURL)
                 }
             }
+            let after = AppContainerDirectoryHelper.directorySize(at: dir, maxDepth: 5)
+            totalFreed += max(0, before - after)
         }
-        return before
+        return totalFreed
     }
 }

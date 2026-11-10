@@ -242,7 +242,7 @@ struct AppDataBackupView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
 
-                            HStack(spacing: 14) {
+                            HStack(spacing: 12) {
                                 Button {
                                     backupContainer(item)
                                 } label: {
@@ -252,7 +252,7 @@ struct AppDataBackupView: View {
                                 .buttonStyle(.borderless)
 
                                 NavigationLink {
-                                    FileBrowserView(path: item.containerURL.appendingPathComponent("Documents"), shouldGrant: true)
+                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Documents")
                                 } label: {
                                     Label("修改 Documents", systemImage: "folder.badge.gearshape")
                                         .font(.caption)
@@ -260,9 +260,17 @@ struct AppDataBackupView: View {
                                 .buttonStyle(.borderless)
 
                                 NavigationLink {
-                                    FileBrowserView(path: item.containerURL.appendingPathComponent("Library/Preferences"), shouldGrant: true)
+                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Library/Preferences")
                                 } label: {
                                     Label("修改配置 Plist", systemImage: "doc.text.magnifyingglass")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+
+                                NavigationLink {
+                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: nil)
+                                } label: {
+                                    Label("完整目录", systemImage: "folder")
                                         .font(.caption)
                                 }
                                 .buttonStyle(.borderless)
@@ -345,7 +353,7 @@ struct AppDataBackupView: View {
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
                 let wasActive = wq.hasActiveAccess(path: url.path)
-                guard wq.grantAccess(path: url.path).0 else { continue }
+                guard wq.grantAccess(path: url.path, requireWrite: false).0 else { continue }
                 defer {
                     if !wasActive {
                         wq.releaseAccess(path: url.path)
@@ -395,7 +403,7 @@ struct AppDataBackupView: View {
             do {
                 try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
                 let wasActive = wq.hasActiveAccess(path: item.containerURL.path)
-                guard wq.grantAccess(path: item.containerURL.path).0 else {
+                guard wq.grantAccess(path: item.containerURL.path, requireWrite: false).0 else {
                     throw "无法获取该应用容器的读取权限"
                 }
                 defer {
@@ -406,30 +414,38 @@ struct AppDataBackupView: View {
 
                 let docsSrc = item.containerURL.appendingPathComponent("Documents")
                 let prefsSrc = item.containerURL.appendingPathComponent("Library/Preferences")
+                var copiedAny = false
 
                 if fm.fileExists(atPath: docsSrc.path) {
-                    try? fm.copyItem(at: docsSrc, to: stagingDir.appendingPathComponent("Documents"))
+                    _ = wq.grantAccess(path: docsSrc.path, requireWrite: false)
+                    try fm.copyItem(at: docsSrc, to: stagingDir.appendingPathComponent("Documents"))
+                    copiedAny = true
                 }
                 if fm.fileExists(atPath: prefsSrc.path) {
+                    _ = wq.grantAccess(path: prefsSrc.path, requireWrite: false)
                     let libDest = stagingDir.appendingPathComponent("Library")
                     try fm.createDirectory(at: libDest, withIntermediateDirectories: true)
-                    try? fm.copyItem(at: prefsSrc, to: libDest.appendingPathComponent("Preferences"))
+                    try fm.copyItem(at: prefsSrc, to: libDest.appendingPathComponent("Preferences"))
+                    copiedAny = true
+                }
+
+                guard copiedAny else {
+                    throw "未在该应用容器中找到可备份的 Documents 或 Preferences 目录数据。"
                 }
 
                 let meta: [String: String] = [
                     "bundleID": item.bundleID,
                     "createdAt": ISO8601DateFormatter().string(from: Date())
                 ]
-                if let metaData = try? PropertyListSerialization.data(fromPropertyList: meta, format: .xml, options: 0) {
-                    try? metaData.write(to: stagingDir.appendingPathComponent("BackupManifest.plist"))
-                }
+                let metaData = try PropertyListSerialization.data(fromPropertyList: meta, format: .xml, options: 0)
+                try metaData.write(to: stagingDir.appendingPathComponent("BackupManifest.plist"), options: .atomic)
 
                 let formatter = DateFormatter()
                 formatter.dateFormat = "yyyyMMdd_HHmmss"
                 let zipName = "\(item.bundleID)__\(formatter.string(from: Date())).zip"
                 let zipURL = Self.backupsRootURL.appendingPathComponent(zipName)
                 if fm.fileExists(atPath: zipURL.path) {
-                    try? fm.removeItem(at: zipURL)
+                    try fm.removeItem(at: zipURL)
                 }
 
                 try fm.zipItem(at: stagingDir, to: zipURL, shouldKeepParent: false)
@@ -457,6 +473,22 @@ struct AppDataBackupView: View {
             defer { try? fm.removeItem(at: extractDir) }
 
             do {
+                guard let archive = try? Archive(url: backup.fileURL, accessMode: .read) else {
+                    throw "无法读取备份压缩包，文件可能已损坏！"
+                }
+                let destStd = extractDir.standardizedFileURL
+                let destPrefix = destStd.path.hasSuffix("/") ? destStd.path : destStd.path + "/"
+                for entry in archive {
+                    let entryPath = entry.path
+                    if entryPath.hasPrefix("/") || entryPath.split(separator: "/").contains("..") || entryPath.split(separator: "\\").contains("..") {
+                        throw "检测到备份包包含非法路径穿越条目 (\(entryPath))，已拒绝还原！"
+                    }
+                    let resolvedPath = destStd.appendingPathComponent(entryPath).standardizedFileURL.path
+                    if resolvedPath != destStd.path && !resolvedPath.hasPrefix(destPrefix) {
+                        throw "检测到备份包条目越界 (\(entryPath))，已拒绝还原！"
+                    }
+                }
+
                 try fm.createDirectory(at: extractDir, withIntermediateDirectories: true)
                 try fm.unzipItem(at: backup.fileURL, to: extractDir)
 
@@ -475,10 +507,19 @@ struct AppDataBackupView: View {
                     return
                 }
 
-                let targetContainerPath: String
+                var targetContainerPath = ""
+                var preGrantedCached = false
                 if let matched = containers.first(where: { $0.bundleID == resolvedBundleID }) {
-                    targetContainerPath = matched.containerURL.path
-                } else {
+                    let cachedPath = matched.containerURL.path
+                    let wasCachedActive = wq.hasActiveAccess(path: cachedPath)
+                    if wq.grantAccess(path: cachedPath).0 && fm.fileExists(atPath: cachedPath) && getBIDFromXattr(URL(fileURLWithPath: cachedPath)) == resolvedBundleID {
+                        targetContainerPath = cachedPath
+                        preGrantedCached = !wasCachedActive
+                    } else if !wasCachedActive {
+                        wq.releaseAccess(path: cachedPath)
+                    }
+                }
+                if targetContainerPath.isEmpty {
                     targetContainerPath = fsHandlers.getContainerPath(forMatch: resolvedBundleID)
                 }
 
@@ -493,7 +534,7 @@ struct AppDataBackupView: View {
                 }
 
                 let containerURL = URL(fileURLWithPath: targetContainerPath)
-                let wasActive = wq.hasActiveAccess(path: containerURL.path)
+                let wasActive = preGrantedCached ? false : wq.hasActiveAccess(path: containerURL.path)
                 guard wq.grantAccess(path: containerURL.path).0 else {
                     throw "无法获取目标容器的写入权限"
                 }
@@ -504,23 +545,33 @@ struct AppDataBackupView: View {
                 }
 
                 var restoredFiles = 0
+                var restoredPrefs = false
                 let docsExtract = extractDir.appendingPathComponent("Documents")
                 if fm.fileExists(atPath: docsExtract.path) {
                     let docsTarget = containerURL.appendingPathComponent("Documents")
+                    try? fm.createDirectory(at: docsTarget, withIntermediateDirectories: true)
+                    _ = wq.grantAccess(path: docsTarget.path)
                     restoredFiles += Self.mergeDirectoryInPlace(from: docsExtract, to: docsTarget)
                 }
 
                 let prefsExtract = extractDir.appendingPathComponent("Library/Preferences")
                 if fm.fileExists(atPath: prefsExtract.path) {
                     let prefsTarget = containerURL.appendingPathComponent("Library/Preferences")
-                    restoredFiles += Self.mergeDirectoryInPlace(from: prefsExtract, to: prefsTarget)
+                    try? fm.createDirectory(at: prefsTarget, withIntermediateDirectories: true)
+                    _ = wq.grantAccess(path: prefsTarget.path)
+                    let pCount = Self.mergeDirectoryInPlace(from: prefsExtract, to: prefsTarget)
+                    if pCount > 0 {
+                        restoredPrefs = true
+                    }
+                    restoredFiles += pCount
                 }
 
+                let cfprefsHint = restoredPrefs ? "\n\n提示：本次还原包含 Preferences 偏好设置，建议在后台多任务中彻底关闭目标应用或注销设备（Respring），以便系统 cfprefsd 重新加载配置。" : ""
                 DispatchQueue.main.async {
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
                         title: "存档还原完成！",
-                        body: "已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(resolvedBundleID)」容器。"
+                        body: "已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(resolvedBundleID)」容器。" + cfprefsHint
                     )
                 }
             } catch {
@@ -553,7 +604,11 @@ struct AppDataBackupView: View {
                         count += 1
                     }
                 } else {
-                    if writeFileTemp(data, to: dstURL).0 {
+                    if data.isEmpty {
+                        if (try? data.write(to: dstURL, options: .atomic)) != nil {
+                            count += 1
+                        }
+                    } else if writeFileTemp(data, to: dstURL).0 {
                         count += 1
                     }
                 }
@@ -589,6 +644,49 @@ struct AppDataBackupView: View {
             }
         case .failure(let error):
             Alertinator.shared.alert(title: "导入备份包失败！", body: error.localizedDescription)
+        }
+    }
+}
+
+struct ContainerSubdirBrowserView: View {
+    let containerURL: URL
+    let relativeSubpath: String?
+    @State private var targetURL: URL?
+    @State private var errorMsg: String?
+
+    var body: some View {
+        Group {
+            if let targetURL {
+                FileBrowserView(path: targetURL, shouldGrant: true)
+            } else if let errorMsg {
+                List {
+                    CompactAlert(title: "无法打开容器目录！", symbol: "folder.badge.questionmark", text: errorMsg)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("正在授权并打开容器目录...")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .onAppear {
+            guard targetURL == nil && errorMsg == nil else { return }
+            let rootGrant = wq.grantAccess(path: containerURL.path)
+            guard rootGrant.0 else {
+                errorMsg = "无法获取应用容器根目录权限：\(rootGrant.2)"
+                return
+            }
+            if let relativeSubpath, !relativeSubpath.isEmpty {
+                let subURL = containerURL.appendingPathComponent(relativeSubpath)
+                try? fm.createDirectory(at: subURL, withIntermediateDirectories: true)
+                _ = wq.grantAccess(path: subURL.path)
+                targetURL = subURL
+            } else {
+                targetURL = containerURL
+            }
         }
     }
 }

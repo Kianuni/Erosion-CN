@@ -15,26 +15,30 @@ import ZIPFoundation
 enum KeypadID: String, CaseIterable {
     case one, two, three, four, five, six, seven, eight, nine, star, zero, pound
     
-    var fileNames: [String] {
+    var keyFragment: String {
         switch self {
-        case .one: return getFileNames(forKey: "-1-")
-        case .two: return getFileNames(forKey: "-2-A B C")
-        case .three: return getFileNames(forKey: "-3-D E F")
-        case .four: return getFileNames(forKey: "-4-G H I")
-        case .five: return getFileNames(forKey: "-5-J K L")
-        case .six: return getFileNames(forKey: "-6-M N O")
-        case .seven: return getFileNames(forKey: "-7-P Q R S")
-        case .eight: return getFileNames(forKey: "-8-T U V")
-        case .nine: return getFileNames(forKey: "-9-W X Y Z")
-        case .star: return getFileNames(forKey: "-*-")
-        case .zero: return getFileNames(forKey: "-0-+")
-        case .pound: return getFileNames(forKey: "-#-")
+        case .one: return "-1-"
+        case .two: return "-2-A B C"
+        case .three: return "-3-D E F"
+        case .four: return "-4-G H I"
+        case .five: return "-5-J K L"
+        case .six: return "-6-M N O"
+        case .seven: return "-7-P Q R S"
+        case .eight: return "-8-T U V"
+        case .nine: return "-9-W X Y Z"
+        case .star: return "-*-"
+        case .zero: return "-0-+"
+        case .pound: return "-#-"
         }
     }
     
-    private func getFileNames(forKey key: String) -> [String] {
+    var fileNames: [String] {
+        fileNames(withPrefix: kp.getFileRegCode())
+    }
+    
+    func fileNames(withPrefix prefix: String) -> [String] {
         let files = ["--mask.png", "--white.png", "-hi-mask.png", "-hi-white.png", "--white-bold.png", "--mask-bold.png"]
-        return files.map { kp.getFileRegCode() + key + $0 }
+        return files.map { prefix + keyFragment + $0 }
     }
     
     func getAccentedFileName() -> String {
@@ -94,6 +98,7 @@ enum KPMsg {
 let kp = KeypadManager()
 final class KeypadManager: ObservableObject {
     static let shared = KeypadManager()
+    private static let savedRegCodeKey = "kpDetectedFileRegCode"
     
     @Published var mpKeypad = [KeypadItem]()
     
@@ -109,11 +114,21 @@ final class KeypadManager: ObservableObject {
     
     // fun...
     func getFileRegCode() -> String {
-        let tpURL = URL(fileURLWithPath: mpContainerPath()).appendingPathComponent("Library/Caches/TelephonyUI-10")
-        if let tpURLs = try? fm.contentsOfDirectory(at: tpURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) {
-            if let split = tpURLs.first?.lastPathComponent.split(separator: "-") {
-                return split.map { String($0) }[0]
+        let base = mpContainerPath()
+        if !base.isEmpty {
+            let tpURL = URL(fileURLWithPath: base).appendingPathComponent("Library/Caches/TelephonyUI-10")
+            if let tpURLs = try? fm.contentsOfDirectory(at: tpURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) {
+                for fileURL in tpURLs where fileURL.pathExtension.lowercased() == "png" {
+                    let split = fileURL.lastPathComponent.split(separator: "-").map { String($0) }
+                    if let first = split.first, !first.isEmpty, first != "other" {
+                        UserDefaults.standard.set(first, forKey: Self.savedRegCodeKey)
+                        return first
+                    }
+                }
             }
+        }
+        if let cached = UserDefaults.standard.string(forKey: Self.savedRegCodeKey), !cached.isEmpty, cached != "other" {
+            return cached
         }
         return "other"
     }
@@ -134,8 +149,20 @@ final class KeypadManager: ObservableObject {
     }
 
     func applyKeypadItems() -> Bool {
+        let base = mpContainerPath()
+        guard !base.isEmpty else { return false }
+        guard wq.grantAccess(path: base).0 else { return false }
+        let tpURL = URL(fileURLWithPath: base).appendingPathComponent("Library/Caches/TelephonyUI-10")
+        do {
+            try fm.createDirectory(at: tpURL, withIntermediateDirectories: true)
+        } catch {
+            print("(kp) failed to create TelephonyUI-10 directory: \(error.localizedDescription)")
+            return false
+        }
+        _ = wq.grantAccess(path: tpURL.path)
         var failed = 0
         var appliedAny = false
+        let targetPrefix = getFileRegCode()
         for item in mpKeypad {
             // Skip untouched/empty keypad buttons instead of writing 0-byte PNGs (SEC-M4-06)
             guard !item.imgData.isEmpty else { continue }
@@ -144,9 +171,9 @@ final class KeypadManager: ObservableObject {
                 failed += 1
                 continue
             }
-            let files = item.kpID.fileNames
+            let files = item.kpID.fileNames(withPrefix: targetPrefix)
             for fileName in files {
-                let finalURL = URL(fileURLWithPath: mpContainerPath()).appendingPathComponent("Library/Caches/TelephonyUI-10").appendingPathComponent(fileName)
+                let finalURL = tpURL.appendingPathComponent(fileName)
                 do {
                     if fm.fileExists(atPath: finalURL.path) {
                         let res = writeFileAtomically(item.imgData, to: finalURL)
@@ -166,12 +193,17 @@ final class KeypadManager: ObservableObject {
     
     func resetKeypadItems() -> Bool {
         do {
-            let filesURL = URL(fileURLWithPath: mpContainerPath()).appendingPathComponent("Library/Caches/TelephonyUI-10")
+            let base = mpContainerPath()
+            guard !base.isEmpty, wq.grantAccess(path: base).0 else { return false }
+            let filesURL = URL(fileURLWithPath: base).appendingPathComponent("Library/Caches/TelephonyUI-10")
+            let targetPrefix = getFileRegCode()
             var targetNames = Set<String>()
             for item in mpKeypad {
-                for fn in item.kpID.fileNames { targetNames.insert(fn) }
+                for fn in item.kpID.fileNames(withPrefix: targetPrefix) { targetNames.insert(fn) }
+                for fn in item.kpID.fileNames(withPrefix: "other") { targetNames.insert(fn) }
             }
             if fm.fileExists(atPath: filesURL.path) {
+                _ = wq.grantAccess(path: filesURL.path)
                 let files = try fm.contentsOfDirectory(at: filesURL, includingPropertiesForKeys: [])
                 for fileURL in files where targetNames.contains(fileURL.lastPathComponent) {
                     try fm.removeItem(at: fileURL)
@@ -264,59 +296,81 @@ final class KeypadManager: ObservableObject {
     // by far the most annoying piece of swift i've ever had to write. but, it works how it should, so i'm happy.
     // -lunginspector, 9/11/26
     func importTheme(fromURL fileURL: URL) -> Bool {
+        let tempURL = URL.temporaryDirectory.appendingPathComponent("ImportedKeypad_\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tempURL) }
         do {
-            // create a temp dir for extraction
-            var filesURL = URL.temporaryDirectory.appendingPathComponent(fileURL.deletingPathExtension().lastPathComponent + "_\(UUID())_EROSIONTMP")
+            guard let archive = try? Archive(url: fileURL, accessMode: .read) else {
+                throw "无法读取拨号主题压缩包！"
+            }
+            let destStd = tempURL.standardizedFileURL
+            let destPrefix = destStd.path.hasSuffix("/") ? destStd.path : destStd.path + "/"
+            for entry in archive {
+                let entryPath = entry.path
+                if entryPath.hasPrefix("/") || entryPath.split(separator: "/").contains("..") || entryPath.split(separator: "\\").contains("..") {
+                    throw "检测到主题包包含非法路径穿越条目 (\(entryPath))，已拒绝导入！"
+                }
+                let resolvedPath = destStd.appendingPathComponent(entryPath).standardizedFileURL.path
+                if resolvedPath != destStd.path && !resolvedPath.hasPrefix(destPrefix) {
+                    throw "检测到主题包条目越界 (\(entryPath))，已拒绝导入！"
+                }
+            }
+            var filesURL = tempURL
             try fm.createDirectory(at: filesURL, withIntermediateDirectories: true)
             try fm.unzipItem(at: fileURL, to: filesURL)
-            let dirURLs = try fm.contentsOfDirectory(at: filesURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+            let dirURLs = try fm.contentsOfDirectory(at: filesURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles).filter { $0.lastPathComponent != "__MACOSX" }
             if dirURLs.count < 1 {
                 throw "no files found inside of extracted folder!"
             } else if dirURLs.count == 1 {
-                filesURL = filesURL.appendingPathComponent(dirURLs[0].lastPathComponent)
-            } else {
-                if let index = dirURLs.firstIndex(where: { $0.lastPathComponent == "TelephonyUI-8" || $0.lastPathComponent == "TelephonyUI-9" || $0.lastPathComponent == "TelephonyUI-10" }) {
-                    filesURL = filesURL.appendingPathComponent(dirURLs[index].lastPathComponent)
-                } else {
-                    throw "no telephonyui folders found inside of extracted folder!"
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: dirURLs[0].path, isDirectory: &isDir), isDir.boolValue {
+                    filesURL = dirURLs[0]
                 }
+            } else if let index = dirURLs.firstIndex(where: { $0.lastPathComponent == "TelephonyUI-8" || $0.lastPathComponent == "TelephonyUI-9" || $0.lastPathComponent == "TelephonyUI-10" }) {
+                filesURL = dirURLs[index]
+            } else if !dirURLs.contains(where: { $0.pathExtension.lowercased() == "png" }) {
+                throw "no telephonyui folders found inside of extracted folder!"
             }
-            // once extracted check each file for a match with the right image
-            var replaceCount = 0
+            // once extracted check each file for a match with the right image (excluding -hi- highlight images)
             let fileURLs = try fm.contentsOfDirectory(at: filesURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
-            for fileURL in fileURLs {
-                let split = fileURL.lastPathComponent.split(separator: "-").map { String($0) }
-                //print(split)
-                let fileForAppr = UIScreen.main.traitCollection.userInterfaceStyle == .dark ? "white" : "mask"
-                // for appearance - get appearance for key ("white"-dark, "mask"-light) and see if it matches the current appearance too
-                let apprName = {
-                    if split.indices.contains(3) {
-                        let appearance = split[3].split(separator: ".")[0]
-                        if appearance == fileForAppr {
-                            return split[3]
+                .filter { !$0.lastPathComponent.contains("-hi-") }
+            let preferredAppr = UIScreen.main.traitCollection.userInterfaceStyle == .dark ? "white" : "mask"
+            
+            func matchFiles(acceptedAppearances: Set<String>) throws -> Int {
+                var count = 0
+                var matchedIDs = Set<KeypadID>()
+                for itemURL in fileURLs {
+                    let split = itemURL.lastPathComponent.split(separator: "-").map { String($0) }
+                    let apprName: String = {
+                        if split.indices.contains(3) {
+                            let appearance = String(split[3].split(separator: ".")[0])
+                            if acceptedAppearances.contains(appearance) {
+                                return split[3]
+                            }
                         }
-                    }
-                    if split.indices.contains(2) {
-                        let appearance = split[2].split(separator: ".")[0]
-                        if appearance == fileForAppr {
-                            return split[2]
+                        if split.indices.contains(2) {
+                            let appearance = String(split[2].split(separator: ".")[0])
+                            if acceptedAppearances.contains(appearance) {
+                                return split[2]
+                            }
                         }
-                    }
-                    return ""
-                }()
-                //print(apprName)
-                if split.indices.contains(1) {
-                    // lookup for key
+                        return ""
+                    }()
+                    guard !apprName.isEmpty, split.indices.contains(1) else { continue }
                     let keyNum = split[1]
-                    //print("(kp) fileName: \(fileURL.lastPathComponent), keyNum: \(keyNum), appearance: \(appearance), fileForAppr: \(fileForAppr), apprName: \(apprName)")
-                    // check if that's the appearance we actually want
-                    if let id = KeypadID.allCases.first(where: { $0.fileNames.contains { $0.contains(keyNum) && $0.contains(apprName) }}) {
-                        //print("(kp) found image! lookup: \(keyNum), fileName: \(fileURL.lastPathComponent)")
-                        let data = try Data(contentsOf: fileURL)
+                    if let id = KeypadID.allCases.first(where: { $0.fileNames.contains { $0.contains("-\(keyNum)-") && $0.contains(apprName) } }),
+                       !matchedIDs.contains(id) {
+                        let data = try Data(contentsOf: itemURL)
                         updateKeypadItem(forID: id, withData: data, ogData: data)
-                        replaceCount += 1
+                        matchedIDs.insert(id)
+                        count += 1
                     }
                 }
+                return count
+            }
+            
+            var replaceCount = try matchFiles(acceptedAppearances: [preferredAppr])
+            if replaceCount < 1 {
+                replaceCount = try matchFiles(acceptedAppearances: ["mask", "white"])
             }
             if replaceCount < 1 {
                 throw "the file was unzipped, but no keys were found?"

@@ -37,6 +37,7 @@ struct GestaltView: View {
     @State private var pendingDiffs: [MGDiffItem] = []
     @State private var pendingCandidateDict: NSMutableDictionary? = nil
     @State private var hasPromptedBuildMismatch = false
+    @State private var hasWriteAccess = false
     
     var body: some View {
         NavigationStack {
@@ -127,8 +128,11 @@ struct GestaltView: View {
                 }
                 
                 Section {
+                    let internalGateLocked = store.isEnabled([MGKey.appIntell]) || (isAppleIntellHD() && !mgOverrideGates)
                     PlainToggle("启用 Apple 内部安装模式", infoType: .info, infoMessage: MGMsg.intInstall, isOn: store.mgKeyBinding([MGKey.intInstall]))
+                        .disabled(internalGateLocked && !store.isKeyEnabled(MGKey.intInstall))
                     PlainToggle("启用内部版本标识 (Internal Build)", infoType: .info, infoMessage: MGMsg.intBuild, isOn: store.mgKeyBinding([MGKey.intBuild]))
+                        .disabled(internalGateLocked && !store.isKeyEnabled(MGKey.intBuild))
                 } header: {
                     HeaderLabel("内部调试选项", symbol: "ant")
                 } footer: {
@@ -136,10 +140,9 @@ struct GestaltView: View {
                         Text("已自动锁定：Apple 内部安装模式与 Apple 智能互斥，开启会导致原生 AI 机型无法激活 Apple 智能。")
                     }
                 }
-                .disabled(store.isEnabled([MGKey.appIntell]) || (isAppleIntellHD() && !mgOverrideGates))
                 
                 Section {
-                    AppleIntelligenceCheckupCard(store: store) {
+                    AppleIntelligenceCheckupCard(store: store, hasWriteAccess: hasWriteAccess) {
                         showInspectorSheet = true
                     }
 
@@ -375,6 +378,7 @@ struct GestaltView: View {
                         } label: {
                             Label("还原原始备份", systemImage: "xmark")
                         }
+                        .disabled(!hasWriteAccess && !weOnADebugBuild)
                         
                         Button(role: .destructive) {
                             Alertinator.shared.alert(title: "确定要彻底重置 MobileGestalt 吗？", body: MGMsg.mgReset, actionLabel: "确认重置", action: {
@@ -396,6 +400,7 @@ struct GestaltView: View {
                         } label: {
                             Label("清除并重建缓存", systemImage: "trash")
                         }
+                        .disabled(!hasWriteAccess && !weOnADebugBuild)
                         
                         Divider()
                         
@@ -410,7 +415,9 @@ struct GestaltView: View {
                             List {
                                 Section {
                                     Button("导出当前 MobileGestalt") {
-                                        presentShareSheet(with: MGURL.fsGestaltURL)
+                                        if let tempURL = makeTemp(MGURL.fsGestaltURL) {
+                                            presentShareSheet(with: tempURL)
+                                        }
                                     }
                                     Button("导出原始备份 (OriginalGestalt)") {
                                         presentShareSheet(with: MGURL.savedGestaltURL)
@@ -462,6 +469,7 @@ struct GestaltView: View {
                             prepareApplyPreview()
                         }
                     }
+                    .disabled(!hasWriteAccess && !weOnADebugBuild)
                 }
             }
             .sheet(isPresented: $showInfoSheet) {
@@ -579,9 +587,12 @@ struct GestaltView: View {
                     ogMachineName = machineName()
                 }
                 let isWritable = fm.isWritableFile(atPath: MGURL.fsGestaltURL.path)
-                if !isWritable {
+                if isWritable {
+                    hasWriteAccess = true
+                } else {
                     let res = wq.grantAccess(path: MGURL.fsGestaltURL.deletingLastPathComponent().path)
-                    if !res.0 {
+                    hasWriteAccess = res.0 || fm.isWritableFile(atPath: MGURL.fsGestaltURL.path)
+                    if !hasWriteAccess {
                         Alertinator.shared.alert(title: "获取 MobileGestalt 写入权限失败！", body: "修改将无法保存生效，请尝试重启本应用后再试。")
                     }
                 }
@@ -621,6 +632,73 @@ struct GestaltView: View {
             )
             .disabled(!canModify)
         }
+    }
+
+    private func isCurrentGestaltUnmodifiedComparedToOriginal(currentDict: NSDictionary, ogDict: NSDictionary) -> Bool {
+        let curExtra = currentDict["CacheExtra"] as? NSDictionary ?? [:]
+        let ogExtra = ogDict["CacheExtra"] as? NSDictionary ?? [:]
+        let curProd = curExtra[MGKey.prodType] as? String ?? ""
+        let ogProd = ogExtra[MGKey.prodType] as? String ?? currentOriginalMachineName()
+        if !curProd.isEmpty && curProd != ogProd && curProd != currentOriginalMachineName() {
+            return false
+        }
+        let knownTweakKeys: [String] = [
+            MGKey.regionCode,
+            MGKey.regionInfo,
+            MGKey.regionSysconfig,
+            MGKey.regModelNumber,
+            MGKey.liquidGlassLowPower,
+            MGKey.island,
+            MGKey.AOTime,
+            MGKey.AOD,
+            MGKey.AODVibrancy,
+            MGKey.chargeLim,
+            MGKey.bootChime,
+            MGKey.intInstall,
+            MGKey.intBuild,
+            MGKey.srd,
+            MGKey.crashDet,
+            MGKey.pwm,
+            MGKey.appPencil,
+            MGKey.camButton,
+            MGKey.grapPefr,
+            MGKey.actButton,
+            MGKey.tapToWake,
+            MGKey.stageMgr,
+            MGKey.modelNameOuter1,
+            MGKey.modelNameOuter2
+        ] + MGKey.appIntellAllKeys + MGKey.advAppIntellKeys + MGKey.mediaHealthAllKeys + MGKey.ipadosCacheEx
+        for key in knownTweakKeys {
+            if !mgPlistValuesEqual(curExtra[key], ogExtra[key]) {
+                return false
+            }
+        }
+        if let curArt = curExtra[MGKey.artwork] as? NSDictionary,
+           let ogArt = ogExtra[MGKey.artwork] as? NSDictionary {
+            if !mgPlistValuesEqual(curArt["ArtworkDeviceSubType"], ogArt["ArtworkDeviceSubType"]) ||
+               !mgPlistValuesEqual(curArt["ArtworkDeviceProductDescription"], ogArt["ArtworkDeviceProductDescription"]) {
+                return false
+            }
+        }
+        if case .success((let layout, let curData)) = MGCacheDataCoordinator.shared.resolveValidated(for: currentDict),
+           let origFlags = MGCacheDataCoordinator.shared.originalFlags(for: layout, savedOriginalDict: ogDict) {
+            let curGT = curData[layout.greenTeaOffset] == 1
+            let curNGT = curData[layout.notGreenTeaOffset] == 1
+            if curGT != origFlags.greenTea || curNGT != origFlags.notGreenTea {
+                return false
+            }
+            if let wOff = layout.wapiOffset, let origWapi = origFlags.wapi {
+                if (curData[wOff] == 1) != origWapi {
+                    return false
+                }
+            }
+            for (fKey, fSlot) in layout.featureSlotIndices where layout.validateSingleBooleanSlot(fSlot, in: curData) {
+                if let origVal = origFlags.extraSlots?[fKey], (curData[fSlot * 8] == 1) != origVal {
+                    return false
+                }
+            }
+        }
+        return true
     }
     
     private func mgLoadData() -> NSMutableDictionary {
@@ -682,11 +760,9 @@ struct GestaltView: View {
                 // Detect OS upgrade build mismatch between OriginalGestalt.plist and live MobileGestalt
                 let ogBuild = ogDict["CacheVersion"] as? String ?? ""
                 let curBuild = currentDict["CacheVersion"] as? String ?? ""
-                let curRegCode = cacheExtra[MGKey.regionCode] as? String ?? ""
-                let curProd = cacheExtra[MGKey.prodType] as? String ?? ""
                 if !hasPromptedBuildMismatch && !ogBuild.isEmpty && !curBuild.isEmpty && ogBuild != curBuild {
                     hasPromptedBuildMismatch = true
-                    if curRegCode != "LL" && (curProd.isEmpty || curProd == currentOriginalMachineName()) {
+                    if isCurrentGestaltUnmodifiedComparedToOriginal(currentDict: currentDict, ogDict: ogDict) {
                         Alertinator.shared.alert(
                             title: "检测到系统版本已更新",
                             body: "原始备份文件来自旧版系统 (\(ogBuild))，而当前系统已更新至 \(curBuild)（当前缓存处于原厂未修改状态）。\n\n建议立即将原始备份同步更新为 \(curBuild) 的原厂文件，以免后续误用旧版备份覆盖。",

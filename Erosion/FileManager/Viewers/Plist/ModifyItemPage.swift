@@ -11,19 +11,30 @@ struct ModifyItemPage: View {
     @EnvironmentObject private var pmgr: PlistManager
     @Environment(\.dismiss) var dismiss
     
-    @State var ogItem: PlistItem = PlistItem(key: "", value: "")
+    @State var ogItem: PlistItem
+    @State private var draftItem: PlistItem
     @Binding var item: PlistItem
     @State private var isEditing = false
+    
+    init(item: Binding<PlistItem>) {
+        self._item = item
+        self._ogItem = State(initialValue: item.wrappedValue)
+        self._draftItem = State(initialValue: item.wrappedValue)
+    }
+    
+    private var activeBinding: Binding<PlistItem> {
+        isEditing ? $draftItem : $item
+    }
     
     var body: some View {
         List {
             Section {
                 if isEditing {
-                    TextField("键名 (Key)", text: $item.key)
+                    TextField("键名 (Key)", text: $draftItem.key)
                 } else {
                     Text(item.key)
                 }
-                Picker("类型", selection: $item.type) {
+                Picker("类型", selection: activeBinding.type) {
                     ForEach(PlistItemType.allCases, id: \.self) { type in
                         if type != .unknown {
                             Text(type.label).id(type)
@@ -31,24 +42,29 @@ struct ModifyItemPage: View {
                     }
                 }
                 .disabled(!isEditing)
+                .onChange(of: draftItem.type) { _, newType in
+                    if newType == .bool {
+                        draftItem.stringVal = draftItem.boolVal ? "true" : "false"
+                    }
+                }
             } header: {
                 HeaderLabel("属性标识", symbol: "creditcard")
             }
             
             Section {
-                switch item.type {
+                switch activeBinding.wrappedValue.type {
                 case .dict, .array:
                     Button("添加子项") {
-                        item.dictVal.insert(PlistItem(key: "New Item", value: "", isModified: true), at: 0)
+                        draftItem.dictVal.insert(PlistItem(key: "New Item", value: "", isModified: true), at: 0)
                     }
                     .disabled(!isEditing)
-                    ForEach($item.dictVal) { $nestItem in
+                    ForEach(activeBinding.dictVal) { $nestItem in
                         ItemRow(item: $nestItem, hierarchy: 0).environmentObject(pmgr)
                             .disabled(isEditing && nestItem.key == "New Item")
                             .swipeActions {
                                 if isEditing {
                                     Button(role: .destructive) {
-                                        item.dictVal.removeAll { $0.id == nestItem.id }
+                                        draftItem.dictVal.removeAll { $0.id == nestItem.id }
                                     } label: {
                                         Image(systemName: "trash")
                                     }
@@ -56,20 +72,20 @@ struct ModifyItemPage: View {
                             }
                     }
                 case .data:
-                    Text(item.stringVal)
+                    Text(activeBinding.wrappedValue.stringVal)
                 case .bool:
-                    Toggle(item.boolVal ? "开启 (True)" : "关闭 (False)", isOn: $item.boolVal)
+                    Toggle(activeBinding.wrappedValue.boolVal ? "开启 (True)" : "关闭 (False)", isOn: activeBinding.boolVal)
                         .disabled(!isEditing)
-                        .onChange(of: item.boolVal) { newVal in
-                            item.stringVal = newVal ? "true" : "false"
+                        .onChange(of: draftItem.boolVal) { newVal in
+                            draftItem.stringVal = newVal ? "true" : "false"
                         }
                 default:
-                    TextField(item.type.label, text: $item.stringVal)
+                    TextField(activeBinding.wrappedValue.type.label, text: activeBinding.stringVal)
                         .disabled(!isEditing)
                 }
             } header: {
-                if item.type == .dict || item.type == .array {
-                    HeaderLabel("键值 (\(item.dictVal.count) 项)", symbol: "character.cursor.ibeam")
+                if activeBinding.wrappedValue.type == .dict || activeBinding.wrappedValue.type == .array {
+                    HeaderLabel("键值 (\(activeBinding.wrappedValue.dictVal.count) 项)", symbol: "character.cursor.ibeam")
                 } else {
                     HeaderLabel("键值", symbol: "character.cursor.ibeam")
                 }
@@ -86,20 +102,21 @@ struct ModifyItemPage: View {
                 }
             }
         }
-        .navigationTitle("\(item.key)")
+        .navigationTitle("\(activeBinding.wrappedValue.key)")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
         .listStyle(.grouped)
         .onAppear {
-            Task {
-                let plistItem = pmgr.plistArray.first(where: { $0.id == item.id }) ?? item
-                ogItem = plistItem
+            if !isEditing {
+                ogItem = item
+                draftItem = item
             }
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if isEditing {
                     Button {
+                        draftItem = ogItem
                         item = ogItem
                         isEditing = false
                     } label: {
@@ -111,11 +128,18 @@ struct ModifyItemPage: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if isEditing {
                     Button(role: .adaptiveConfirm) {
-                        let res = pmgr.writePlistItems(newItem: item)
+                        draftItem.isModified = true
+                        if draftItem.type != .data {
+                            draftItem.rawVal = nil
+                        }
+                        let res = pmgr.writePlistItems(newItem: draftItem)
                         if res {
+                            item = draftItem
+                            ogItem = draftItem
                             Haptic.shared.play(.soft)
                         } else {
                             Alertinator.shared.alert(title: "写入 Plist 失败！", body: Errors.checkLogs)
+                            draftItem = ogItem
                             item = ogItem
                         }
                         isEditing = false
@@ -125,6 +149,8 @@ struct ModifyItemPage: View {
                 } else {
                     if pmgr.isWritable {
                         Button {
+                            ogItem = item
+                            draftItem = item
                             isEditing = true
                         } label: {
                             ToolbarLabel("编辑", symbol: "pencil")

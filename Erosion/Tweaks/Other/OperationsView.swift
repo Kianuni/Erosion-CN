@@ -18,6 +18,25 @@ struct OperationsView: View {
     @State private var imprtName = ""
     @State private var imprtData = Data()
     
+    private var normalizedDirectory: String {
+        var dir = directory.trimmingCharacters(in: .whitespacesAndNewlines)
+        while dir.count > 1 && dir.hasSuffix("/") {
+            dir.removeLast()
+        }
+        return dir
+    }
+    
+    private var normalizedFileName: String {
+        var name = fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        while name.hasPrefix("/") {
+            name.removeFirst()
+        }
+        while name.hasSuffix("/") {
+            name.removeLast()
+        }
+        return name
+    }
+    
     var body: some View {
         List {
             Section {
@@ -27,14 +46,32 @@ struct OperationsView: View {
                     .disabled(isAcc)
                 HStack {
                     Button("获取读写权限") {
-                        let res = wq.grantAccess(path: "\(directory)/\(fileName)")
-                        if !res.0 {
-                            Alertinator.shared.alert(title: "获取目标文件权限失败！", body: "\(res.1): \(res.2)")
-                        } else {
-                            isAcc = true
+                        let cleanDir = normalizedDirectory
+                        let cleanFile = normalizedFileName
+                        directory = cleanDir
+                        fileName = cleanFile
+                        guard !cleanDir.isEmpty else {
+                            Alertinator.shared.alert(title: "目录路径为空！", body: "请先输入有效的目标目录路径。")
+                            return
                         }
+                        let dirRes = wq.grantAccess(path: cleanDir)
+                        if !dirRes.0 {
+                            Alertinator.shared.alert(title: "获取目标目录权限失败！", body: "\(dirRes.1): \(dirRes.2)")
+                            return
+                        }
+                        if !cleanFile.isEmpty {
+                            let fullPath = "\(cleanDir)/\(cleanFile)"
+                            if fm.fileExists(atPath: fullPath) {
+                                let fileRes = wq.grantAccess(path: fullPath)
+                                if !fileRes.0 {
+                                    Alertinator.shared.alert(title: "获取目标文件权限失败！", body: "\(fileRes.1): \(fileRes.2)")
+                                    return
+                                }
+                            }
+                        }
+                        isAcc = true
                     }
-                    .disabled(isAcc)
+                    .disabled(isAcc || normalizedDirectory.isEmpty)
                     if isAcc {
                         Spacer()
                         HStack {
@@ -52,9 +89,14 @@ struct OperationsView: View {
                     }
                     
                     Button("导出原文件") {
-                        let fileDir = "\(directory)/\(fileName)"
-                        presentShareSheet(with: URL(fileURLWithPath: fileDir))
+                        let fileDir = "\(normalizedDirectory)/\(normalizedFileName)"
+                        if let tempURL = makeTemp(URL(fileURLWithPath: fileDir)) {
+                            presentShareSheet(with: tempURL)
+                        } else {
+                            Alertinator.shared.alert(title: "导出原文件失败！", body: "无法读取或复制目标文件，请确认目标文件名存在且可读。")
+                        }
                     }
+                    .disabled(normalizedFileName.isEmpty)
                 }
             } header: {
                 HeaderLabel("目标文件", symbol: "dot.scope")
@@ -62,10 +104,9 @@ struct OperationsView: View {
             
             Section {
                 HStack {
-                    Button("导入替换文件") {
+                    Button(imprtData.isEmpty ? "导入替换文件" : "重新选择替换文件") {
                         showImporter = true
                     }
-                    .disabled(!imprtData.isEmpty)
                     if !imprtName.isEmpty {
                         Spacer()
                         Text(imprtName)
@@ -75,7 +116,7 @@ struct OperationsView: View {
                 }
                 
                 Button("覆盖目标文件") {
-                    let targetURL = URL(fileURLWithPath: "\(directory)/\(fileName)").standardizedFileURL
+                    let targetURL = URL(fileURLWithPath: normalizedDirectory).appendingPathComponent(normalizedFileName).standardizedFileURL
                     if let blockReason = Self.blockedSystemPathReason(for: targetURL) {
                         Alertinator.shared.alert(title: "已拦截高危系统路径覆盖！", body: blockReason)
                         return
@@ -97,10 +138,10 @@ struct OperationsView: View {
                         Alertinator.shared.alert(title: "覆盖文件失败！", body: "\(error.localizedDescription)")
                     }
                 }
-                .disabled(imprtData.isEmpty)
+                .disabled(!isAcc || imprtData.isEmpty || normalizedFileName.isEmpty)
                 
                 Button("写入到目标目录") {
-                    let targetURL = URL(fileURLWithPath: "\(directory)").appendingPathComponent(imprtName).standardizedFileURL
+                    let targetURL = URL(fileURLWithPath: normalizedDirectory).appendingPathComponent(imprtName).standardizedFileURL
                     if let blockReason = Self.blockedSystemPathReason(for: targetURL) {
                         Alertinator.shared.alert(title: "已拦截高危系统路径写入！", body: blockReason)
                         return
@@ -122,10 +163,10 @@ struct OperationsView: View {
                         Alertinator.shared.alert(title: "写入文件失败！", body: "\(error.localizedDescription)")
                     }
                 }
-                .disabled(imprtData.isEmpty)
+                .disabled(!isAcc || imprtData.isEmpty)
                 
                 Button("删除目标文件", role: .destructive) {
-                    let targetURL = URL(fileURLWithPath: "\(directory)/\(fileName)").standardizedFileURL
+                    let targetURL = URL(fileURLWithPath: normalizedDirectory).appendingPathComponent(normalizedFileName).standardizedFileURL
                     if let blockReason = Self.blockedSystemPathReason(for: targetURL) {
                         Alertinator.shared.alert(title: "已拦截高危系统文件删除！", body: blockReason)
                         return
@@ -147,7 +188,7 @@ struct OperationsView: View {
                         }
                     )
                 }
-                .disabled(!isAcc)
+                .disabled(!isAcc || normalizedFileName.isEmpty)
             } header: {
                 HeaderLabel("文件操作", symbol: "wrench.and.screwdriver")
             }

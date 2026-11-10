@@ -163,9 +163,26 @@ final class GestaltStore: ObservableObject {
         }
     }
     
+    func isKeyEnabled(_ key: String, enableValue: Int = 1) -> Bool {
+        if let value = self.cacheExtra[key] as? Int, value == enableValue {
+            return true
+        }
+        if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict),
+           let slotIdx = layout.slotIndex(forKey: key),
+           layout.validateSingleBooleanSlot(slotIdx, in: data),
+           data[slotIdx * 8] == 1 {
+            let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
+            let origVal = MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) ?? false
+            if !origVal {
+                return true
+            }
+        }
+        return false
+    }
+
     func isEnabled(_ keys: [String], enableValue: Int = 1) -> Bool {
         guard !keys.isEmpty else { return false }
-        return keys.allSatisfy { (self.cacheExtra[$0] as? Int) == enableValue }
+        return keys.allSatisfy { self.isKeyEnabled($0, enableValue: enableValue) }
     }
     
     func strVal(forKey key: String) -> String {
@@ -176,23 +193,10 @@ final class GestaltStore: ObservableObject {
     // MARK: bindings
     func mgKeyBinding(_ keys: [String], defaultValue: Int = 0, enableValue: Int = 1) -> Binding<Bool> {
         return Binding(get: {
-            guard let firstKey = keys.first else {
+            guard !keys.isEmpty else {
                 return false
             }
-            if let value = self.cacheExtra[firstKey] as? Int, value == enableValue {
-                return true
-            }
-            if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict),
-               let slotIdx = layout.slotIndex(forKey: firstKey),
-               layout.validateSingleBooleanSlot(slotIdx, in: data),
-               data[slotIdx * 8] == 1 {
-                let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
-                let origVal = MGCacheDataCoordinator.shared.originalSlotValue(forKey: firstKey, layout: layout, savedOriginalDict: savedOrig) ?? false
-                if !origVal {
-                    return true
-                }
-            }
-            return false
+            return keys.allSatisfy { self.isKeyEnabled($0, enableValue: enableValue) }
         }, set: { enabled in
             self.objectWillChange.send()
             for key in keys {

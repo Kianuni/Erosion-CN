@@ -33,7 +33,17 @@ struct FileItem: Identifiable {
 let clearFileItem = FileItem(name: "", fileURL: URL(fileURLWithPath: ""), destURL: URL(fileURLWithPath: ""), type: .file, uttype: .data, size: 0, creationDate: Date(), modifiedDate: Date(), creationDateStr: "", modifiedDateStr: "", hidden: false, posixPerms: "", owner: "", group: "", readable: false, writable: false, executable: false)
 
 func getFileItem(at url: URL, isContainer: Bool = false) -> FileItem {
-    var item = FileItem(name: url.lastPathComponent, fileURL: url, destURL: url, type: .file, uttype: .data, size: 0, creationDate: Date(), modifiedDate: Date(), creationDateStr: "", modifiedDateStr: "", hidden: false, posixPerms: "", owner: "", group: "", readable: false, writable: false, executable: false)
+    var item = FileItem(name: url.lastPathComponent, fileURL: url, destURL: url, type: isContainer ? .folder : .file, uttype: .data, size: 0, creationDate: Date(), modifiedDate: Date(), creationDateStr: "", modifiedDateStr: "", hidden: false, posixPerms: "", owner: "", group: "", readable: false, writable: false, executable: false)
+    
+    let wasAlreadyActive = isContainer ? wq.hasActiveAccess(path: url.path) : false
+    if isContainer && !wasAlreadyActive {
+        _ = wq.grantAccess(path: url.path, requireWrite: false)
+    }
+    defer {
+        if isContainer && !wasAlreadyActive {
+            wq.releaseAccess(path: url.path)
+        }
+    }
     
     if isContainer {
         if let folderName = folderLabel(url: url) {
@@ -49,7 +59,7 @@ func getFileItem(at url: URL, isContainer: Bool = false) -> FileItem {
     if let values = try? url.resourceValues(forKeys: keys) {
         if values.isSymbolicLink ?? false {
             if let path = try? fm.destinationOfSymbolicLink(atPath: url.path) {
-                item.destURL = URL(fileURLWithPath: path)
+                item.destURL = URL(fileURLWithPath: path, relativeTo: url.deletingLastPathComponent()).standardizedFileURL
             }
         }
         if let symlink = values.isSymbolicLink, let directory = values.isDirectory {

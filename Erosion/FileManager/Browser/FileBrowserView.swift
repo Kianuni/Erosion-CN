@@ -34,6 +34,7 @@ struct FileBrowserView: View {
     
     @State private var dirFiles: [FileItem] = []
     @State private var unfilteredFiles: [FileItem] = []
+    @State private var rawFiles: [FileItem] = []
     @State private var searchText = ""
     @AppStorage("maxInode") var maxInode = 15000000
     @AppStorage("chosenSort") var chosenSort: FileSortMode = .system
@@ -264,6 +265,7 @@ struct FileBrowserView: View {
         }
         .onAppear {
             if !mgr.storedFiles.isEmpty && mgr.storedURL == path {
+                rawFiles = mgr.storedFiles
                 let sorted = sortFiles(files: mgr.storedFiles)
                 unfilteredFiles = sorted
                 dirFiles = filterFiles(sorted, query: searchText)
@@ -271,7 +273,7 @@ struct FileBrowserView: View {
                 // do nothing as it's already being stored in the variable
             } else {
                 if shouldGrant {
-                    let res = wq.grantAccess(path: path.path)
+                    let res = wq.grantAccess(path: path.path, requireWrite: false)
                     if res.0 {
                         loadFilesFromPath()
                     } else {
@@ -287,10 +289,16 @@ struct FileBrowserView: View {
             dirFiles = filterFiles(unfilteredFiles, query: newSearch)
         }
         .onChange(of: chosenSort) {
-            loadFilesFromPath()
+            let source = rawFiles.isEmpty ? unfilteredFiles : rawFiles
+            let sorted = sortFiles(files: source)
+            unfilteredFiles = sorted
+            dirFiles = filterFiles(sorted, query: searchText)
         }
         .onChange(of: filesAscend) {
-            loadFilesFromPath()
+            let source = rawFiles.isEmpty ? unfilteredFiles : rawFiles
+            let sorted = sortFiles(files: source)
+            unfilteredFiles = sorted
+            dirFiles = filterFiles(sorted, query: searchText)
         }
         .onChange(of: mgr.refreshFiles) {
             loadFilesFromPath()
@@ -332,6 +340,7 @@ struct FileBrowserView: View {
                     }
                 }
                 DispatchQueue.main.async {
+                    rawFiles = unsortedFiles
                     let sorted = sortFiles(files: unsortedFiles)
                     unfilteredFiles = sorted
                     dirFiles = filterFiles(sorted, query: searchText)
@@ -390,9 +399,18 @@ struct FileBrowserView: View {
                 let data = try Data(contentsOf: fileURL)
                 
                 let newURL = path.appendingPathComponent(fileURL.lastPathComponent)
-                try? fm.removeItem(at: newURL)
-                
-                try data.write(to: newURL)
+                if newURL.lastPathComponent.lowercased() == "com.apple.mobilegestalt.plist" {
+                    Alertinator.shared.alert(title: "已拦截高危系统文件覆盖！", body: "禁止在文件浏览器中直接导入覆盖 com.apple.MobileGestalt.plist，请使用 MobileGestalt 专用模块。")
+                    return
+                }
+                if fm.fileExists(atPath: newURL.path) {
+                    let atomicRes = writeFileAtomically(data, to: newURL, allowEmpty: true)
+                    if !atomicRes.0 {
+                        throw atomicRes.1
+                    }
+                } else {
+                    try data.write(to: newURL, options: .atomic)
+                }
                 mgr.refreshFiles.toggle()
             } catch {
                 print("(fm) failed to import file: \(error.localizedDescription)")

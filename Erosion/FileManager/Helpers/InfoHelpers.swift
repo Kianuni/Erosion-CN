@@ -25,7 +25,7 @@ func getFolderType(url: URL) -> FolderType {
 // this is awful
 func getBIDFromXattr(_ url: URL) -> String? {
     let wasAlreadyActive = wq.hasActiveAccess(path: url.path)
-    let grantRes = wq.grantAccess(path: url.path)
+    let grantRes = wq.grantAccess(path: url.path, requireWrite: false)
     guard grantRes.0 else {
         return nil
     }

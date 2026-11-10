@@ -13,6 +13,7 @@ struct KeypadView: View {
     @StateObject private var kpMgr = KeypadManager.shared
     @AppStorage("mpContainerPath") private var mpContainerPath = ""
     @State private var isReady = false
+    @State private var hasAccess = false
     let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
     @State private var size: KPSize = KPSize.defSize
     @State private var showSizeAlert = false
@@ -85,6 +86,7 @@ struct KeypadView: View {
                     .buttonStyle(KeypadButtonStyle(isConfirm: true))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 10)
+                    .disabled(!hasAccess)
                 }
             }
         }
@@ -104,6 +106,12 @@ struct KeypadView: View {
                         kpMgr.getCurrentKeypads()
                     } label: {
                         Label("读取当前按键", systemImage: "externaldrive")
+                    }
+                    .disabled(!hasAccess)
+                    Button {
+                        setupPhoneContainer(forceRefresh: true)
+                    } label: {
+                        Label("重新获取电话容器路径", systemImage: "arrow.clockwise")
                     }
                     Button {
                         openApp(withBID: SysBID.phone)
@@ -131,6 +139,7 @@ struct KeypadView: View {
                     } label: {
                         Label("恢复系统默认", systemImage: "trash")
                     }
+                    .disabled(!hasAccess)
                 } label: {
                     Label("菜单", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
@@ -142,29 +151,62 @@ struct KeypadView: View {
                 Button("导入主题") {
                     showFileImporter = true
                 }
-                .disabled(!isReady)
+                .disabled(!isReady || !hasAccess)
             }
         }
         .onAppear {
-            DispatchQueue.global(qos: .userInitiated).async {
-                var targetPath = mpContainerPath
-                if targetPath.isEmpty {
-                    targetPath = fsHandlers.getContainerPath(forMatch: "com.apple.mobilephone")
-                }
-                if !targetPath.isEmpty && !fm.isReadableFile(atPath: targetPath) {
-                    let _ = wq.grantAccess(path: targetPath)
-                }
-                DispatchQueue.main.async {
-                    if mpContainerPath.isEmpty && !targetPath.isEmpty {
-                        mpContainerPath = targetPath
-                    }
-                    kpMgr.getCurrentKeypads(size: size, saveOgData: true)
-                    isReady = true
-                }
-            }
+            setupPhoneContainer(forceRefresh: false)
         }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             handleImport(result)
+        }
+    }
+    
+    private func setupPhoneContainer(forceRefresh: Bool) {
+        if forceRefresh {
+            isReady = false
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var targetPath = forceRefresh ? "" : mpContainerPath
+            var accessOK = false
+            if !targetPath.isEmpty {
+                let grant = wq.grantAccess(path: targetPath)
+                if grant.0 && fm.fileExists(atPath: targetPath) {
+                    accessOK = true
+                } else {
+                    targetPath = ""
+                }
+            }
+            if targetPath.isEmpty {
+                let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.mobilephone")
+                if !fetched.isEmpty {
+                    targetPath = fetched
+                    let grant = wq.grantAccess(path: targetPath)
+                    accessOK = grant.0 && fm.fileExists(atPath: targetPath)
+                }
+            }
+            if accessOK {
+                let cachesPath = "\(targetPath)/Library/Caches"
+                if fm.fileExists(atPath: cachesPath) {
+                    _ = wq.grantAccess(path: cachesPath)
+                }
+                let tpPath = "\(targetPath)/Library/Caches/TelephonyUI-10"
+                if fm.fileExists(atPath: tpPath) {
+                    _ = wq.grantAccess(path: tpPath)
+                }
+            }
+            DispatchQueue.main.async {
+                if !targetPath.isEmpty {
+                    mpContainerPath = targetPath
+                }
+                hasAccess = accessOK
+                if accessOK {
+                    kpMgr.getCurrentKeypads(size: size, saveOgData: true)
+                } else {
+                    Alertinator.shared.alert(title: "无法访问电话应用容器！", body: "未能定位或授权 com.apple.mobilephone 容器，请先打开一次系统“电话”应用，或在右上角菜单点击“重新获取电话容器路径”。")
+                }
+                isReady = true
+            }
         }
     }
     

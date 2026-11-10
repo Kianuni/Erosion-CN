@@ -11,7 +11,7 @@ import SwiftUI
 extension FileManager {
     func createDirIfNeeded(at url: URL) throws {
         if !self.fileExists(atPath: url.path) {
-            try? self.createDirectory(at: url, withIntermediateDirectories: true)
+            try self.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
 }

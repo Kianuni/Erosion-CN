@@ -27,6 +27,7 @@ struct ConfigView: View {
     @State private var footnoteText = ""
     @State private var supervised = false
     @State private var orgName = ""
+    @State private var hasAccess = false
     
     var body: some View {
         NavigationStack {
@@ -91,11 +92,13 @@ struct ConfigView: View {
                         Label("恢复默认", systemImage: "gobackward")
                             .labelStyle(.iconOnly)
                     }
+                    .disabled(!hasAccess)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("应用", role: .adaptiveConfirm) {
                         apply()
                     }
+                    .disabled(!hasAccess)
                 }
             }
             .onAppear {
@@ -104,45 +107,67 @@ struct ConfigView: View {
         }
     }
     
+    private static func isGenuineMDMCloudConfig(_ dict: NSDictionary) -> Bool {
+        let mdmKeys = [
+            "ConfigurationSource",
+            "PostSetupProfileWasInstalled",
+            "AwaitDeviceConfigured",
+            "CloudConfigurationUIComplete",
+            "ConfigurationURL",
+            "AnchorCertificates",
+            "SupervisorHostCertificates"
+        ]
+        for key in mdmKeys where dict[key] != nil {
+            return true
+        }
+        let allKeys = Set(dict.allKeys.compactMap { $0 as? String })
+        let fakeOnlyKeys: Set<String> = ["IsSupervised", "OrganizationName"]
+        return !allKeys.subtracting(fakeOnlyKeys).isEmpty
+    }
+    
     private func doSetup() {
-        if !fm.isWritableFile(atPath: CNURL.sharedDevConfig.path) {
+        if fm.isWritableFile(atPath: FSURL.configProfiles.path) {
+            hasAccess = true
+        } else {
             let res = wq.grantAccess(path: FSURL.configProfiles.path)
+            hasAccess = res.0
             if !res.0 {
                 Alertinator.shared.alert(title: "获取写入权限失败！", body: AppMsg.opFailed)
                 return
             }
         }
         if UserDefaults.standard.object(forKey: "cn_cloud_config_originally_existed") == nil {
-            let existed = fm.fileExists(atPath: CNURL.cloudConfig.path)
-            UserDefaults.standard.set(existed, forKey: "cn_cloud_config_originally_existed")
-            if existed && !fm.fileExists(atPath: CNURL.cloudConfigBackup.path) {
+            var genuineExisted = false
+            if fm.fileExists(atPath: CNURL.cloudConfig.path),
+               let existingDict = NSDictionary(contentsOf: CNURL.cloudConfig),
+               Self.isGenuineMDMCloudConfig(existingDict) {
+                genuineExisted = true
+            }
+            UserDefaults.standard.set(genuineExisted, forKey: "cn_cloud_config_originally_existed")
+            if genuineExisted && !fm.fileExists(atPath: CNURL.cloudConfigBackup.path) {
                 try? fm.copyItem(at: CNURL.cloudConfig, to: CNURL.cloudConfigBackup)
                 mgExcludeFromCloudBackup(CNURL.cloudConfigBackup)
-            }
-        }
-        if !fm.fileExists(atPath: CNURL.sharedDevConfig.path) {
-            do {
-                let dict = ["LockScreenFootnote" : ""]
-                let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .binary, options: 0)
-                try data.write(to: CNURL.sharedDevConfig, options: .atomic)
-            } catch {
-                print("(cn) failed to create footnote file: \(error.localizedDescription)")
-                Alertinator.shared.alert(title: "创建锁屏文字配置文件失败！", body: AppMsg.opFailed)
             }
         }
         loadData()
     }
     
     private func loadData() {
-        if let ftDict = NSMutableDictionary(contentsOf: CNURL.sharedDevConfig) {
+        if fm.fileExists(atPath: CNURL.sharedDevConfig.path),
+           let ftDict = NSMutableDictionary(contentsOf: CNURL.sharedDevConfig) {
             ftCurrentDict = ftDict
             footnoteText = ftDict["LockScreenFootnote"] as? String ?? ""
+        } else {
+            ftCurrentDict = NSMutableDictionary()
+            footnoteText = ""
         }
-        if let ccDict = NSMutableDictionary(contentsOf: CNURL.cloudConfig) {
+        if fm.fileExists(atPath: CNURL.cloudConfig.path),
+           let ccDict = NSMutableDictionary(contentsOf: CNURL.cloudConfig) {
             ccCurrentDict = ccDict
             supervised = ccDict["IsSupervised"] as? Bool ?? false
             orgName = ccDict["OrganizationName"] as? String ?? ""
         } else {
+            ccCurrentDict = NSMutableDictionary()
             supervised = false
             orgName = ""
         }
@@ -152,6 +177,7 @@ struct ConfigView: View {
         let ftDict = NSMutableDictionary(dictionary: ftCurrentDict)
         ftDict["LockScreenFootnote"] = footnoteText
         do {
+            try fm.createDirectory(at: FSURL.configProfiles, withIntermediateDirectories: true)
             let ftData = try PropertyListSerialization.data(fromPropertyList: ftDict, format: .binary, options: 0)
             if fm.fileExists(atPath: CNURL.sharedDevConfig.path) {
                 let res = writeFileAtomically(ftData, to: CNURL.sharedDevConfig)
@@ -180,7 +206,10 @@ struct ConfigView: View {
                 try fm.removeItem(at: CNURL.sharedDevConfig)
             }
             let originallyExisted = UserDefaults.standard.bool(forKey: "cn_cloud_config_originally_existed")
-            if originallyExisted, fm.fileExists(atPath: CNURL.cloudConfigBackup.path) {
+            if originallyExisted,
+               fm.fileExists(atPath: CNURL.cloudConfigBackup.path),
+               let backupDict = NSDictionary(contentsOf: CNURL.cloudConfigBackup),
+               Self.isGenuineMDMCloudConfig(backupDict) {
                 let backupData = try Data(contentsOf: CNURL.cloudConfigBackup)
                 if fm.fileExists(atPath: CNURL.cloudConfig.path) {
                     let res = writeFileAtomically(backupData, to: CNURL.cloudConfig)
@@ -188,9 +217,16 @@ struct ConfigView: View {
                 } else {
                     try backupData.write(to: CNURL.cloudConfig, options: .atomic)
                 }
-            } else if !originallyExisted && fm.fileExists(atPath: CNURL.cloudConfig.path) {
-                // Remove spurious CloudConfigurationDetails.plist left on retail devices (SEC-M4-01)
-                try fm.removeItem(at: CNURL.cloudConfig)
+            } else if fm.fileExists(atPath: CNURL.cloudConfig.path) {
+                if let currentDict = NSDictionary(contentsOf: CNURL.cloudConfig),
+                   !Self.isGenuineMDMCloudConfig(currentDict) {
+                    // Remove fake supervision plist left by older Erosion versions (SEC-M4-01)
+                    try fm.removeItem(at: CNURL.cloudConfig)
+                    try? fm.removeItem(at: CNURL.cloudConfigBackup)
+                    UserDefaults.standard.set(false, forKey: "cn_cloud_config_originally_existed")
+                } else if !originallyExisted {
+                    try fm.removeItem(at: CNURL.cloudConfig)
+                }
             }
             print("(cn) successfully reset config tweaks!")
             Haptic.shared.play(.soft)

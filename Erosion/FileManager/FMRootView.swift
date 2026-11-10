@@ -37,14 +37,14 @@ struct FMRootView: View {
                 Section {
                     NavigationLink("应用数据容器 (Data)", destination: FileBrowserView(path: FSURL.appContainers, isContainer: true))
                     NavigationLink("插件数据容器 (Plugin)", destination: FileBrowserView(path: FSURL.appPlugins, isContainer: true))
-                    NavigationLink("共享应用组 (App Groups)", destination: FileBrowserView(path: FSURL.appGroup, shouldGrant: true))
+                    NavigationLink("共享应用组 (App Groups)", destination: FileBrowserView(path: FSURL.appGroup, isContainer: true))
                 } header: {
                     HeaderLabel("应用程序", symbol: "square.grid.2x2")
                 }
                 
                 Section {
                     NavigationLink("守护进程容器 (Daemon)", destination: FileBrowserView(path: FSURL.internalDaemons, isContainer: true))
-                    NavigationLink("系统数据容器 (System)", destination: FileBrowserView(path: FSURL.systemData, shouldGrant: true))
+                    NavigationLink("系统数据容器 (System)", destination: FileBrowserView(path: FSURL.systemData, isContainer: true))
                     NavigationLink("系统共享组容器 (SystemGroup)", destination: FileBrowserView(path: FSURL.sysGroup, isContainer: true))
                 } header: {
                     HeaderLabel("系统容器", symbol: "gear")
