@@ -22,8 +22,8 @@ struct TweaksView: View {
                 Section {
                     if raveSupported() || weOnADebugBuild {
                         NavigationLink("MobileGestalt 修改", destination: GestaltView())
-                        NavigationLink("系统配置与监管", destination: ConfigView())
                     }
+                    NavigationLink("系统配置与监管", destination: ConfigView())
                     NavigationLink("任意文件替换", destination: OperationsView())
                 } header: {
                     HeaderLabel("系统底层", symbol: "gear")

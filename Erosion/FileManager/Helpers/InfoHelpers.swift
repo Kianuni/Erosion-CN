@@ -24,23 +24,22 @@ func getFolderType(url: URL) -> FolderType {
 
 // this is awful
 func getBIDFromXattr(_ url: URL) -> String? {
-    wq.grantAccess(path: url.path)
-    
-    var buf = [UInt8](repeating: 0, count: 512)
-    
-    let len = buf.withUnsafeMutableBytes {
-        getxattr(url.path, "com.apple.containermanager.identifier", $0.baseAddress, 511, 0, XATTR_NOFOLLOW)
+    let grantRes = wq.grantAccess(path: url.path)
+    guard grantRes.0 else {
+        return nil
     }
+    defer {
+        wq.releaseAccess(path: url.path)
+    }
+
+    var buf = [CChar](repeating: 0, count: 512)
+    let len = getxattr(url.path, "com.apple.containermanager.identifier", &buf, 511, 0, XATTR_NOFOLLOW)
     if len < 0 {
         print("failed to read xattr: \(String(cString: strerror(errno))) (errno \(errno))")
         return nil
     }
     let bid = String(cString: buf)
-    
-    if !bid.isEmpty {
-        return bid
-    }
-    return nil
+    return bid.isEmpty ? nil : bid
 }
 
 // i don't know why root's works and mine doesn't, but i'm stealing it.

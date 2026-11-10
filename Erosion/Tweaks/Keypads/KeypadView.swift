@@ -12,6 +12,7 @@ import PhotosUI
 struct KeypadView: View {
     @StateObject private var kpMgr = KeypadManager.shared
     @AppStorage("mpContainerPath") private var mpContainerPath = ""
+    @State private var isReady = false
     let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
     @State private var size: KPSize = KPSize.defSize
     @State private var showSizeAlert = false
@@ -21,60 +22,70 @@ struct KeypadView: View {
     
     var body: some View {
         VStack {
-            LazyVGrid(columns: columns, alignment: .center, spacing: 16) {
-                ForEach($kpMgr.mpKeypad) { $item in
-                    KeyItem(size: $size, kpID: item.kpID, imgData: $item.imgData)
-                        .environmentObject(kpMgr)
+            if !isReady {
+                VStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(1.25)
+                    Text("正在定位系统容器路径...")
+                        .foregroundStyle(.secondary)
                 }
-            }
-            .safeAreaInset(edge: .top) {
-                VStack(spacing: 2) {
-                    Text("按键尺寸")
-                    Picker("", selection: $size) {
-                        ForEach(KPSize.allCases, id: \.self) { kpSize in
-                            Text(kpSize.label + (kpSize == .custom ? " (\(custW)x\(custH))" : "")).tag(kpSize)
+                .frame(maxWidth: .infinity)
+            } else {
+                LazyVGrid(columns: columns, alignment: .center, spacing: 16) {
+                    ForEach($kpMgr.mpKeypad) { $item in
+                        KeyItem(size: $size, kpID: item.kpID, imgData: $item.imgData)
+                            .environmentObject(kpMgr)
+                    }
+                }
+                .safeAreaInset(edge: .top) {
+                    VStack(spacing: 2) {
+                        Text("按键尺寸")
+                        Picker("", selection: $size) {
+                            ForEach(KPSize.allCases, id: \.self) { kpSize in
+                                Text(kpSize.label + (kpSize == .custom ? " (\(custW)x\(custH))" : "")).tag(kpSize)
+                            }
+                        }
+                        .alert("请输入自定义按键尺寸（像素）", isPresented: $showSizeAlert) {
+                            TextField("宽度", value: $custW, format: .number)
+                                .keyboardType(.numberPad)
+                            TextField("高度", value: $custH, format: .number)
+                                .keyboardType(.numberPad)
+                            Button("取消", role: .cancel) {
+                                size = .defSize
+                            }
+                            Button("设定") {
+                                kpMgr.changeSizeOfKeypads(size: size, custW: custW, custH: custH)
+                            }
+                        }
+                        .onChange(of: size) { _, newSize in
+                            if newSize != KPSize.custom {
+                                kpMgr.changeSizeOfKeypads(size: newSize)
+                            } else {
+                                showSizeAlert.toggle()
+                            }
                         }
                     }
-                    .alert("请输入自定义按键尺寸（像素）", isPresented: $showSizeAlert) {
-                        TextField("宽度", value: $custW, format: .number)
-                            .keyboardType(.numberPad)
-                        TextField("高度", value: $custH, format: .number)
-                            .keyboardType(.numberPad)
-                        Button("取消", role: .cancel) {
-                            size = .defSize
-                        }
-                        Button("设定") {
-                            kpMgr.changeSizeOfKeypads(size: size, custW: custW, custH: custH)
-                        }
-                    }
-                    .onChange(of: size) { _, newSize in
-                        if newSize != KPSize.custom {
-                            kpMgr.changeSizeOfKeypads(size: newSize)
+                    .padding(6)
+                    .background(Color(.systemBackground), in: .rect(cornerRadius: cornerRad.component))
+                }
+                .safeAreaInset(edge: .bottom) {
+                    Button {
+                        let res = kpMgr.applyKeypadItems()
+                        if res {
+                            Alertinator.shared.alert(title: "拨号键盘主题应用成功！", body: KPMsg.applyComp, actionLabel: "打开电话", action: {
+                                openApp(withBID: SysBID.phone)
+                            })
+                            Haptic.shared.play(.soft)
                         } else {
-                            showSizeAlert.toggle()
+                            Alertinator.shared.alert(title: "应用拨号键盘主题失败！", body: AppMsg.opFailed)
                         }
+                    } label: {
+                        Image(systemName: "checkmark")
                     }
+                    .buttonStyle(KeypadButtonStyle(isConfirm: true))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 10)
                 }
-                .padding(6)
-                .background(Color(.systemBackground), in: .rect(cornerRadius: cornerRad.component))
-            }
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    let res = kpMgr.applyKeypadItems()
-                    if res {
-                        Alertinator.shared.alert(title: "拨号键盘主题应用成功！", body: KPMsg.applyComp, actionLabel: "打开电话", action: {
-                            openApp(withBID: SysBID.phone)
-                        })
-                        Haptic.shared.play(.soft)
-                    } else {
-                        Alertinator.shared.alert(title: "应用拨号键盘主题失败！", body: AppMsg.opFailed)
-                    }
-                } label: {
-                    Image(systemName: "checkmark")
-                }
-                .buttonStyle(KeypadButtonStyle(isConfirm: true))
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 10)
             }
         }
         .navigationTitle(isPad() ? "" : "拨号键盘美化")
@@ -124,22 +135,33 @@ struct KeypadView: View {
                     Label("菜单", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
                 }
+                .disabled(!isReady)
             }
             ToolbarSpacer(placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("导入主题") {
                     showFileImporter = true
                 }
+                .disabled(!isReady)
             }
         }
         .onAppear {
-            if mpContainerPath.isEmpty {
-                mpContainerPath = fsHandlers.getContainerPath(forMatch: "com.apple.mobilephone")
+            DispatchQueue.global(qos: .userInitiated).async {
+                var targetPath = mpContainerPath
+                if targetPath.isEmpty {
+                    targetPath = fsHandlers.getContainerPath(forMatch: "com.apple.mobilephone")
+                }
+                if !targetPath.isEmpty && !fm.isReadableFile(atPath: targetPath) {
+                    let _ = wq.grantAccess(path: targetPath)
+                }
+                DispatchQueue.main.async {
+                    if mpContainerPath.isEmpty && !targetPath.isEmpty {
+                        mpContainerPath = targetPath
+                    }
+                    kpMgr.getCurrentKeypads(size: size, saveOgData: true)
+                    isReady = true
+                }
             }
-            if !fm.isReadableFile(atPath: mpContainerPath) {
-                let _ = wq.grantAccess(path: mpContainerPath)
-            }
-            kpMgr.getCurrentKeypads(size: size, saveOgData: true)
         }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             handleImport(result)

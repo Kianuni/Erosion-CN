@@ -39,7 +39,7 @@
 8. **完善机型适配与实用工具优化**
    - 补全 iPhone 15 / 16 / 17 / Air / 18 / Duo 全系列及 M 系列 iPad 监管型号映射与硬件特征表，修复原版“80% 充电上限”与“开机提示音”硬件判断互换笔误及自定义键值恒写入 `true` 的 Bug；
    - 新增 iOS 26/27「液态玻璃低功耗渲染（省电模式）」开关与机型外层描述同步；
-   - 修复文件浏览器搜索栏失效与失焦清空问题，提升高 Inode 容器扫描上限并新增核心缓存目录 0 秒一键直达入口。
+   - 修复文件浏览器搜索栏失效与失焦清空问题，采用 `stat()` 动态探测本机实时最大 Inode 基线配合 `pathleak` 加速容器扫描（并为动态壁纸与拨号盘页面加入异步加载进度动画），同时新增核心缓存目录 0 秒一键直达入口。
 
 ---
 
@@ -48,8 +48,8 @@
 > [!IMPORTANT]
 > 操作前请务必通过电脑完整备份设备重要数据！修改系统底层配置存在潜在风险，仅供安全研究与学习交流，请仅在本人持有的设备上使用并自行承担风险。
 
-- **iOS / iPadOS 27.0 – 27.2**、**27.3 beta 1**（完整支持所有功能，包括 `MobileGestalt` 读取与安全写入）
-- **iOS / iPadOS 26.0 – 26.7.2**（部分支持：可使用锁屏壁纸、拨号键盘美化与部分容器浏览；受底层沙盒限制，iOS 26 不支持写入系统 `MobileGestalt`）
+- **iOS / iPadOS 27.0 – 27.2.1**、**27.3 beta 1**（完整支持所有功能，包括 `MobileGestalt` 读取与安全写入）
+- **iOS / iPadOS 26.0 – 26.7.2**（部分支持：可使用锁屏壁纸、拨号键盘美化、锁屏底部签名文字与部分容器浏览；受底层沙盒限制，iOS 26 不支持写入系统 `MobileGestalt`）
 
 ---
 
@@ -58,7 +58,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.5.2_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.5.3_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)
