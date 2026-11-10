@@ -145,15 +145,17 @@ struct GestaltView: View {
                             }
                         }
                     }
-                    PlainToggle(
-                        "解锁 iOS 27 进阶 AI 能力",
-                        subtitle: "开启端侧个人实时翻译与通话/录音音频智能摘要",
-                        infoType: .info,
-                        infoTitle: "iOS 27 进阶 AI 能力说明",
-                        infoMessage: MGMsg.advAppleIntell,
-                        minVrs: 27.0,
-                        isOn: store.mgKeyBinding(MGKey.advAppIntellKeys)
-                    )
+                    if !isAdvAppleIntellHD() || mgOverrideGates {
+                        PlainToggle(
+                            "解锁 iOS 27 进阶 AI 能力",
+                            subtitle: "开启端侧个人实时翻译与通话/录音音频智能摘要",
+                            infoType: .info,
+                            infoTitle: "iOS 27 进阶 AI 能力说明",
+                            infoMessage: MGMsg.advAppleIntell,
+                            minVrs: 27.0,
+                            isOn: store.mgKeyBinding(MGKey.advAppIntellKeys)
+                        )
+                    }
                     if !isAppleIntellHD() || mgOverrideGates {
                         HStack(spacing: 10) {
                             Picker("机型伪装", selection: $mgProductType) {
