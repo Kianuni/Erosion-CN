@@ -226,8 +226,9 @@ struct GestaltView: View {
 
                     PlainToggle(
                         "将“无线局域网”显示为“Wi-Fi”",
+                        subtitle: "⚠️ 开启后会丢失国行特有的单应用“不允许联网”功能",
                         infoType: .warning,
-                        infoTitle: "无线局域网改 Wi-Fi 说明",
+                        infoTitle: "无线局域网改 Wi-Fi 重要提示",
                         infoMessage: MGMsg.wapiToWifi,
                         isOn: store.mgWapiWifiBinding()
                     )
@@ -235,7 +236,7 @@ struct GestaltView: View {
                 } header: {
                     HeaderLabel("国行底层缓存限制 (CacheData 动态解析)", symbol: "antenna.radiowaves.left.and.right")
                 } footer: {
-                    Text("运行时从本机内存中的 libMobileGestalt.dylib 实时解析偏移并严格核对 CacheUUID、长度与有效位；解析失败时严禁修改任何字节。应用本组开关后请手动重启手机生效。")
+                    Text("运行时从本机内存中的 libMobileGestalt.dylib 实时解析偏移并严格核对 CacheUUID、长度与有效位；解析失败时严禁修改任何字节。注意：将“无线局域网”改为“Wi-Fi”会丢失国行的“不允许联网”功能（仅保留蜂窝数据开关）。应用本组开关后请手动重启手机生效。")
                 }
                 
                 Section {

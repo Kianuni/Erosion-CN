@@ -25,7 +25,7 @@ enum MGMsg {
     // info
     static let liquidGlass = "开启后将使用 iOS 26/27 液态玻璃 (Liquid Glass) 的低性能开销渲染模式，可降低 GPU 负载、减少机身发热并节省电量（注销或重启后生效）。"
     static let chinaCacheUnlock = "通过从本机内存加载的系统库 (libMobileGestalt.dylib) 实时动态解析二进制 CacheData 槽位偏移，将国行底层限制标记 green-tea 设为 false、not-green-tea 设为 true。\n\n• 可在国行设备上解锁 FaceTime 音频（语音通话）；\n• 在自带物理 eSIM 芯片的国行机型（如 iPhone 18 系列 / Air）上，可尝试解除系统层针对境外 eSIM 的地理围栏拦截（仍需硬件与运营商支持）。\n\n安全策略：仅当本机 CacheUUID、总长度、有效位及填充字节 100% 匹配通过时才允许修改；应用后请手动重启手机生效。"
-    static let wapiToWifi = "通过本机系统库实时动态解析 wapi 布尔槽位偏移并设为 false，将系统“设置”与控制中心里的“无线局域网”统一显示为海外版的“Wi-Fi”。\n\n注意：开启后国行专属的“启用 WAPI”及“使用无线局域网与蜂窝网络的 App（单独禁止某应用联网）”权限菜单将同步隐藏；关闭此开关并重启即可原样恢复。应用后请手动重启手机生效。"
+    static let wapiToWifi = "通过本机系统库实时动态解析 wapi 布尔槽位偏移并设为 false，将系统“设置”与控制中心里的“无线局域网”统一显示为国际版的“Wi-Fi”。\n\n⚠️ 重要提示：开启后将会【丢失国行特有的“不允许联网”功能】（即“使用无线局域网与蜂窝网络的 App”中的“关闭”选项）！国际版逻辑仅允许单独关闭“蜂窝数据”，无法禁止单个应用使用 Wi-Fi 联网（如第三方输入法或离线应用将无法彻底断网），同时“启用 WAPI”开关也会隐藏。\n\n如需保留应用“不允许联网”权限控制，请保持此项关闭；若已开启，关闭此开关重新应用并手动重启手机即可原样恢复。"
     static let intInstall = "此选项将启用部分遗留在正式版 iOS 中的 Apple 内部调试特性。注意：开启后可能会影响部分正常功能（如无法从 App Store 重新安装自带系统应用），且与 Apple 智能互斥。"
     static let intBuild = "此开关主要用于在“设置”应用中显示内部存储调试信息。在部分设备（尤其是 iPadOS）上可能引发兼容性问题。"
     static let spoofUseless = "伪装设备型号可能会导致面容 ID (Face ID) 等硬件功能失效！你的设备硬件本身已原生支持 Apple 智能，无需修改此项（国行设备只需开启上方“解除地区限制”即可）。"
@@ -341,6 +341,9 @@ final class GestaltStore: ObservableObject {
                     case .success:
                         self.objectWillChange.send()
                         self.mgCurrentDict["CacheData"] = data
+                        if enabled {
+                            Alertinator.shared.alert(title: "无线局域网改 Wi-Fi 重要提示", body: MGMsg.wapiToWifi)
+                        }
                     }
                 }
             }

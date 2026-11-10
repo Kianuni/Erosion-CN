@@ -15,7 +15,7 @@
 
 ## 二、签名与安装说明
 
-1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.5.1_zh-Hans.ipa`**。
+1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.5.2_zh-Hans.ipa`**。
 2. 使用 **SideStore / AltStore / Feather / Sideloadly / Impactor** 配合个人 Apple ID 或带 App Group 权限的开发者证书签名安装：
    - 应用内置了运行时权限自动识别机制，可自动匹配签名工具重写后的 `group.*` 容器标识；
    - 升级新版本时请直接用同一签名工具**覆盖安装**（切勿先卸载旧版，以便完整保留应用沙盒内的初始原厂备份文件 `OriginalGestalt.plist`）。
@@ -39,7 +39,7 @@
    - 若解析未通过，安全护栏会自动置灰锁定所有二进制缓存开关，严禁盲目写入。
 2. 按需选择开关：
    - **解除国行底层限制**：动态调整 `green-tea` 与 `not-green-tea` 布尔槽位（需设备硬件与运营商支持）；
-   - **将“无线局域网”显示为“Wi-Fi”**：动态调整 `wapi` 布尔槽位（注：开启后系统将隐藏国行特有的单应用无线局域网联网权限控制菜单；关闭该开关即可恢复）。
+   - **将“无线局域网”显示为“Wi-Fi”**：动态调整 `wapi` 布尔槽位（⚠️ **重要提示**：开启后会**丢失国行特有的单应用“不允许联网”功能**，国际版仅支持关闭蜂窝数据、无法禁止单个 App 使用 Wi-Fi；关闭该开关并重启即可原样恢复）。
 
 ### 4. 变更预览、安全写入与重启生效
 1. 点击右上角 **「应用」**，在弹出的 **「变更对比预览」** 弹窗中逐项核对本次即将写入的键值变化。
