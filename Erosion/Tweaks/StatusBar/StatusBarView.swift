@@ -11,7 +11,7 @@ private enum SBURL {
     static let carrierOverlayDir = URL(fileURLWithPath: "/var/mobile/Library/Carrier Bundles/Overlay")
     static let sbPrefs = URL(fileURLWithPath: "/var/mobile/Library/Preferences/com.apple.springboard.plist")
     static let backupDir = URL.documentsDirectory.appendingPathComponent("StatusBarBackup")
-    static let sbPrefsBackup = URL.documentsDirectory.appendingPathComponent("StatusBarBackup/Original_com.apple.springboard.plist")
+    static let sbPrefsBackup = URL.documentsDirectory.appendingPathComponent("SharedOriginal_com.apple.springboard.plist")
     static let overlayBackupDir = URL.documentsDirectory.appendingPathComponent("StatusBarBackup/CarrierOverlay")
 }
 
@@ -238,38 +238,52 @@ struct StatusBarView: View {
             sbDict = NSMutableDictionary()
         }
 
+        var originalSBValues: [String: Any] = [:]
+        if fm.fileExists(atPath: SBURL.sbPrefsBackup.path),
+           let ogData = try? Data(contentsOf: SBURL.sbPrefsBackup),
+           let ogDict = try? PropertyListSerialization.propertyList(from: ogData, options: [], format: nil) as? [String: Any] {
+            originalSBValues = ogDict
+        }
+        func restoreOrRemoveSBKey(_ key: String) {
+            if let ogVal = originalSBValues[key] {
+                sbDict[key] = ogVal
+            } else {
+                sbDict.removeObject(forKey: key)
+            }
+        }
+
         let trimmedTime = customTimeText.trimmingCharacters(in: .whitespacesAndNewlines)
         if enableFakeTime && !trimmedTime.isEmpty {
             sbDict["SBFakeTime"] = true
             sbDict["SBFakeTimeString"] = trimmedTime
         } else {
-            sbDict.removeObject(forKey: "SBFakeTime")
-            sbDict.removeObject(forKey: "SBFakeTimeString")
+            restoreOrRemoveSBKey("SBFakeTime")
+            restoreOrRemoveSBKey("SBFakeTimeString")
         }
 
         let trimmedCarrier = customCarrierText.trimmingCharacters(in: .whitespacesAndNewlines)
         if enableCustomCarrier && !trimmedCarrier.isEmpty {
             sbDict["SBFakeCarrier"] = trimmedCarrier
         } else {
-            sbDict.removeObject(forKey: "SBFakeCarrier")
+            restoreOrRemoveSBKey("SBFakeCarrier")
         }
 
         if showRSSI {
             sbDict["SBShowRSSI"] = true
         } else {
-            sbDict.removeObject(forKey: "SBShowRSSI")
+            restoreOrRemoveSBKey("SBShowRSSI")
         }
 
         if showBatteryPercent {
             sbDict["SBShowBatteryPercentage"] = true
         } else {
-            sbDict.removeObject(forKey: "SBShowBatteryPercentage")
+            restoreOrRemoveSBKey("SBShowBatteryPercentage")
         }
 
         if disableBreadcrumb {
             sbDict["SBShowBreadcrumb"] = false
         } else {
-            sbDict.removeObject(forKey: "SBShowBreadcrumb")
+            restoreOrRemoveSBKey("SBShowBreadcrumb")
         }
 
         do {

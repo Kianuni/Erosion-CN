@@ -658,6 +658,16 @@ struct GestaltView: View {
                 cacheExtra.removeObject(forKey: item.key)
             }
         }
+
+        // Self-healing sanitizer: strip non-cached iOS 27 keys and binary CacheData slot keys from CacheExtra
+        // in case the device was previously polluted by an older third-party tool before installing Erosion-CN.
+        if raveSupported() {
+            cacheExtra.removeObject(forKey: MGKey.regionInfo)
+            cacheExtra.removeObject(forKey: "0L5PkT61qoH1b/B1USWqjQ")
+        }
+        for conflictKey in ["iyfxmLogGVIaH7aEgqwcIA", "4snMZS8LJkSctKypt2m+xA", "hiHut/WR+B9Lx/vd0WyeNg", "green-tea", "not-green-tea", "wapi"] {
+            cacheExtra.removeObject(forKey: conflictKey)
+        }
         return candidate
     }
     

@@ -205,10 +205,11 @@ final class GestaltStore: ObservableObject {
                     Alertinator.shared.alert(title: "解除地区限制提示", body: MGMsg.region)
                     self.cacheExtra[MGKey.regionCode] = "LL"
                     self.cacheExtra[MGKey.regionSysconfig] = "LL/A"
-                    // Only write MGKey.regionInfo (zHeENZu+wbg7PUprwNwBWg) if present in factory CacheExtra.
-                    // On iOS 27, factory CacheExtra only has RegionInfoFromSysconfig (yK+xavymRGZ3xWc1tb8XDg);
-                    // injecting zHeENZu+wbg7PUprwNwBWg triggers boot-time MobileGestalt cache invalidation & reset.
-                    if self.originalCacheExtraValue(forKey: MGKey.regionInfo) != nil {
+                    // Only write MGKey.regionInfo (zHeENZu+wbg7PUprwNwBWg) on iOS < 27 if present in factory CacheExtra.
+                    // On iOS 27 (raveSupported()), zHeENZu+wbg7PUprwNwBWg has slot == -1 (non-cached);
+                    // even if a previous third-party tool polluted OriginalGestalt.plist with it, always strip it on iOS 27
+                    // so boot-time mobilegestaltd validation never invalidates or resets the cache.
+                    if !raveSupported(), self.originalCacheExtraValue(forKey: MGKey.regionInfo) != nil {
                         self.cacheExtra[MGKey.regionInfo] = "LL/A"
                     } else {
                         self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
@@ -221,7 +222,11 @@ final class GestaltStore: ObservableObject {
                     }
                 } else {
                     self.restoreOrRemoveKey(MGKey.regionCode)
-                    self.restoreOrRemoveKey(MGKey.regionInfo)
+                    if raveSupported() {
+                        self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
+                    } else {
+                        self.restoreOrRemoveKey(MGKey.regionInfo)
+                    }
                     self.restoreOrRemoveKey(MGKey.regionSysconfig)
                     self.restoreOrRemoveKey(MGKey.regModelNumber)
                 }

@@ -12,7 +12,7 @@ private enum SBTweakURL {
     static let sbPrefs = URL(fileURLWithPath: "/var/mobile/Library/Preferences/com.apple.springboard.plist")
     static let globalPrefs = URL(fileURLWithPath: "/var/mobile/Library/Preferences/.GlobalPreferences.plist")
     static let backupDir = URL.documentsDirectory.appendingPathComponent("SpringBoardBackup")
-    static let sbBackup = URL.documentsDirectory.appendingPathComponent("SpringBoardBackup/Original_com.apple.springboard.plist")
+    static let sbBackup = URL.documentsDirectory.appendingPathComponent("SharedOriginal_com.apple.springboard.plist")
     static let globalBackup = URL.documentsDirectory.appendingPathComponent("SpringBoardBackup/Original_GlobalPreferences.plist")
 }
 
@@ -240,34 +240,48 @@ struct SpringBoardTweakView: View {
             sbDict = NSMutableDictionary()
         }
 
+        var originalSBValues: [String: Any] = [:]
+        if fm.fileExists(atPath: SBTweakURL.sbBackup.path),
+           let ogData = try? Data(contentsOf: SBTweakURL.sbBackup),
+           let ogDict = try? PropertyListSerialization.propertyList(from: ogData, options: [], format: nil) as? [String: Any] {
+            originalSBValues = ogDict
+        }
+        func restoreOrRemoveSBKey(_ key: String) {
+            if let ogVal = originalSBValues[key] {
+                sbDict[key] = ogVal
+            } else {
+                sbDict.removeObject(forKey: key)
+            }
+        }
+
         if enableAnimSpeed {
             sbDict["UIAnimationDragCoefficient"] = Float(animCoefficient)
         } else {
-            sbDict.removeObject(forKey: "UIAnimationDragCoefficient")
+            restoreOrRemoveSBKey("UIAnimationDragCoefficient")
         }
 
         if hideLowPowerAlerts {
             sbDict["SBHideLowPowerAlerts"] = true
         } else {
-            sbDict.removeObject(forKey: "SBHideLowPowerAlerts")
+            restoreOrRemoveSBKey("SBHideLowPowerAlerts")
         }
 
         if lockScreenDisableCC {
             sbDict["SBControlCenterEnabledInLockScreen"] = false
         } else {
-            sbDict.removeObject(forKey: "SBControlCenterEnabledInLockScreen")
+            restoreOrRemoveSBKey("SBControlCenterEnabledInLockScreen")
         }
 
         if lockScreenDisableNC {
             sbDict["SBNotificationCenterEnabledInLockScreen"] = false
         } else {
-            sbDict.removeObject(forKey: "SBNotificationCenterEnabledInLockScreen")
+            restoreOrRemoveSBKey("SBNotificationCenterEnabledInLockScreen")
         }
 
         if disableHomeRotation {
             sbDict["SBDisableHomeScreenRotation"] = true
         } else {
-            sbDict.removeObject(forKey: "SBDisableHomeScreenRotation")
+            restoreOrRemoveSBKey("SBDisableHomeScreenRotation")
         }
 
         do {
