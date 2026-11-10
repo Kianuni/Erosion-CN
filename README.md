@@ -30,14 +30,15 @@
 5. **本机 `libMobileGestalt.dylib` 运行时动态偏移解析（零硬编码）**
    - 在设备运行时只读扫描内存中加载的 `/usr/lib/libMobileGestalt.dylib` 查询描述符表，实时计算当前机型与当前系统版本的 `CacheUUID`、总槽位数及布尔槽位偏移（`green-tea`、`not-green-tea`、`wapi`）；
    - **严格多重校验门控**：仅当本机 `CacheUUID` 唯一匹配、总长度精确等于 `槽位数 × 9`、有效位 `validity == 1`、8 字节槽位填充全为 `0` 且无任何无关字节变动时才允许修改；解析未通过时自动锁定开关并拦截写入。
-6. **跨机型 / 跨系统升级三重指纹防呆与云备份隔离**
+6. **跨机型 / 跨系统升级四重指纹防呆、SHA-256 备份摘要校验与云备份隔离**
    - 本地备份文件自动标记 `isExcludedFromBackup = true`，防止通过 iCloud / 电脑换机迁移时将旧设备的缓存备份带入新设备；
-   - 还原原始备份时强制核对 `CacheVersion`、`CacheUUID` 与本机硬件 `ProductType`；系统 OTA 升级后首次打开可自动识别新版本构建号并提示刷新备份。
+   - 生成原始备份 `OriginalGestalt.plist` 时自动计算并持久化记录 `SHA-256` 完整性摘要；还原原始备份时强制核对 `SHA-256`、`CacheVersion`、`CacheUUID`、`CacheData` 长度与本机硬件 `ProductType`，从根源上杜绝跨系统升级或损坏备份覆写导致的基带/eSIM 异常。
 7. **重签证书 `App Group` 自动探测与高危软砖项拆除**
    - 运行时通过 `SecTaskCopyValueForEntitlement` 与纯 Swift Mach-O `LC_CODE_SIGNATURE` 签名段解析自动匹配任意重签工具注入的可用 `group.*` 容器；
    - 默认移除并拦截上游版本中存在软砖/无限设置向导隐患的高危功能（如 iPhone 正则盲改切片的 iPadOS 模式、个人零售设备的监管模式开关、非缓存键注入等）。
-8. **完善机型适配与实用工具优化**
+8. **完善机型适配、iOS 27 进阶 AI 能力解锁与实用工具优化**
    - 补全 iPhone 15 / 16 / 17 / Air / 18 / Duo 全系列及 M 系列 iPad 监管型号映射与硬件特征表，修复原版“80% 充电上限”与“开机提示音”硬件判断互换笔误及自定义键值恒写入 `true` 的 Bug；
+   - **Apple 智能子能力打包与 iOS 27 进阶 AI 解锁（`v0.6.2`）**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；新增 **「解锁 iOS 27 进阶 AI 能力」** 合并开关，支持为 iPhone 15 Pro / 16 / 17 等机型一键解锁默认仅在最新代硬件设备树 (`IODeviceTree:/product`) 中开启的**个人实时翻译 (`Personal Translator`)**、**iOS 27 音频智能 (`Audio Intelligence`)** 与**常驻语音唤醒 (`Always-Listening Siri`)**；
    - 新增 iOS 26/27「液态玻璃低功耗渲染（省电模式）」开关与机型外层描述同步；
    - 修复文件浏览器搜索栏失效与失焦清空问题，采用 `stat()` 动态探测本机实时最大 Inode 基线配合 `pathleak` 加速容器扫描（并为动态壁纸与拨号盘页面加入异步加载进度动画），同时新增核心缓存目录 0 秒一键直达入口；
 9. **新增四大扩展工具模块（`v0.6.0`）**
@@ -63,7 +64,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.6.1_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.6.2_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)

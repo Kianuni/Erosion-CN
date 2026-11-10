@@ -110,7 +110,12 @@ final class PlistManager: ObservableObject {
     func replacePlistItem(items: inout [PlistItem], newItem: PlistItem) -> Bool {
         for item in items.indices {
             if items[item].id == newItem.id {
-                items[item] = newItem
+                var updated = newItem
+                let old = items[item]
+                if old.type == updated.type && old.stringVal == updated.stringVal && old.boolVal == updated.boolVal && old.type != .dict && old.type != .array {
+                    updated.isModified = old.isModified
+                }
+                items[item] = updated
                 return true
             }
             

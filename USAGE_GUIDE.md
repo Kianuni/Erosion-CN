@@ -15,7 +15,7 @@
 
 ## 二、签名与安装说明
 
-1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.6.1_zh-Hans.ipa`**。
+1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.6.2_zh-Hans.ipa`**。
 2. 使用 **SideStore / AltStore / Feather / Sideloadly / Impactor** 配合个人 Apple ID 或带 App Group 权限的开发者证书签名安装：
    - 应用内置了运行时权限自动识别机制，可自动匹配签名工具重写后的 `group.*` 容器标识；
    - 升级新版本时请直接用同一签名工具**覆盖安装**（切勿先卸载旧版，以便完整保留应用沙盒内的初始原厂备份文件 `OriginalGestalt.plist`）。
@@ -31,7 +31,8 @@
 
 ### 2. 地区配置与端侧智能特性
 1. 在 **「地区与功能准入 (Eligibility)」** 分区按需开启 **「解除地区限制」**，系统会自动填入当前硬件对应的目标监管型号（保持自动识别值即可，原生支持端侧智能的机型无需、也不应修改机型标识符）。
-2. 如需兼顾中文系统的本地化来电筛选特性，建议在系统 `设置 → 通用 → 语言与地区` 中保持首选语言为 **简体中文**，并根据个人语言习惯配置 Siri 语言。
+2. **「解锁 iOS 27 进阶 AI 能力」**：在 iOS 27 系统下，可一键为 iPhone 15 Pro / 16 / 17 等机型解锁默认仅在最新代硬件设备树 (`IODeviceTree:/product`) 中开启的 **个人实时翻译 (`Personal Translator`)**、**iOS 27 音频智能 (`Audio Intelligence`)** 与 **常驻唤醒词聆听 (`Always-Listening Siri`)**；对于旧机型，开启 **「启用 Apple 智能开关」** 时也会自动同步解锁相册「消除」(Clean Up) 与备忘录「手写体合成」。
+3. 如需兼顾中文系统的本地化来电筛选特性，建议在系统 `设置 → 通用 → 语言与地区` 中保持首选语言为 **简体中文**，并根据个人语言习惯配置 Siri 语言。
 
 ### 3. 本机 `CacheData` 动态解析选项
 1. 在 **「国行底层缓存限制 (CacheData 动态解析)」** 分区顶部查看实时状态：

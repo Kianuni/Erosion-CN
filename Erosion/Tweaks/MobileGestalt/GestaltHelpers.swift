@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreFoundation
+import CryptoKit
 import Darwin
 import MachO
 import UIKit
@@ -51,7 +52,7 @@ func mgPlistValuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {
             let isFloatA = CFNumberIsFloatType(numA)
             let isFloatB = CFNumberIsFloatType(numB)
             if isFloatA != isFloatB { return false }
-            return isFloatA ? (numA.doubleValue == numB.doubleValue) : (numA.int64Value == numB.int64Value)
+            return isFloatA ? (numA.doubleValue == numB.doubleValue) : (numA.stringValue == numB.stringValue)
         }
         if let strA = a as? String, let strB = b as? String { return strA == strB }
         if let dataA = a as? Data, let dataB = b as? Data { return dataA == dataB }
@@ -84,7 +85,7 @@ func mgFormatValue(_ val: Any?) -> String {
         if CFNumberIsFloatType(num) {
             return "\(num.doubleValue) (Float)"
         }
-        return "\(num.int64Value)"
+        return num.stringValue
     }
     if let str = val as? String { return str.isEmpty ? "\"\"" : str }
     if let data = val as? Data { return "<Data: \(data.count) 字节>" }
@@ -102,7 +103,12 @@ func mgKeyDisplayName(_ key: String) -> String {
         MGKey.regionInfo: "销售地区 (RegionInfo)",
         MGKey.regionSysconfig: "系统销售地区 (RegionInfoFromSysconfig)",
         MGKey.regModelNumber: "监管型号 (RegulatoryModelNumber)",
-        MGKey.appIntell: "Apple 智能开关",
+        MGKey.appIntell: "Apple 智能总开关",
+        MGKey.photosCleanUp: "相册“消除”功能 (Photos Clean Up)",
+        MGKey.handwritingSynth: "备忘录手写体合成 (Handwriting Synthesis)",
+        MGKey.audioIntell: "iOS 27 音频智能 (Audio Intelligence)",
+        MGKey.personalTranslator: "个人实时翻译 (Personal Translator)",
+        MGKey.alwaysListeningSiri: "常驻唤醒词聆听 (Always-Listening Siri)",
         MGKey.liquidGlassLowPower: "液态玻璃低功耗渲染",
         MGKey.island: "灵动岛特性",
         MGKey.AOD: "全天候显示 (AOD)",
@@ -211,6 +217,39 @@ func mgExcludeFromCloudBackup(_ url: URL) {
     var values = URLResourceValues()
     values.isExcludedFromBackup = true
     try? target.setResourceValues(values)
+}
+
+func mgComputeSHA256Hex(_ data: Data) -> String {
+    let digest = SHA256.hash(data: data)
+    return digest.map { String(format: "%02x", $0) }.joined()
+}
+
+func mgSaveOriginalBackupWithDigest(_ data: Data) throws {
+    try data.write(to: MGURL.savedGestaltURL, options: .atomic)
+    mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
+    let hex = mgComputeSHA256Hex(data)
+    try Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+    mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+}
+
+func mgVerifyOriginalBackupIntegrity() -> (Bool, String) {
+    guard let data = try? Data(contentsOf: MGURL.savedGestaltURL), !data.isEmpty else {
+        return (false, "找不到或无法读取原始备份文件 OriginalGestalt.plist！")
+    }
+    let check = mgValidatePlistData(data)
+    guard check.0 else {
+        return (false, "原始备份文件结构已损坏：\(check.1)")
+    }
+    if FileManager.default.fileExists(atPath: MGURL.savedGestaltSHA256URL.path),
+       let savedHexData = try? Data(contentsOf: MGURL.savedGestaltSHA256URL),
+       let savedHex = String(data: savedHexData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+       savedHex.count == 64 {
+        let actualHex = mgComputeSHA256Hex(data)
+        if actualHex.caseInsensitiveCompare(savedHex) != .orderedSame {
+            return (false, "原始备份文件 SHA-256 完整性摘要校验未通过（预期 \(savedHex.prefix(12))...，实际 \(actualHex.prefix(12))...），可能已被意外篡改或损坏，已拦截还原！")
+        }
+    }
+    return (true, "ok")
 }
 
 func mgIsDangerousCacheExtraKey(_ key: String) -> String? {

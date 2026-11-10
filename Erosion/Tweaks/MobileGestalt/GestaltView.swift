@@ -130,13 +130,30 @@ struct GestaltView: View {
                         }
                     }
                     if !isAppleIntellHD() || mgOverrideGates {
-                        PlainToggle("启用 Apple 智能开关", minVrs: 18.1, isOn: store.mgKeyBinding([MGKey.appIntell]))
-                            .onChange(of: store.mgKeyBinding([MGKey.appIntell]).wrappedValue) { (_, newVal) in
-                                if newVal {
-                                    store.mgPullKeys([MGKey.intBuild, MGKey.intInstall])
-                                }
+                        PlainToggle(
+                            "启用 Apple 智能开关",
+                            subtitle: "自动同步解锁相册“消除”与备忘录“手写体合成”",
+                            infoType: .info,
+                            infoTitle: "启用 Apple 智能说明",
+                            infoMessage: MGMsg.appleIntellInfo,
+                            minVrs: 18.1,
+                            isOn: store.mgKeyBinding(MGKey.appIntellAllKeys)
+                        )
+                        .onChange(of: store.mgKeyBinding(MGKey.appIntellAllKeys).wrappedValue) { (_, newVal) in
+                            if newVal {
+                                store.mgPullKeys([MGKey.intBuild, MGKey.intInstall])
                             }
+                        }
                     }
+                    PlainToggle(
+                        "解锁 iOS 27 进阶 AI 能力",
+                        subtitle: "开启个人实时翻译、通话/录音音频智能摘要与常驻 Siri 唤醒",
+                        infoType: .info,
+                        infoTitle: "iOS 27 进阶 AI 能力说明",
+                        infoMessage: MGMsg.advAppleIntell,
+                        minVrs: 27.0,
+                        isOn: store.mgKeyBinding(MGKey.advAppIntellKeys)
+                    )
                     if !isAppleIntellHD() || mgOverrideGates {
                         HStack(spacing: 10) {
                             Picker("机型伪装", selection: $mgProductType) {
@@ -339,6 +356,7 @@ struct GestaltView: View {
                                     Button("重新生成原始备份", role: .destructive) {
                                         Alertinator.shared.alert(title: "警告！", body: MGMsg.mgResetSavWarn, actionLabel: "确认覆盖", action: {
                                             try? fm.removeItem(at: MGURL.savedGestaltURL)
+                                            try? fm.removeItem(at: MGURL.savedGestaltSHA256URL)
                                             store.mgCurrentDict = mgLoadData()
                                         })
                                     }
@@ -501,7 +519,13 @@ struct GestaltView: View {
                 throw preCheck.1
             }
             if !fm.fileExists(atPath: MGURL.savedGestaltURL.path) {
-                try mgData.write(to: MGURL.savedGestaltURL, options: .atomic)
+                try mgSaveOriginalBackupWithDigest(mgData)
+            } else if !fm.fileExists(atPath: MGURL.savedGestaltSHA256URL.path),
+                      let existingOgData = try? Data(contentsOf: MGURL.savedGestaltURL),
+                      mgValidatePlistData(existingOgData).0 {
+                let hex = mgComputeSHA256Hex(existingOgData)
+                try? Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+                mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
             }
             mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
             
@@ -556,7 +580,7 @@ struct GestaltView: View {
                             body: "原始备份文件来自旧版系统 (\(ogBuild))，而当前系统已更新至 \(curBuild)（当前缓存处于原厂未修改状态）。\n\n建议立即将原始备份同步更新为 \(curBuild) 的原厂文件，以免后续误用旧版备份覆盖。",
                             actionLabel: "更新原始备份",
                             action: {
-                                try? mgData.write(to: MGURL.savedGestaltURL, options: .atomic)
+                                try? mgSaveOriginalBackupWithDigest(mgData)
                                 store.mgCurrentDict = mgLoadData()
                             }
                         )
@@ -579,9 +603,11 @@ struct GestaltView: View {
     private func buildCandidateDict() throws -> NSMutableDictionary {
         let snapshotData = try PropertyListSerialization.data(fromPropertyList: store.mgCurrentDict, format: .binary, options: 0)
         guard let candidate = try PropertyListSerialization.propertyList(from: snapshotData, options: [.mutableContainersAndLeaves], format: nil) as? NSMutableDictionary,
-              let cacheExtra = candidate["CacheExtra"] as? NSMutableDictionary,
-              let artwork = cacheExtra[MGKey.artwork] as? NSMutableDictionary else {
+              let cacheExtra = candidate["CacheExtra"] as? NSMutableDictionary else {
             throw "无法构建待写入的 CacheExtra 字典！"
+        }
+        guard let artwork = cacheExtra[MGKey.artwork] as? NSMutableDictionary else {
+            throw "检测到 ArtworkTraits (\(MGKey.artwork)) 字段缺失或非有效字典结构，为防止丢失屏幕特征已拦截写入！"
         }
         
         let targetSubtype = mgOverrideGates ? mgSubtype : mgOgSubtype
@@ -688,6 +714,11 @@ struct GestaltView: View {
     
     private func mgRevert() {
         do {
+            let integrityCheck = mgVerifyOriginalBackupIntegrity()
+            guard integrityCheck.0 else {
+                Alertinator.shared.alert(title: "原始备份完整性校验未通过！", body: integrityCheck.1, showCancel: true)
+                return
+            }
             guard let mgDictToApply = NSMutableDictionary(contentsOf: MGURL.savedGestaltURL) else {
                 throw "找不到原始备份文件 OriginalGestalt.plist！"
             }
@@ -709,7 +740,18 @@ struct GestaltView: View {
                 if !ogUUID.isEmpty && !liveUUID.isEmpty && ogUUID.caseInsensitiveCompare(liveUUID) != .orderedSame {
                     Alertinator.shared.alert(
                         title: "已拦截不匹配的缓存布局还原！",
-                        body: "原始备份的 CacheUUID (\(ogUUID)) 与当前设备系统 (\(liveUUID)) 不一致，直接覆盖存在白苹果风险，安全护栏已阻止还原。",
+                        body: "原始备份的 CacheUUID (\(ogUUID)) 与当前设备系统 (\(liveUUID)) 不一致，直接覆盖存在白苹果与丢 eSIM 风险，安全护栏已阻止还原。",
+                        showCancel: true
+                    )
+                    return
+                }
+
+                let ogCacheLen = (mgDictToApply["CacheData"] as? Data)?.count ?? 0
+                let liveCacheLen = (liveDict["CacheData"] as? Data)?.count ?? 0
+                if ogCacheLen > 0 && liveCacheLen > 0 && ogCacheLen != liveCacheLen {
+                    Alertinator.shared.alert(
+                        title: "已拦截长度不一致的二进制缓存还原！",
+                        body: "原始备份的 CacheData 长度 (\(ogCacheLen) 字节) 与当前系统 (\(liveCacheLen) 字节) 不一致，直接写入会破坏基带与 eSIM 槽位，已强制拦截！",
                         showCancel: true
                     )
                     return
