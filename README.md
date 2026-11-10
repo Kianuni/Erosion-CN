@@ -41,16 +41,14 @@
    - **Apple 智能子能力打包与 iOS 27 进阶 AI 解锁（`v0.6.2`）**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；新增 **「解锁 iOS 27 进阶 AI 能力」** 合并开关，支持为 iPhone 15 Pro / 16 / 17 等机型一键解锁默认仅在最新代硬件设备树 (`IODeviceTree:/product`) 中开启的**个人实时翻译 (`Personal Translator`)** 与 **iOS 27 音频智能 (`Audio Intelligence`)**（注：**iPhone 18 系列机型硬件底层已默认开启上述能力，无需额外开启，故应用内默认不展示该选项**，国行设备仅需开启「解除地区限制」即可完整激活）；
    - 新增 iOS 26/27「液态玻璃低功耗渲染（省电模式）」开关与机型外层描述同步；
    - 修复文件浏览器搜索栏失效与失焦清空问题，采用 `stat()` 动态探测本机实时最大 Inode 基线配合 `pathleak` 加速容器扫描（并为动态壁纸与拨号盘页面加入异步加载进度动画），同时新增核心缓存目录 0 秒一键直达入口；
-9. **新增四大扩展工具模块（`v0.6.0`）**
-   - **状态栏与运营商自定义 (`StatusBarView`)**：支持修改 `/var/mobile/Library/Carrier Bundles/Overlay` 运营商文字（支持中文/英文/Emoji）、自定义状态栏时间处短语、强制电池百分比、RSSI 数字信号及屏蔽左上角返回面包屑（自带原厂自动备份与一键还原）；
-   - **桌面与系统动画调优 (`SpringBoardTweakView`)**：支持调节全局 UI 过渡动画速度系数（`UIAnimationDragCoefficient`，提供 `0.25x 瞬开` / `0.50x 极速` / `0.75x 轻快` / `1.00x 默认` 预设与无级滑块）、屏蔽 20%/10% 低电量弹窗打断、锁屏防下拉控制中心/通知中心等；
+9. **新增应用存档管理与容器缓存清理模块（`v0.6.0`）**
    - **应用与游戏存档备份、还原与修改器 (`AppDataBackupView`)**：自动扫描本机第三方应用与单机游戏容器，支持一键将 `Documents` 与 `Library/Preferences` 打包备份为 `.zip`、导出分享、跨重装自动匹配最新容器 UUID 原位还原存档，并支持一键跳入存档目录调用内置无损 Plist/文本编辑器修改；
    - **容器级缓存扫描与清理 (`CacheCleanerView`)**：专治 iOS「系统数据（其他）」暴涨，按体积排行展示各应用容器的 `Library/Caches` 与 `tmp` 可释放空间，支持单应用或批量一键清理（严格保护 `Documents`、聊天记录数据库与登录态）。
-10. **新增真机底层生效核验探针、Apple 智能四要素一键体检与影像/健康硬件槽位解锁（`v0.7.0`）**
-    - **真机 `MobileGestalt` 底层生效核验与动态槽位实时探针 (`MGInspectorView`)**：纯只读调用系统库 `MGCopyAnswer` 实时读取当前真机生效值，并与 `OriginalGestalt.plist` 原厂备份、当前 `CacheData / CacheExtra` 待写配置进行四源同屏对比；同时提供本机全量 `720+` 个二进制 `CacheData` 槽位的动态解析检索与自由键名实时探针；
-    - **Apple 智能 (Apple Intelligence) 激活四要素一键体检面板 (`AppleIntelligenceCheckupCard`)**：实时聚合核验「销售地区 `LL/LL/A`」、「美版监管型号 `Axxxx`（基于真实主板型号防伪装误判）」、「国行 `green-tea` 底层门控与 `InternalInstall` 互斥锁」及「端侧 AI 准入与子能力」，支持一键自动配齐全部缺失项；
+10. **新增真机底层生效核验探针、Apple 智能四要素一键体检与影像/健康硬件槽位解锁（`v0.7.1`）**
+    - **真机 `MobileGestalt` 底层生效核验与动态槽位实时探针 (`MGInspectorView`)**：纯只读调用系统库 `MGCopyAnswer` 实时读取当前真机生效值，并与 `OriginalGestalt.plist` 原厂备份、当前 `CacheData / CacheExtra` 待写配置进行三源同屏对比；同时提供本机全量 `720+` 个二进制 `CacheData` 槽位的动态解析检索与自由键名实时探针；
+    - **Apple 智能 (Apple Intelligence) 激活四要素一键体检面板 (`AppleIntelligenceCheckupCard`)**：实时聚合核验「销售地区 `LL/LL/A`」、「美版监管型号 `Axxxx`（基于真实主板型号防伪装误判）」、「端侧 AI 芯片准入」及「系统实时生效回读」，并在原生 AI 机型上自动锁定 `InternalInstall` 互斥开关，支持一键自动配齐全部缺失项；
     - **影像与健康进阶能力解锁（`CacheData` 二进制硬件槽位直写）**：针对 `libMobileGestalt.dylib` 中 `_MGCacheSetValueForKey` 的 `validity` 短路机制（仅写 `CacheExtra` 会被系统直接忽略的硬件设备树属性），通过运行时动态槽位解析直接写入 `CacheData`，新增 **相册与相机「混音 (Audio Mix)」**、**空间音频录制与 FaceTime 空间音频**、**按下快门瞬间抓拍 (Responsive Shutter)** 与 **健康「高血压趋势评估模式」** 4 项开关，并内置本机原生硬件防降级保护锁；
-    - **修复运营商自定义写入报错**：修复 iOS 26/27 下 `/var/mobile/Library/Preferences` 受 Seatbelt 沙盒保护导致修改运营商名称时提前报错中断的问题，改为优先原位更新 `/var/mobile/Library/Carrier Bundles/Overlay` 下的全部运营商覆盖配置文件。
+    - **修正 `WorseQuerySwift` 错误码日志并清理非容器目录入口（`v0.7.1`）**：修复 `worse_query` 返回 `-6`（内核拒绝签发非容器路径沙盒扩展令牌）时错误原因被覆盖的问题，并移除不在 `containermanagerd` 容器权限范围内的 `/var/mobile/Library` 遗留入口。
 
 ---
 
@@ -69,7 +67,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.7.0_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.7.1_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)

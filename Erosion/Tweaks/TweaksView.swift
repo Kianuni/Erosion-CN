@@ -13,8 +13,6 @@ struct TweaksView: View {
         NavigationStack {
             List {
                 Section {
-                    NavigationLink("状态栏与运营商自定义", destination: StatusBarView())
-                    NavigationLink("桌面与系统动画调优", destination: SpringBoardTweakView())
                     NavigationLink("自定义锁屏壁纸", destination: PosterBoardView())
                     NavigationLink("拨号键盘美化", destination: KeypadView())
                 } header: {
