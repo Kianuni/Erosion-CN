@@ -9,21 +9,81 @@
 
 import Foundation
 
+struct MGSlotDescriptorInfo: Identifiable, Equatable, Sendable {
+    var id: String { "\(slotIndex):\(obfuscatedKey)" }
+    let obfuscatedKey: String
+    let slotIndex: Int       // -1 for non-cached queries, 0..<slotCount for CacheData slots
+    let queryType: UInt32    // 11 = Boolean
+    var valueOffset: Int? { slotIndex >= 0 ? slotIndex * 8 : nil }
+
+    func validityOffset(slotCount: Int) -> Int? {
+        guard slotIndex >= 0 else { return nil }
+        return slotCount * 8 + slotIndex
+    }
+}
+
 struct MGCacheDataLayout: Codable, Equatable, Sendable {
     static let greenTeaKey = "iyfxmLogGVIaH7aEgqwcIA"      // green-tea
     static let notGreenTeaKey = "4snMZS8LJkSctKypt2m+xA"   // not-green-tea
     static let wapiKey = "hiHut/WR+B9Lx/vd0WyeNg"          // wapi (WLAN vs Wi-Fi)
+
+    // Media, Camera & Health Boolean Slot Keys (IODeviceTree-backed, slot >= 0, qtype = 11)
+    static let audioMixKey = "aVL5GE3tx0LSCI/ErfrJGA"            // CameracinematicAudioTrackRendering (Audio Mix)
+    static let spatialAudioRecKey = "X6NGcYcvHmbqlR8hLXASJA"     // spatial-audio-recording
+    static let spatialFaceTimeAudioKey = "/EVOCjM/Nmb2roP5ebtEFA"// spatial-facetime-audio
+    static let responsiveShutterKey = "gQDt76Te0SPw7N8oTLrBFw"   // ResponsiveShutter
+    static let hypertensionNotifKey = "4fh9efw4o1yaFqkXNCXoeA"   // HypertensionNotifications
+
+    // Apple Intelligence & iOS 27 Advanced AI Boolean Slot Keys (slot >= 0, qtype = 11)
+    static let appIntellKey = "A62OafQ85EJAiiqKn4agtg"           // DeviceSupportsGenerativeModelSystems
+    static let photosCleanUpKey = "XNCjqOupLM/S8fNyxRNQTA"       // Photos Clean Up
+    static let handwritingSynthKey = "YgYIIViDt1kgzyIsIV61vA"    // Handwriting Synthesis
+    static let audioIntellKey = "rb2tKZxlj0Gm2tBmUQSLqQ"         // supports-audio-intelligence
+    static let personalTranslatorKey = "M1n2sAqf33NAOgZRGxQYBA"  // supports-personal-translator
+
+    static let optionalFeatureSlotKeys: Set<String> = [
+        audioMixKey,
+        spatialAudioRecKey,
+        spatialFaceTimeAudioKey,
+        responsiveShutterKey,
+        hypertensionNotifKey,
+        appIntellKey,
+        photosCleanUpKey,
+        handwritingSynthKey,
+        audioIntellKey,
+        personalTranslatorKey
+    ]
+
+    static let mediaHealthSlotKeys: Set<String> = [
+        audioMixKey,
+        spatialAudioRecKey,
+        spatialFaceTimeAudioKey,
+        responsiveShutterKey,
+        hypertensionNotifKey
+    ]
 
     let uuid: String
     let slotCount: Int
     let greenTeaIndex: Int
     let notGreenTeaIndex: Int
     let wapiIndex: Int?
+    var featureSlotIndices: [String: Int] = [:]
 
     var byteCount: Int { slotCount * 9 }
     var greenTeaOffset: Int { greenTeaIndex * 8 }
     var notGreenTeaOffset: Int { notGreenTeaIndex * 8 }
     var wapiOffset: Int? { wapiIndex.map { $0 * 8 } }
+
+    func slotIndex(forKey key: String) -> Int? {
+        if key == Self.greenTeaKey { return greenTeaIndex }
+        if key == Self.notGreenTeaKey { return notGreenTeaIndex }
+        if key == Self.wapiKey { return wapiIndex }
+        return featureSlotIndices[key]
+    }
+
+    func valueOffset(forKey key: String) -> Int? {
+        return slotIndex(forKey: key).map { $0 * 8 }
+    }
 
     func validityOffset(for slotIndex: Int) -> Int {
         return slotCount * 8 + slotIndex
@@ -33,6 +93,9 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
         var set: Set<Int> = [greenTeaOffset, notGreenTeaOffset]
         if let wOff = wapiOffset {
             set.insert(wOff)
+        }
+        for (_, slotIdx) in featureSlotIndices where (0..<slotCount).contains(slotIdx) {
+            set.insert(slotIdx * 8)
         }
         return set
     }
@@ -134,7 +197,7 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
         var positiveIndices = Set<Int>()
         var targetIndices: [String: Set<Int>] = [:]
         var targetAlignments: [String: Set<String>] = [:]
-        let watchedKeys: Set<String> = [greenTeaKey, notGreenTeaKey, wapiKey]
+        let requiredKeys: Set<String> = [greenTeaKey, notGreenTeaKey, wapiKey]
 
         for (secID, secData) in constants.enumerated() where secData.count >= 64 {
             let scanErr: MGCacheResolutionError? = secData.withUnsafeBytes { raw -> MGCacheResolutionError? in
@@ -152,10 +215,13 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
                         positiveIndices.insert(slotIdx)
                     }
 
-                    if watchedKeys.contains(key) {
+                    if requiredKeys.contains(key) {
                         guard queryType == 11, slotIdx >= 0 else {
                             return .invalidTargetDescriptor("目标键 \(key) 的描述符类型 (\(queryType)) 或槽位 (\(slotIdx)) 非有效布尔缓存项。")
                         }
+                        targetIndices[key, default: []].insert(slotIdx)
+                        targetAlignments[key, default: []].insert("\(secID):\(off % 64)")
+                    } else if optionalFeatureSlotKeys.contains(key), queryType == 11, slotIdx >= 0 {
                         targetIndices[key, default: []].insert(slotIdx)
                         targetAlignments[key, default: []].insert("\(secID):\(off % 64)")
                     }
@@ -198,15 +264,112 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
             resolvedWapiIdx = wIdx
         }
 
+        var resolvedFeatureSlots: [String: Int] = [:]
+        var usedCoreSlots: Set<Int> = [gtIdx, ngtIdx]
+        if let wIdx = resolvedWapiIdx {
+            usedCoreSlots.insert(wIdx)
+        }
+        for fKey in optionalFeatureSlotKeys.sorted() {
+            if let fSet = targetIndices[fKey],
+               fSet.count == 1,
+               let fIdx = fSet.first,
+               (0..<slotCount).contains(fIdx),
+               !usedCoreSlots.contains(fIdx),
+               targetAlignments[fKey] == gtAlign {
+                resolvedFeatureSlots[fKey] = fIdx
+            }
+        }
+
         return .success(
             MGCacheDataLayout(
                 uuid: resolvedUUID,
                 slotCount: slotCount,
                 greenTeaIndex: gtIdx,
                 notGreenTeaIndex: ngtIdx,
-                wapiIndex: resolvedWapiIdx
+                wapiIndex: resolvedWapiIdx,
+                featureSlotIndices: resolvedFeatureSlots
             )
         )
+    }
+
+    static func scanDescriptorsFromLoadedLibrary() -> [MGSlotDescriptorInfo] {
+        #if os(iOS) && !targetEnvironment(simulator)
+        guard let image = MGCopyLoadedMobileGestaltImage(),
+              let strings = image["strings"] as? Data,
+              let addressNum = image["stringAddress"] as? NSNumber,
+              let constants = image["constants"] as? [Data] else {
+            return []
+        }
+        let stringAddress = addressNum.uint64Value
+        var hashByAddress: [UInt64: String] = [:]
+        strings.withUnsafeBytes { rawBuf in
+            guard let base = rawBuf.bindMemory(to: UInt8.self).baseAddress else { return }
+            let count = rawBuf.count
+            var tokenStart = 0
+            for idx in 0..<count where base[idx] == 0 {
+                let len = idx - tokenStart
+                if len == 22 {
+                    var valid = true
+                    for k in tokenStart..<idx {
+                        let b = base[k]
+                        if !((65...90).contains(b) || (97...122).contains(b) || (48...57).contains(b) || b == 43 || b == 47) {
+                            valid = false
+                            break
+                        }
+                    }
+                    if valid {
+                        let slice = UnsafeBufferPointer(start: base.advanced(by: tokenStart), count: 22)
+                        hashByAddress[stringAddress + UInt64(tokenStart)] = String(decoding: slice, as: UTF8.self)
+                    }
+                }
+                tokenStart = idx + 1
+            }
+        }
+
+        // Determine the primary descriptor table alignment from green-tea
+        var expectedSecID: Int? = nil
+        var expectedMod: Int? = nil
+        for (secID, secData) in constants.enumerated() where secData.count >= 64 {
+            secData.withUnsafeBytes { raw in
+                for off in stride(from: 0, through: secData.count - 64, by: 8) {
+                    let rawPtr = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: off, as: UInt64.self))
+                    let canonicalPtr = rawPtr & 0x0000_7FFF_FFFF_FFFF
+                    if hashByAddress[canonicalPtr] == greenTeaKey {
+                        let slotIdx = Int(Int16(littleEndian: raw.loadUnaligned(fromByteOffset: off + 0x3A, as: Int16.self)))
+                        let queryType = UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: off + 0x3C, as: UInt32.self))
+                        if slotIdx >= 0 && queryType == 11 {
+                            expectedSecID = secID
+                            expectedMod = off % 64
+                            break
+                        }
+                    }
+                }
+            }
+            if expectedSecID != nil { break }
+        }
+
+        var results: [MGSlotDescriptorInfo] = []
+        var seenKeys = Set<String>()
+        for (secID, secData) in constants.enumerated() where secData.count >= 64 {
+            if let expSec = expectedSecID, expSec != secID { continue }
+            secData.withUnsafeBytes { raw in
+                for off in stride(from: 0, through: secData.count - 64, by: 8) {
+                    if let expMod = expectedMod, (off % 64) != expMod { continue }
+                    let rawPtr = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: off, as: UInt64.self))
+                    let canonicalPtr = rawPtr & 0x0000_7FFF_FFFF_FFFF
+                    guard let key = hashByAddress[canonicalPtr], !seenKeys.contains(key) else { continue }
+                    let slotIdx = Int(Int16(littleEndian: raw.loadUnaligned(fromByteOffset: off + 0x3A, as: Int16.self)))
+                    let queryType = UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: off + 0x3C, as: UInt32.self))
+                    guard (-1..<16384).contains(slotIdx), (1...11).contains(queryType) else { continue }
+                    seenKeys.insert(key)
+                    results.append(MGSlotDescriptorInfo(obfuscatedKey: key, slotIndex: slotIdx, queryType: queryType))
+                }
+            }
+        }
+        return results
+        #else
+        return []
+        #endif
     }
 
     // MARK: - Strict Plist & Byte-Level Verification
@@ -328,6 +491,7 @@ struct MGCacheRecordedFlags: Codable, Equatable {
     let greenTea: Bool
     let notGreenTea: Bool
     let wapi: Bool?
+    var extraSlots: [String: Bool]? = nil
 }
 
 struct MGCacheDataDiffDetail {
@@ -344,8 +508,26 @@ final class MGCacheDataCoordinator {
     private let defaultsKey = "mgRecordedOriginalCacheFlagsByUUID_v1"
     private let lock = NSLock()
     private var cachedVerifiedLayout: MGCacheDataLayout?
+    private var cachedAllDescriptors: [MGSlotDescriptorInfo]?
 
     private init() {}
+
+    func allDescriptors() -> [MGSlotDescriptorInfo] {
+        lock.lock()
+        if let existing = cachedAllDescriptors {
+            lock.unlock()
+            return existing
+        }
+        lock.unlock()
+
+        let scanned = MGCacheDataLayout.scanDescriptorsFromLoadedLibrary()
+        if !scanned.isEmpty {
+            lock.lock()
+            cachedAllDescriptors = scanned
+            lock.unlock()
+        }
+        return scanned
+    }
 
     func libraryLayout() -> Result<MGCacheDataLayout, MGCacheResolutionError> {
         lock.lock()
@@ -397,7 +579,26 @@ final class MGCacheDataCoordinator {
         defer { lock.unlock() }
         var map = loadRecordedMap()
         let key = layout.uuid.uppercased()
-        guard map[key] == nil else { return }
+
+        var extraMap: [String: Bool] = [:]
+        for (fKey, fSlot) in layout.featureSlotIndices where layout.validateSingleBooleanSlot(fSlot, in: data) {
+            extraMap[fKey] = (data[fSlot * 8] == 1)
+        }
+
+        if var existing = map[key] {
+            var currentExtra = existing.extraSlots ?? [:]
+            var updated = false
+            for (k, v) in extraMap where currentExtra[k] == nil {
+                currentExtra[k] = v
+                updated = true
+            }
+            if updated {
+                existing.extraSlots = currentExtra
+                map[key] = existing
+                saveRecordedMap(map)
+            }
+            return
+        }
 
         let gt = data[layout.greenTeaOffset] == 1
         let ngt = data[layout.notGreenTeaOffset] == 1
@@ -411,7 +612,8 @@ final class MGCacheDataCoordinator {
             cacheVersion: build,
             greenTea: gt,
             notGreenTea: ngt,
-            wapi: wapiVal
+            wapi: wapiVal,
+            extraSlots: extraMap
         )
         saveRecordedMap(map)
     }
@@ -425,16 +627,31 @@ final class MGCacheDataCoordinator {
             if let wIdx = layout.wapiIndex, layout.validateSingleBooleanSlot(wIdx, in: savedData) {
                 wVal = (savedData[wIdx * 8] == 1)
             }
+            var extraMap: [String: Bool] = [:]
+            for (fKey, fSlot) in layout.featureSlotIndices where layout.validateSingleBooleanSlot(fSlot, in: savedData) {
+                extraMap[fKey] = (savedData[fSlot * 8] == 1)
+            }
             let build = saved["CacheVersion"] as? String ?? ""
             return MGCacheRecordedFlags(
                 layoutUUID: layout.uuid.uppercased(),
                 cacheVersion: build,
                 greenTea: gt,
                 notGreenTea: ngt,
-                wapi: wVal
+                wapi: wVal,
+                extraSlots: extraMap
             )
         }
         return loadRecordedMap()[layout.uuid.uppercased()]
+    }
+
+    func originalSlotValue(forKey key: String, layout: MGCacheDataLayout, savedOriginalDict: NSDictionary?) -> Bool? {
+        if let saved = savedOriginalDict,
+           case .success(let savedData) = layout.validatePlist(saved),
+           let slotIdx = layout.slotIndex(forKey: key),
+           layout.validateSingleBooleanSlot(slotIdx, in: savedData) {
+            return savedData[slotIdx * 8] == 1
+        }
+        return loadRecordedMap()[layout.uuid.uppercased()]?.extraSlots?[key]
     }
 
     private func loadRecordedMap() -> [String: MGCacheRecordedFlags] {
@@ -495,6 +712,16 @@ final class MGCacheDataCoordinator {
             }
         }
 
+        for (fKey, fSlot) in layout.featureSlotIndices {
+            let fOff = fSlot * 8
+            if validBefore[fOff] != validAfter[fOff] {
+                guard layout.validateSingleBooleanSlot(fSlot, in: validBefore),
+                      layout.validateSingleBooleanSlot(fSlot, in: validAfter) else {
+                    return .failure(.slotInvalid("功能槽位 \(fSlot) (\(fKey)) 未通过 8 字节布尔有效性校验，已拒绝修改！"))
+                }
+            }
+        }
+
         for idx in validBefore.indices where validBefore[idx] != validAfter[idx] {
             guard allowedOffsets.contains(idx) else {
                 return .failure(.unauthorizedByteMutation(String(format: "检测到未授权的无关缓存字节变动（偏移 0x%X：0x%02X -> 0x%02X），已强制中止写入！", idx, validBefore[idx], validAfter[idx])))
@@ -502,6 +729,33 @@ final class MGCacheDataCoordinator {
         }
 
         return .success(())
+    }
+
+    static func featureSlotMeta(forKey key: String) -> (id: String, label: String, trueHint: String, falseHint: String) {
+        switch key {
+        case MGCacheDataLayout.audioMixKey:
+            return ("audio-mix", "相册与相机混音 (Audio Mix)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.spatialAudioRecKey:
+            return ("spatial-audio-rec", "空间音频录制 (spatial-audio-recording)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.spatialFaceTimeAudioKey:
+            return ("spatial-facetime-audio", "FaceTime 空间音频 (spatial-facetime-audio)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.responsiveShutterKey:
+            return ("responsive-shutter", "按下快门瞬间抓拍 (ResponsiveShutter)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hypertensionNotifKey:
+            return ("hypertension-notif", "健康高血压趋势评估 (HypertensionNotifications)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.appIntellKey:
+            return ("ai-core-slot", "Apple 智能底层槽位 (GenerativeModelSystems)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.photosCleanUpKey:
+            return ("photos-cleanup-slot", "相册消除底层槽位 (Photos Clean Up)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.handwritingSynthKey:
+            return ("handwriting-slot", "手写体合成底层槽位 (Handwriting Synthesis)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.audioIntellKey:
+            return ("audio-intell-slot", "iOS 27 音频智能底层槽位 (Audio Intelligence)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.personalTranslatorKey:
+            return ("personal-translator-slot", "个人实时翻译底层槽位 (Personal Translator)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        default:
+            return (key, "硬件特性槽位 (\(key))", "true (0x01)", "false (0x00)")
+        }
     }
 
     func diffDetails(from beforeDict: NSDictionary, to afterDict: NSDictionary, using customLayout: MGCacheDataLayout? = nil) -> [MGCacheDataDiffDetail] {
@@ -533,6 +787,14 @@ final class MGCacheDataCoordinator {
             ]
             if let wIdx = layout.wapiIndex, layout.validateSingleBooleanSlot(wIdx, in: beforeData) && layout.validateSingleBooleanSlot(wIdx, in: afterData) {
                 arr.append(("wapi", "无线局域网显示标记 (wapi)", MGCacheDataLayout.wapiKey, wIdx, "true (0x01 · 无线局域网)", "false (0x00 · Wi-Fi)"))
+            }
+            for fKey in layout.featureSlotIndices.keys.sorted() {
+                if let fSlot = layout.featureSlotIndices[fKey],
+                   layout.validateSingleBooleanSlot(fSlot, in: beforeData),
+                   layout.validateSingleBooleanSlot(fSlot, in: afterData) {
+                    let meta = Self.featureSlotMeta(forKey: fKey)
+                    arr.append((meta.id, meta.label, fKey, fSlot, meta.trueHint, meta.falseHint))
+                }
             }
             return arr
         }()
@@ -592,6 +854,14 @@ final class MGCacheDataCoordinator {
                                     wIdx, wOff, layout.validityOffset(for: wIdx), wVal ? "true (无线局域网)" : "false (Wi-Fi)"))
             } else {
                 lines.append("wapi (WLAN/Wi-Fi)：当前系统未解析出有效槽位（已单独禁用）")
+            }
+            for fKey in MGCacheDataLayout.mediaHealthSlotKeys.sorted() {
+                if let fSlot = layout.featureSlotIndices[fKey], layout.validateSingleBooleanSlot(fSlot, in: data) {
+                    let meta = Self.featureSlotMeta(forKey: fKey)
+                    let fVal = data[fSlot * 8] == 1
+                    lines.append(String(format: "%@：槽位 %d，偏移 0x%X，当前值 = %@",
+                                        meta.label, fSlot, fSlot * 8, fVal ? "true" : "false"))
+                }
             }
             return lines.joined(separator: "\n")
         }

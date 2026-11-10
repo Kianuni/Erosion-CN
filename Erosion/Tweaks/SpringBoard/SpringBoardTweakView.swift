@@ -20,6 +20,7 @@ struct SpringBoardTweakView: View {
     @EnvironmentObject private var mgr: ErosionManager
     @AppStorage("autoRespring") private var autoRespring = false
     @State private var isReady = false
+    @State private var canWritePrefs = false
 
     @State private var enableAnimSpeed = false
     @State private var animCoefficient: Double = 1.0
@@ -40,6 +41,23 @@ struct SpringBoardTweakView: View {
                     }
                 }
             } else {
+                if !canWritePrefs {
+                    Section {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "lock.shield.fill")
+                                .foregroundStyle(.orange)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("当前系统沙盒已锁定 Preferences 目录直写")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("iOS 26/27 的 Seatbelt 策略禁止应用通过沙盒扩展直接覆写 /var/mobile/Library/Preferences/com.apple.springboard.plist（由 cfprefsd 独占托管）。建议使用“MobileGestalt 修改 -> 液态玻璃低功耗渲染”或“运营商与状态栏自定义”中的 Carrier Overlay 功能。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 Section {
                     PlainToggle(
                         "启用全局 UI 过渡动画调速",
@@ -91,6 +109,7 @@ struct SpringBoardTweakView: View {
                 } footer: {
                     Text("推荐使用 0.50x～0.75x，兼顾丝滑视觉与极速响应。")
                 }
+                .disabled(!canWritePrefs)
 
                 Section {
                     PlainToggle(
@@ -121,6 +140,7 @@ struct SpringBoardTweakView: View {
                 } footer: {
                     Text("点击右上角“应用”并注销设备后即可生效；随时可通过右上角重置按钮恢复默认。")
                 }
+                .disabled(!canWritePrefs)
             }
         }
         .navigationTitle("桌面与系统动画调优")
@@ -140,13 +160,13 @@ struct SpringBoardTweakView: View {
                     Label("恢复默认", systemImage: "gobackward")
                         .labelStyle(.iconOnly)
                 }
-                .disabled(!isReady)
+                .disabled(!isReady || !canWritePrefs)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("应用", role: .adaptiveConfirm) {
                     applyChanges()
                 }
-                .disabled(!isReady)
+                .disabled(!isReady || !canWritePrefs)
             }
         }
         .onAppear {
@@ -163,9 +183,8 @@ struct SpringBoardTweakView: View {
 
     private func loadCurrentState() {
         ensureBackupDir()
-        _ = wq.grantAccess(path: SBTweakURL.prefsDir.path)
-        _ = wq.grantAccess(path: SBTweakURL.sbPrefs.path)
-        _ = wq.grantAccess(path: SBTweakURL.globalPrefs.path)
+        let prefsGrant = wq.grantAccess(path: SBTweakURL.prefsDir.path)
+        let writable = prefsGrant.0 && fm.fileExists(atPath: SBTweakURL.sbPrefs.path) && fm.isWritableFile(atPath: SBTweakURL.sbPrefs.path)
 
         var loadedCoeff: Double? = nil
         var lowPower = false
@@ -173,7 +192,8 @@ struct SpringBoardTweakView: View {
         var noNC = false
         var noRot = false
 
-        if let data = try? Data(contentsOf: SBTweakURL.sbPrefs),
+        if writable,
+           let data = try? Data(contentsOf: SBTweakURL.sbPrefs),
            let dict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] {
             if let num = dict["UIAnimationDragCoefficient"] as? NSNumber {
                 loadedCoeff = num.doubleValue
@@ -188,7 +208,7 @@ struct SpringBoardTweakView: View {
             noRot = (dict["SBDisableHomeScreenRotation"] as? Bool) ?? false
         }
 
-        if loadedCoeff == nil,
+        if writable, loadedCoeff == nil,
            let gData = try? Data(contentsOf: SBTweakURL.globalPrefs),
            let gDict = try? PropertyListSerialization.propertyList(from: gData, options: [], format: nil) as? [String: Any],
            let num = gDict["UIAnimationDragCoefficient"] as? NSNumber {
@@ -196,6 +216,7 @@ struct SpringBoardTweakView: View {
         }
 
         DispatchQueue.main.async {
+            self.canWritePrefs = writable
             if let coeff = loadedCoeff {
                 self.enableAnimSpeed = true
                 self.animCoefficient = min(max(coeff, 0.15), 1.50)

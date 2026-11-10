@@ -108,6 +108,14 @@ func mgKeyDisplayName(_ key: String) -> String {
         MGKey.handwritingSynth: "备忘录手写体合成 (Handwriting Synthesis)",
         MGKey.audioIntell: "iOS 27 音频智能 (Audio Intelligence)",
         MGKey.personalTranslator: "个人实时翻译 (Personal Translator)",
+        MGKey.audioMix: "相册与相机混音 (Audio Mix)",
+        MGKey.spatialAudioRec: "空间音频录制 (spatial-audio-recording)",
+        MGKey.spatialFaceTimeAudio: "FaceTime 空间音频 (spatial-facetime-audio)",
+        MGKey.responsiveShutter: "按下快门瞬间抓拍 (ResponsiveShutter)",
+        MGKey.hypertensionNotif: "健康高血压趋势评估 (HypertensionNotifications)",
+        MGCacheDataLayout.greenTeaKey: "国行限制标记 (green-tea)",
+        MGCacheDataLayout.notGreenTeaKey: "非国行设备标记 (not-green-tea)",
+        MGCacheDataLayout.wapiKey: "无线局域网显示标记 (wapi)",
         MGKey.liquidGlassLowPower: "液态玻璃低功耗渲染",
         MGKey.island: "灵动岛特性",
         MGKey.AOD: "全天候显示 (AOD)",
@@ -264,6 +272,11 @@ func mgIsDangerousCacheExtraKey(_ key: String) -> String? {
         "green-tea": "green-tea（明文冲突键，禁止注入 CacheExtra）",
         "not-green-tea": "not-green-tea（明文冲突键，禁止注入 CacheExtra）",
         "wapi": "wapi（明文冲突键，禁止注入 CacheExtra）",
+        "aVL5GE3tx0LSCI/ErfrJGA": "混音 Audio Mix（属于 CacheData 二进制槽位，请直接使用主界面对应开关）",
+        "X6NGcYcvHmbqlR8hLXASJA": "空间音频录制（属于 CacheData 二进制槽位，请直接使用主界面对应开关）",
+        "/EVOCjM/Nmb2roP5ebtEFA": "FaceTime 空间音频（属于 CacheData 二进制槽位，请直接使用主界面对应开关）",
+        "gQDt76Te0SPw7N8oTLrBFw": "按下快门瞬间抓拍（属于 CacheData 二进制槽位，请直接使用主界面对应开关）",
+        "4fh9efw4o1yaFqkXNCXoeA": "高血压趋势评估（属于 CacheData 二进制槽位，请直接使用主界面对应开关）",
         "CacheData": "顶层系统保留字段",
         "CacheUUID": "顶层系统保留字段",
         "CacheVersion": "顶层系统保留字段"
@@ -338,6 +351,85 @@ func currentOriginalMachineName() -> String {
         return saved
     }
     return machineName()
+}
+
+/// Returns the true factory hardware ProductType (immune to in-memory or active ProductType spoofing)
+func originalHardwareProductType() -> String {
+    if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
+       let ogExtra = ogDict["CacheExtra"] as? NSDictionary,
+       let ogProd = ogExtra[MGKey.prodType] as? String,
+       !ogProd.isEmpty {
+        return ogProd
+    }
+    return currentOriginalMachineName()
+}
+
+// MARK: - Safe Read-Only Live MGCopyAnswer Probe (+1 Copy Rule Compliant)
+
+private typealias MGCopyAnswerFn = @convention(c) (CFString) -> Unmanaged<CFTypeRef>?
+
+private let resolvedMGCopyAnswer: MGCopyAnswerFn? = {
+    let handle = dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_LAZY | RTLD_LOCAL)
+    guard let sym = dlsym(handle ?? UnsafeMutableRawPointer(bitPattern: -2), "MGCopyAnswer") else {
+        return nil
+    }
+    return unsafeBitCast(sym, to: MGCopyAnswerFn.self)
+}()
+
+func mgQueryLiveRaw(forKey key: String) -> CFTypeRef? {
+    #if os(iOS) && !targetEnvironment(simulator)
+    guard let fn = resolvedMGCopyAnswer, !key.isEmpty else { return nil }
+    // MGCopyAnswer follows CoreFoundation's +1 Copy rule; takeRetainedValue() transfers ownership to ARC without leaking
+    return fn(key as CFString)?.takeRetainedValue()
+    #else
+    return nil
+    #endif
+}
+
+func mgQueryLiveBool(forKey key: String) -> Bool? {
+    guard let val = mgQueryLiveRaw(forKey: key) else { return nil }
+    let typeID = CFGetTypeID(val)
+    if typeID == CFBooleanGetTypeID() {
+        return CFBooleanGetValue((val as! CFBoolean))
+    }
+    if let num = val as? NSNumber {
+        return num.boolValue
+    }
+    return nil
+}
+
+func mgQueryLiveString(forKey key: String) -> String? {
+    guard let val = mgQueryLiveRaw(forKey: key) else { return nil }
+    return val as? String
+}
+
+func mgQueryLiveFormatted(forKey key: String) -> String {
+    guard let val = mgQueryLiveRaw(forKey: key) else {
+        return "nil (未返回 / 默认关闭)"
+    }
+    let typeID = CFGetTypeID(val)
+    if typeID == CFBooleanGetTypeID() {
+        return CFBooleanGetValue((val as! CFBoolean)) ? "true (Bool)" : "false (Bool)"
+    }
+    if let num = val as? NSNumber {
+        if CFNumberIsFloatType(num) {
+            return "\(num.doubleValue) (Float)"
+        }
+        return "\(num.stringValue) (Int)"
+    }
+    if let str = val as? String {
+        return str.isEmpty ? "\"\"" : str
+    }
+    if let data = val as? Data {
+        return "<Data: \(data.count) 字节>"
+    }
+    if let arr = val as? NSArray {
+        return "<Array: \(arr.count) 项>"
+    }
+    if let dict = val as? NSDictionary {
+        return "<Dict: \(dict.count) 项>"
+    }
+    return String(describing: val)
 }
 
 /// Maps Mainland China / International models & ProductTypes to US (LL/A) RegulatoryModelNumber (97JDvERpVwO+GHtthIh7hA)

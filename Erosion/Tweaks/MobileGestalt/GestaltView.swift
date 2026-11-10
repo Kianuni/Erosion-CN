@@ -33,6 +33,7 @@ struct GestaltView: View {
     @State private var idiotButtonTimerComplete = false
     @State private var mgBaselineDict: NSDictionary = [:]
     @State private var showDiffSheet = false
+    @State private var showInspectorSheet = false
     @State private var pendingDiffs: [MGDiffItem] = []
     @State private var pendingCandidateDict: NSMutableDictionary? = nil
     @State private var hasPromptedBuildMismatch = false
@@ -40,6 +41,25 @@ struct GestaltView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    NavigationLink {
+                        MGInspectorView(store: store)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "waveform.path.ecg.rectangle.fill")
+                                .font(.title3)
+                                .foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("真机生效核验与动态槽位实时探针")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("对比原厂备份、当前配置与 MGCopyAnswer 真机返回值（纯只读）")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
                 Section {
                     if mgOverrideGates {
                         HStack {
@@ -111,12 +131,20 @@ struct GestaltView: View {
                     PlainToggle("启用内部版本标识 (Internal Build)", infoType: .info, infoMessage: MGMsg.intBuild, isOn: store.mgKeyBinding([MGKey.intBuild]))
                 } header: {
                     HeaderLabel("内部调试选项", symbol: "ant")
+                } footer: {
+                    if isAppleIntellHD() && !mgOverrideGates {
+                        Text("已自动锁定：Apple 内部安装模式与 Apple 智能互斥，开启会导致原生 AI 机型无法激活 Apple 智能。")
+                    }
                 }
-                .disabled(store.isEnabled([MGKey.appIntell]))
+                .disabled(store.isEnabled([MGKey.appIntell]) || (isAppleIntellHD() && !mgOverrideGates))
                 
                 Section {
+                    AppleIntelligenceCheckupCard(store: store) {
+                        showInspectorSheet = true
+                    }
+
                     PlainToggle("启用安全研究设备界面 (SRD UI)", minVrs: 26.0, isOn: store.mgKeyBinding([MGKey.srd]))
-                    if showRegionTweak || mgOverrideGates {
+                    if showRegionTweak || mgOverrideGates || store.mgRegionRestrictionsBinding().wrappedValue {
                         PlainToggle("解除地区限制（国行 AI / 美版 LL/A）", isOn: store.mgRegionRestrictionsBinding())
                         if store.mgRegionRestrictionsBinding().wrappedValue {
                             HStack {
@@ -258,6 +286,41 @@ struct GestaltView: View {
                     HeaderLabel("国行底层缓存限制 (CacheData 动态解析)", symbol: "antenna.radiowaves.left.and.right")
                 } footer: {
                     Text("运行时从本机内存中的 libMobileGestalt.dylib 实时解析偏移并严格核对 CacheUUID、长度与有效位；解析失败时严禁修改任何字节。注意：将“无线局域网”改为“Wi-Fi”会丢失国行的“不允许联网”功能（仅保留蜂窝数据开关）。应用本组开关后请手动重启手机生效。")
+                }
+
+                Section {
+                    featureSlotRow(
+                        title: "相册与相机“混音 (Audio Mix)”",
+                        subtitle: "视频编辑支持标准 / 语音突显 / 录音棚 / 电影效果四档人声混音",
+                        infoTitle: "混音 (Audio Mix) 说明",
+                        infoMessage: MGMsg.audioMixInfo,
+                        keys: [MGKey.audioMix]
+                    )
+                    featureSlotRow(
+                        title: "空间音频录制与 FaceTime 空间音频",
+                        subtitle: "解锁相机视频 3D 空间音频拾音及 FaceTime 空间声场渲染",
+                        infoTitle: "空间音频录制说明",
+                        infoMessage: MGMsg.spatialAudioInfo,
+                        keys: MGKey.spatialAudioAllKeys
+                    )
+                    featureSlotRow(
+                        title: "按下快门瞬间抓拍 (Responsive Shutter)",
+                        subtitle: "降低相机按下快门至成像管线的触发延迟，实现零延迟抓拍",
+                        infoTitle: "按下快门瞬间抓拍说明",
+                        infoMessage: MGMsg.responsiveShutterInfo,
+                        keys: [MGKey.responsiveShutter]
+                    )
+                    featureSlotRow(
+                        title: "健康“高血压趋势评估与通知模式”",
+                        subtitle: "开启健康 App 血压偏高趋势分析、风险评估与测量记录向导",
+                        infoTitle: "高血压趋势评估说明",
+                        infoMessage: MGMsg.hypertensionInfo,
+                        keys: [MGKey.hypertensionNotif]
+                    )
+                } header: {
+                    HeaderLabel("影像与健康进阶能力 (CacheData 硬件槽位)", symbol: "waveform.badge.mic")
+                } footer: {
+                    Text("本组能力由设备树 (IODeviceTree) 映射至二进制 CacheData 布尔槽位，必须通过动态槽位偏移直接写入 CacheData 才能绕过系统 _MGCacheSetValueForKey 有效性短路检查。本机已原生开启的硬件能力会自动锁定以防误关降级；应用后请手动重启手机生效。")
                 }
                 
                 Section {
@@ -499,6 +562,18 @@ struct GestaltView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showInspectorSheet) {
+                NavigationStack {
+                    MGInspectorView(store: store)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("关闭") {
+                                    showInspectorSheet = false
+                                }
+                            }
+                        }
+                }
+            }
             .onAppear {
                 if ogMachineName.isEmpty {
                     ogMachineName = machineName()
@@ -512,6 +587,39 @@ struct GestaltView: View {
                 }
                 store.mgCurrentDict = mgLoadData()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func featureSlotRow(
+        title: String,
+        subtitle: String,
+        infoTitle: String,
+        infoMessage: String,
+        keys: [String]
+    ) -> some View {
+        let canModify = store.canModifyFeatureSlot(keys)
+        let isNativeOn = store.isFeatureSlotNativeEnabled(keys)
+        if isNativeOn && !mgOverrideGates {
+            PlainToggle(
+                title,
+                subtitle: "✅ 本机硬件已原生开启（无需额外修改，已锁定防误关）",
+                infoType: .info,
+                infoTitle: infoTitle,
+                infoMessage: infoMessage,
+                isOn: .constant(true)
+            )
+            .disabled(true)
+        } else {
+            PlainToggle(
+                title,
+                subtitle: canModify ? subtitle : "当前系统版本未包含或无法解析此二进制槽位",
+                infoType: .info,
+                infoTitle: infoTitle,
+                infoMessage: infoMessage,
+                isOn: store.mgFeatureSlotBinding(keys)
+            )
+            .disabled(!canModify)
         }
     }
     
@@ -665,7 +773,7 @@ struct GestaltView: View {
             cacheExtra.removeObject(forKey: MGKey.regionInfo)
             cacheExtra.removeObject(forKey: "0L5PkT61qoH1b/B1USWqjQ")
         }
-        for conflictKey in ["iyfxmLogGVIaH7aEgqwcIA", "4snMZS8LJkSctKypt2m+xA", "hiHut/WR+B9Lx/vd0WyeNg", "green-tea", "not-green-tea", "wapi"] {
+        for conflictKey in ["iyfxmLogGVIaH7aEgqwcIA", "4snMZS8LJkSctKypt2m+xA", "hiHut/WR+B9Lx/vd0WyeNg", "green-tea", "not-green-tea", "wapi"] + MGKey.mediaHealthAllKeys {
             cacheExtra.removeObject(forKey: conflictKey)
         }
         return candidate
@@ -706,7 +814,7 @@ struct GestaltView: View {
                     let needsRebootHint = store.isEnabled([MGKey.appIntell]) || store.mgRegionRestrictionsBinding().wrappedValue
                     var extraHint = ""
                     if cacheDataChanged {
-                        extraHint = "\n\n⚠️ 本次修改了底层二进制缓存（国行底层限制 / Wi-Fi 显示），仅注销无法刷新蜂窝基带与系统通话守护进程，请务必【手动重启一次手机】使其生效！"
+                        extraHint = "\n\n⚠️ 本次修改了底层二进制缓存（国行底层限制 / Wi-Fi 显示 / 影像与健康硬件槽位），仅注销无法完全刷新系统守护进程，请务必【手动重启一次手机】使其生效！"
                     } else if needsRebootHint {
                         extraHint = "\n\n若修改了地区限制或 Apple 智能，注销后建议手动重启一次设备以使 eligibilityd 完全刷新。"
                     }
