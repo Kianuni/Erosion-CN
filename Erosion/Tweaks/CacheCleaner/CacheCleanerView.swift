@@ -225,21 +225,29 @@ struct CacheCleanerView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
             var result: [ContainerCacheEntry] = []
+            let selfBID = Bundle.main.bundleIdentifier ?? "com.jbdotparty.Erosion"
 
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
-                guard let bid = getBIDFromXattr(url), !bid.isEmpty else { continue }
-                if Self.protectedBundleIDs.contains(bid) { continue }
+                let wasActive = wq.hasActiveAccess(path: url.path)
+                guard wq.grantAccess(path: url.path).0 else { continue }
+                defer {
+                    if !wasActive {
+                        wq.releaseAccess(path: url.path)
+                    }
+                }
+
+                var buf = [CChar](repeating: 0, count: 512)
+                let len = getxattr(url.path, "com.apple.containermanager.identifier", &buf, 511, 0, XATTR_NOFOLLOW)
+                guard len > 0 else { continue }
+                let bid = String(cString: buf)
+                guard !bid.isEmpty, bid != selfBID, !Self.protectedBundleIDs.contains(bid) else { continue }
 
                 let cachesURL = url.appendingPathComponent("Library/Caches")
                 let tmpURL = url.appendingPathComponent("tmp")
-                _ = wq.grantAccess(path: cachesURL.path)
-                _ = wq.grantAccess(path: tmpURL.path)
 
                 let cBytes = AppContainerDirectoryHelper.directorySize(at: cachesURL, maxDepth: 5)
                 let tBytes = AppContainerDirectoryHelper.directorySize(at: tmpURL, maxDepth: 4)
-                wq.releaseAccess(path: cachesURL.path)
-                wq.releaseAccess(path: tmpURL.path)
 
                 let total = cBytes + tBytes
                 guard total > 4096 else { continue }
@@ -310,24 +318,34 @@ struct CacheCleanerView: View {
 
     private static func purgeCacheContents(for entry: ContainerCacheEntry) -> Int64 {
         let before = entry.totalCleanableBytes
+        let wasActive = wq.hasActiveAccess(path: entry.containerURL.path)
+        guard wq.grantAccess(path: entry.containerURL.path).0 else { return 0 }
+        defer {
+            if !wasActive {
+                wq.releaseAccess(path: entry.containerURL.path)
+            }
+        }
+
         let dirs = [
             entry.containerURL.appendingPathComponent("Library/Caches"),
             entry.containerURL.appendingPathComponent("tmp"),
             entry.containerURL.appendingPathComponent("Library/WebKit/WebsiteData/CacheStorage")
         ]
         for dir in dirs {
-            _ = wq.grantAccess(path: dir.path)
-            guard let children = try? fm.contentsOfDirectory(atPath: dir.path) else {
-                wq.releaseAccess(path: dir.path)
-                continue
-            }
+            var dirSt = stat()
+            guard lstat(dir.path, &dirSt) == 0, (dirSt.st_mode & S_IFMT) == S_IFDIR else { continue }
+            guard let children = try? fm.contentsOfDirectory(atPath: dir.path) else { continue }
             for child in children {
+                guard !child.contains("/"), child != ".", child != ".." else { continue }
                 let childURL = dir.appendingPathComponent(child)
-                _ = wq.grantAccess(path: childURL.path)
-                try? fm.removeItem(at: childURL)
-                wq.releaseAccess(path: childURL.path)
+                var childSt = stat()
+                guard lstat(childURL.path, &childSt) == 0 else { continue }
+                let mode = childSt.st_mode & S_IFMT
+                // Only remove regular files and regular subdirectories; skip sockets/FIFOs/symlinks
+                if mode == S_IFREG || mode == S_IFDIR {
+                    try? fm.removeItem(at: childURL)
+                }
             }
-            wq.releaseAccess(path: dir.path)
         }
         return before
     }

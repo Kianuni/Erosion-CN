@@ -144,6 +144,12 @@ struct StatusBarView: View {
         mgExcludeFromCloudBackup(SBURL.backupDir)
     }
 
+    private static func isRegularFile(_ url: URL) -> Bool {
+        var st = stat()
+        guard lstat(url.path, &st) == 0 else { return false }
+        return (st.st_mode & S_IFMT) == S_IFREG
+    }
+
     private func loadCurrentState() {
         ensureBackupDir()
 
@@ -155,7 +161,7 @@ struct StatusBarView: View {
         var detectedCarrier = ""
 
         if let items = try? fm.contentsOfDirectory(at: SBURL.carrierOverlayDir, includingPropertiesForKeys: nil) {
-            let plistURLs = items.filter { $0.pathExtension.lowercased() == "plist" }
+            let plistURLs = items.filter { $0.pathExtension.lowercased() == "plist" && Self.isRegularFile($0) }
             detectedOverlays = plistURLs.count
             for url in plistURLs {
                 _ = wq.grantAccess(path: url.path)
@@ -221,8 +227,12 @@ struct StatusBarView: View {
 
         var sbFormat: PropertyListSerialization.PropertyListFormat = .binary
         let sbDict: NSMutableDictionary
-        if let data = try? Data(contentsOf: SBURL.sbPrefs),
-           let parsed = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &sbFormat) as? NSMutableDictionary {
+        if fm.fileExists(atPath: SBURL.sbPrefs.path) {
+            guard let data = try? Data(contentsOf: SBURL.sbPrefs),
+                  let parsed = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &sbFormat) as? NSMutableDictionary else {
+                Alertinator.shared.alert(title: "安全护栏拦截！", body: "无法读取或解析现有的 com.apple.springboard.plist，为防止覆盖丢失原有桌面配置，已中止写入。")
+                return
+            }
             sbDict = parsed
         } else {
             sbDict = NSMutableDictionary()
@@ -310,7 +320,7 @@ struct StatusBarView: View {
             return 0
         }
         var updatedCount = 0
-        for url in items where url.pathExtension.lowercased() == "plist" {
+        for url in items where url.pathExtension.lowercased() == "plist" && Self.isRegularFile(url) {
             _ = wq.grantAccess(path: url.path)
             let backupURL = SBURL.overlayBackupDir.appendingPathComponent(url.lastPathComponent)
             if !fm.fileExists(atPath: backupURL.path) {
@@ -340,7 +350,8 @@ struct StatusBarView: View {
             }
 
             if modified,
-               let outData = try? PropertyListSerialization.data(fromPropertyList: dict, format: format, options: 0) {
+               let outData = try? PropertyListSerialization.data(fromPropertyList: dict, format: format, options: 0),
+               (try? PropertyListSerialization.propertyList(from: outData, options: [], format: nil) as? NSDictionary) != nil {
                 let res = writeFileAtomically(outData, to: url)
                 if res.0 {
                     updatedCount += 1
@@ -358,8 +369,9 @@ struct StatusBarView: View {
         for backupURL in backups where backupURL.pathExtension.lowercased() == "plist" {
             let destURL = SBURL.carrierOverlayDir.appendingPathComponent(backupURL.lastPathComponent)
             _ = wq.grantAccess(path: destURL.path)
-            if fm.fileExists(atPath: destURL.path),
-               let ogData = try? Data(contentsOf: backupURL) {
+            if Self.isRegularFile(destURL),
+               let ogData = try? Data(contentsOf: backupURL),
+               (try? PropertyListSerialization.propertyList(from: ogData, options: [], format: nil) as? NSDictionary) != nil {
                 _ = writeFileAtomically(ogData, to: destURL)
             }
         }
@@ -369,17 +381,29 @@ struct StatusBarView: View {
         restoreCarrierOverlayFilesOnly()
         UserDefaults.standard.set(false, forKey: "sb_custom_carrier_enabled")
 
+        let managedKeys = ["SBFakeTime", "SBFakeTimeString", "SBFakeCarrier", "SBShowRSSI", "SBShowBatteryPercentage", "SBShowBreadcrumb"]
+        var originalValues: [String: Any] = [:]
         if fm.fileExists(atPath: SBURL.sbPrefsBackup.path),
-           let ogData = try? Data(contentsOf: SBURL.sbPrefsBackup) {
-            _ = wq.grantAccess(path: SBURL.sbPrefs.path)
-            _ = writeFileAtomically(ogData, to: SBURL.sbPrefs)
-        } else if fm.fileExists(atPath: SBURL.sbPrefs.path) {
+           let ogData = try? Data(contentsOf: SBURL.sbPrefsBackup),
+           let ogDict = try? PropertyListSerialization.propertyList(from: ogData, options: [], format: nil) as? [String: Any] {
+            for key in managedKeys {
+                if let val = ogDict[key] {
+                    originalValues[key] = val
+                }
+            }
+        }
+
+        if fm.fileExists(atPath: SBURL.sbPrefs.path) {
             _ = wq.grantAccess(path: SBURL.sbPrefs.path)
             var format: PropertyListSerialization.PropertyListFormat = .binary
             if let data = try? Data(contentsOf: SBURL.sbPrefs),
                let dict = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &format) as? NSMutableDictionary {
-                for key in ["SBFakeTime", "SBFakeTimeString", "SBFakeCarrier", "SBShowRSSI", "SBShowBatteryPercentage", "SBShowBreadcrumb"] {
-                    dict.removeObject(forKey: key)
+                for key in managedKeys {
+                    if let ogVal = originalValues[key] {
+                        dict[key] = ogVal
+                    } else {
+                        dict.removeObject(forKey: key)
+                    }
                 }
                 if let outData = try? PropertyListSerialization.data(fromPropertyList: dict, format: format, options: 0) {
                     _ = writeFileAtomically(outData, to: SBURL.sbPrefs)

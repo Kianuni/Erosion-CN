@@ -329,6 +329,13 @@ struct AppDataBackupView: View {
         backups = items
     }
 
+    private static let protectedSystemBundleIDs: Set<String> = [
+        "com.jbdotparty.Erosion",
+        "com.apple.springboard",
+        "com.apple.PosterBoard",
+        "com.apple.Preferences"
+    ]
+
     private func scanAllContainers() {
         isScanning = true
         scanProgressText = "正在扫描本机应用数据容器..."
@@ -337,16 +344,24 @@ struct AppDataBackupView: View {
             var discovered: [AppSaveContainerItem] = []
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
-                guard let bid = getBIDFromXattr(url), !bid.isEmpty else { continue }
+                let wasActive = wq.hasActiveAccess(path: url.path)
+                guard wq.grantAccess(path: url.path).0 else { continue }
+                defer {
+                    if !wasActive {
+                        wq.releaseAccess(path: url.path)
+                    }
+                }
+
+                var buf = [CChar](repeating: 0, count: 512)
+                let len = getxattr(url.path, "com.apple.containermanager.identifier", &buf, 511, 0, XATTR_NOFOLLOW)
+                guard len > 0 else { continue }
+                let bid = String(cString: buf)
+                guard !bid.isEmpty, !Self.protectedSystemBundleIDs.contains(bid) else { continue }
 
                 let docsURL = url.appendingPathComponent("Documents")
                 let prefsURL = url.appendingPathComponent("Library/Preferences")
-                _ = wq.grantAccess(path: docsURL.path)
-                _ = wq.grantAccess(path: prefsURL.path)
                 let docsSize = AppContainerDirectoryHelper.directorySize(at: docsURL, maxDepth: 4)
                 let prefsSize = AppContainerDirectoryHelper.directorySize(at: prefsURL, maxDepth: 2)
-                wq.releaseAccess(path: docsURL.path)
-                wq.releaseAccess(path: prefsURL.path)
 
                 discovered.append(AppSaveContainerItem(
                     id: url.lastPathComponent,
@@ -379,12 +394,18 @@ struct AppDataBackupView: View {
 
             do {
                 try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-                _ = wq.grantAccess(path: item.containerURL.path)
+                let wasActive = wq.hasActiveAccess(path: item.containerURL.path)
+                guard wq.grantAccess(path: item.containerURL.path).0 else {
+                    throw "无法获取该应用容器的读取权限"
+                }
+                defer {
+                    if !wasActive {
+                        wq.releaseAccess(path: item.containerURL.path)
+                    }
+                }
 
                 let docsSrc = item.containerURL.appendingPathComponent("Documents")
                 let prefsSrc = item.containerURL.appendingPathComponent("Library/Preferences")
-                _ = wq.grantAccess(path: docsSrc.path)
-                _ = wq.grantAccess(path: prefsSrc.path)
 
                 if fm.fileExists(atPath: docsSrc.path) {
                     try? fm.copyItem(at: docsSrc, to: stagingDir.appendingPathComponent("Documents"))
@@ -432,23 +453,6 @@ struct AppDataBackupView: View {
 
     private func restoreBackup(_ backup: LocalSaveBackupItem) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let targetContainerPath: String
-            if let matched = containers.first(where: { $0.bundleID == backup.bundleID }) {
-                targetContainerPath = matched.containerURL.path
-            } else {
-                targetContainerPath = fsHandlers.getContainerPath(forMatch: backup.bundleID)
-            }
-
-            guard !targetContainerPath.isEmpty else {
-                DispatchQueue.main.async {
-                    Alertinator.shared.alert(
-                        title: "未找到目标应用容器！",
-                        body: "本机当前未检测到「\(backup.bundleID)」的数据容器，请先安装并至少打开一次该应用后再试。"
-                    )
-                }
-                return
-            }
-
             let extractDir = fm.temporaryDirectory.appendingPathComponent("RestoreSave_\(UUID().uuidString)")
             defer { try? fm.removeItem(at: extractDir) }
 
@@ -456,21 +460,59 @@ struct AppDataBackupView: View {
                 try fm.createDirectory(at: extractDir, withIntermediateDirectories: true)
                 try fm.unzipItem(at: backup.fileURL, to: extractDir)
 
+                var resolvedBundleID = backup.bundleID
+                let manifestURL = extractDir.appendingPathComponent("BackupManifest.plist")
+                if let mData = try? Data(contentsOf: manifestURL),
+                   let mDict = try? PropertyListSerialization.propertyList(from: mData, options: [], format: nil) as? [String: Any],
+                   let mBID = mDict["bundleID"] as? String, !mBID.isEmpty {
+                    resolvedBundleID = mBID
+                }
+
+                guard !Self.protectedSystemBundleIDs.contains(resolvedBundleID) else {
+                    DispatchQueue.main.async {
+                        Alertinator.shared.alert(title: "安全护栏拦截！", body: "禁止向受保护的核心系统容器还原外部备份包。")
+                    }
+                    return
+                }
+
+                let targetContainerPath: String
+                if let matched = containers.first(where: { $0.bundleID == resolvedBundleID }) {
+                    targetContainerPath = matched.containerURL.path
+                } else {
+                    targetContainerPath = fsHandlers.getContainerPath(forMatch: resolvedBundleID)
+                }
+
+                guard !targetContainerPath.isEmpty else {
+                    DispatchQueue.main.async {
+                        Alertinator.shared.alert(
+                            title: "未找到目标应用容器！",
+                            body: "本机当前未检测到「\(resolvedBundleID)」的数据容器，请先安装并至少打开一次该应用后再试。"
+                        )
+                    }
+                    return
+                }
+
                 let containerURL = URL(fileURLWithPath: targetContainerPath)
-                _ = wq.grantAccess(path: containerURL.path)
+                let wasActive = wq.hasActiveAccess(path: containerURL.path)
+                guard wq.grantAccess(path: containerURL.path).0 else {
+                    throw "无法获取目标容器的写入权限"
+                }
+                defer {
+                    if !wasActive {
+                        wq.releaseAccess(path: containerURL.path)
+                    }
+                }
 
                 var restoredFiles = 0
                 let docsExtract = extractDir.appendingPathComponent("Documents")
                 if fm.fileExists(atPath: docsExtract.path) {
                     let docsTarget = containerURL.appendingPathComponent("Documents")
-                    _ = wq.grantAccess(path: docsTarget.path)
                     restoredFiles += Self.mergeDirectoryInPlace(from: docsExtract, to: docsTarget)
                 }
 
                 let prefsExtract = extractDir.appendingPathComponent("Library/Preferences")
                 if fm.fileExists(atPath: prefsExtract.path) {
                     let prefsTarget = containerURL.appendingPathComponent("Library/Preferences")
-                    _ = wq.grantAccess(path: prefsTarget.path)
                     restoredFiles += Self.mergeDirectoryInPlace(from: prefsExtract, to: prefsTarget)
                 }
 
@@ -478,7 +520,7 @@ struct AppDataBackupView: View {
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
                         title: "存档还原完成！",
-                        body: "已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(backup.bundleID)」容器。"
+                        body: "已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(resolvedBundleID)」容器。"
                     )
                 }
             } catch {
@@ -490,20 +532,23 @@ struct AppDataBackupView: View {
     }
 
     private static func mergeDirectoryInPlace(from srcDir: URL, to dstDir: URL) -> Int {
-        _ = wq.grantAccess(path: dstDir.path)
         try? fm.createDirectory(at: dstDir, withIntermediateDirectories: true)
         guard let names = try? fm.contentsOfDirectory(atPath: srcDir.path) else { return 0 }
         var count = 0
         for name in names {
+            guard !name.contains("/"), name != ".", name != ".." else { continue }
             let srcURL = srcDir.appendingPathComponent(name)
             let dstURL = dstDir.appendingPathComponent(name)
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: srcURL.path, isDirectory: &isDir) else { continue }
-            if isDir.boolValue {
+            var st = stat()
+            guard lstat(srcURL.path, &st) == 0 else { continue }
+            let mode = st.st_mode & S_IFMT
+            if mode == S_IFDIR {
                 count += mergeDirectoryInPlace(from: srcURL, to: dstURL)
-            } else if let data = try? Data(contentsOf: srcURL) {
-                _ = wq.grantAccess(path: dstURL.path)
-                if fm.fileExists(atPath: dstURL.path) {
+            } else if mode == S_IFREG, let data = try? Data(contentsOf: srcURL) {
+                var dstSt = stat()
+                if lstat(dstURL.path, &dstSt) == 0 {
+                    // Never overwrite a symlink in destination
+                    guard (dstSt.st_mode & S_IFMT) == S_IFREG else { continue }
                     if writeFileAtomically(data, to: dstURL, allowEmpty: true).0 {
                         count += 1
                     }

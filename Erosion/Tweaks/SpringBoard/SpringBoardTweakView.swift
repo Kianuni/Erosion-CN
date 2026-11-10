@@ -229,8 +229,12 @@ struct SpringBoardTweakView: View {
         // 1. Update com.apple.springboard.plist
         var sbFormat: PropertyListSerialization.PropertyListFormat = .binary
         let sbDict: NSMutableDictionary
-        if let data = try? Data(contentsOf: SBTweakURL.sbPrefs),
-           let parsed = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &sbFormat) as? NSMutableDictionary {
+        if fm.fileExists(atPath: SBTweakURL.sbPrefs.path) {
+            guard let data = try? Data(contentsOf: SBTweakURL.sbPrefs),
+                  let parsed = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &sbFormat) as? NSMutableDictionary else {
+                Alertinator.shared.alert(title: "安全护栏拦截！", body: "无法读取或解析现有的 com.apple.springboard.plist，为防止覆盖丢失原有桌面配置，已中止写入。")
+                return
+            }
             sbDict = parsed
         } else {
             sbDict = NSMutableDictionary()
@@ -315,18 +319,34 @@ struct SpringBoardTweakView: View {
         _ = wq.grantAccess(path: SBTweakURL.sbPrefs.path)
         _ = wq.grantAccess(path: SBTweakURL.globalPrefs.path)
 
+        let managedKeys = [
+            "UIAnimationDragCoefficient",
+            "SBHideLowPowerAlerts",
+            "SBControlCenterEnabledInLockScreen",
+            "SBNotificationCenterEnabledInLockScreen",
+            "SBDisableHomeScreenRotation"
+        ]
+        var originalSBValues: [String: Any] = [:]
+        if fm.fileExists(atPath: SBTweakURL.sbBackup.path),
+           let ogData = try? Data(contentsOf: SBTweakURL.sbBackup),
+           let ogDict = try? PropertyListSerialization.propertyList(from: ogData, options: [], format: nil) as? [String: Any] {
+            for key in managedKeys {
+                if let val = ogDict[key] {
+                    originalSBValues[key] = val
+                }
+            }
+        }
+
         if fm.fileExists(atPath: SBTweakURL.sbPrefs.path) {
             var sbFormat: PropertyListSerialization.PropertyListFormat = .binary
             if let data = try? Data(contentsOf: SBTweakURL.sbPrefs),
                let dict = try? PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &sbFormat) as? NSMutableDictionary {
-                for key in [
-                    "UIAnimationDragCoefficient",
-                    "SBHideLowPowerAlerts",
-                    "SBControlCenterEnabledInLockScreen",
-                    "SBNotificationCenterEnabledInLockScreen",
-                    "SBDisableHomeScreenRotation"
-                ] {
-                    dict.removeObject(forKey: key)
+                for key in managedKeys {
+                    if let ogVal = originalSBValues[key] {
+                        dict[key] = ogVal
+                    } else {
+                        dict.removeObject(forKey: key)
+                    }
                 }
                 if let outData = try? PropertyListSerialization.data(fromPropertyList: dict, format: sbFormat, options: 0) {
                     _ = writeFileAtomically(outData, to: SBTweakURL.sbPrefs)

@@ -63,7 +63,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.6.0_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.6.1_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)
