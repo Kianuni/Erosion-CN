@@ -147,7 +147,7 @@ struct GestaltView: View {
                     }
                     PlainToggle(
                         "解锁 iOS 27 进阶 AI 能力",
-                        subtitle: "开启个人实时翻译、通话/录音音频智能摘要与常驻 Siri 唤醒",
+                        subtitle: "开启端侧个人实时翻译与通话/录音音频智能摘要",
                         infoType: .info,
                         infoTitle: "iOS 27 进阶 AI 能力说明",
                         infoMessage: MGMsg.advAppleIntell,

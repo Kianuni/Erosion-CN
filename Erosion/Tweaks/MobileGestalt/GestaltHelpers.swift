@@ -108,7 +108,6 @@ func mgKeyDisplayName(_ key: String) -> String {
         MGKey.handwritingSynth: "备忘录手写体合成 (Handwriting Synthesis)",
         MGKey.audioIntell: "iOS 27 音频智能 (Audio Intelligence)",
         MGKey.personalTranslator: "个人实时翻译 (Personal Translator)",
-        MGKey.alwaysListeningSiri: "常驻唤醒词聆听 (Always-Listening Siri)",
         MGKey.liquidGlassLowPower: "液态玻璃低功耗渲染",
         MGKey.island: "灵动岛特性",
         MGKey.AOD: "全天候显示 (AOD)",
