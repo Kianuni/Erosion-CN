@@ -30,7 +30,7 @@ enum MGMsg {
     static let intInstall = "此选项将启用部分遗留在正式版 iOS 中的 Apple 内部调试特性。注意：开启后可能会影响部分正常功能（如无法从 App Store 重新安装自带系统应用），且与 Apple 智能互斥。"
     static let intBuild = "此开关主要用于在“设置”应用中显示内部存储调试信息。在部分设备（尤其是 iPadOS）上可能引发兼容性问题。"
     static let appleIntellInfo = "为不支持 Apple 智能的旧机型开启端侧生成式 AI 总开关 (DeviceSupportsGenerativeModelSystems)，并自动同步解锁以下 2 项在旧芯片上默认关闭的子能力标记：\n\n• 相册“消除”功能 (Photos Clean Up)\n• 备忘录“手写体合成” (Handwriting Synthesis)\n\n注：旧机型若需实际下载端侧 AI 模型，通常还需配合下方的“机型伪装”与上方的“解除地区限制”使用（修改后请手动重启手机生效）。"
-    static let advAppleIntell = "一键解锁 2 项默认仅在最新代机型硬件设备树 (IODeviceTree:/product) 中开启的进阶端侧 AI 能力标记（即使是原生支持 Apple 智能的 iPhone 15 Pro / 16 / 17 系列默认也为关闭）：\n\n1. 个人实时翻译 (Personal Translator)：解锁电话、FaceTime 与信息中的系统级实时同声传译及个人音色保留翻译能力；\n2. iOS 27 音频智能 (Audio Intelligence)：解锁语音备忘录与通话录音的端侧实时语音理解、流式智能摘要与环境人声分离能力。\n\n注：此开关仅解除 MobileGestalt 底层能力准入限制，实际运行仍取决于当前系统版本、地区设置及端侧模型状态（应用后请手动重启手机生效）。"
+    static let advAppleIntell = "一键解锁 2 项默认仅在最新代机型硬件设备树 (IODeviceTree:/product) 中开启的进阶端侧 AI 能力标记（在 iPhone 15 Pro / 16 / 17 系列上默认关闭；iPhone 18 系列硬件已原生开启，无需额外开启故默认不展示此选项）：\n\n1. 个人实时翻译 (Personal Translator)：解锁电话、FaceTime 与信息中的系统级实时同声传译及个人音色保留翻译能力；\n2. iOS 27 音频智能 (Audio Intelligence)：解锁语音备忘录与通话录音的端侧实时语音理解、流式智能摘要与环境人声分离能力。\n\n注：此开关仅解除 MobileGestalt 底层能力准入限制，实际运行仍取决于当前系统版本、地区设置及端侧模型状态（应用后请手动重启手机生效）。"
     static let spoofUseless = "伪装设备型号可能会导致面容 ID (Face ID) 等硬件功能失效！你的设备硬件本身已原生支持 Apple 智能，无需修改此项（国行设备只需开启上方“解除地区限制”即可）。"
     static let spoofAI = "对于不支持 Apple 智能的旧机型，仅开启开关无法下载端侧 AI 模型，还需伪装为支持的机型；但伪装机型可能导致面容 ID 失效。取消机型伪装后，请勿再次进入“设置 -> Apple 智能与 Siri”页面。"
     static let subtype = "仅在你想调整灵动岛纵向位置或屏幕分辨率特征时才修改设备子类型 (Subtype)。如需在非灵动岛机型开启灵动岛，请配合下方的“启用灵动岛”开关使用！"

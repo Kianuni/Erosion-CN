@@ -200,6 +200,8 @@ struct GestaltView: View {
                     }
                 } header: {
                     HeaderLabel("地区与功能准入 (Eligibility)", symbol: "flag")
+                } footer: {
+                    Text("注：iPhone 18 系列硬件设备树已原生开启全部 Apple 智能与 iOS 27 进阶 AI 能力（个人实时翻译 / 音频智能），无需额外开启，故默认不展示相关选项（国行机型仅需开启“解除地区限制”即可完整激活）。")
                 }
 
                 Section {
