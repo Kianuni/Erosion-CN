@@ -13,10 +13,19 @@ struct TweaksView: View {
         NavigationStack {
             List {
                 Section {
+                    NavigationLink("状态栏与运营商自定义", destination: StatusBarView())
+                    NavigationLink("桌面与系统动画调优", destination: SpringBoardTweakView())
                     NavigationLink("自定义锁屏壁纸", destination: PosterBoardView())
                     NavigationLink("拨号键盘美化", destination: KeypadView())
                 } header: {
-                    HeaderLabel("美化外观", symbol: "paintbrush")
+                    HeaderLabel("外观与桌面定制", symbol: "paintbrush")
+                }
+
+                Section {
+                    NavigationLink("应用与游戏存档管理", destination: AppDataBackupView())
+                    NavigationLink("容器缓存扫描与清理", destination: CacheCleanerView())
+                } header: {
+                    HeaderLabel("应用存档与空间清理", symbol: "externaldrive.badge.checkmark")
                 }
                 
                 Section {
