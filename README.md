@@ -30,15 +30,15 @@
 5. **本机 `libMobileGestalt.dylib` 运行时动态偏移解析（零硬编码）**
    - 在设备运行时只读扫描内存中加载的 `/usr/lib/libMobileGestalt.dylib` 查询描述符表，实时计算当前机型与当前系统版本的 `CacheUUID`、总槽位数及布尔槽位偏移（`green-tea`、`not-green-tea`、`wapi`）；
    - **严格多重校验门控**：仅当本机 `CacheUUID` 唯一匹配、总长度精确等于 `槽位数 × 9`、有效位 `validity == 1`、8 字节槽位填充全为 `0` 且无任何无关字节变动时才允许修改；解析未通过时自动锁定开关并拦截写入。
-6. **跨机型 / 跨系统升级四重指纹防呆、SHA-256 备份摘要校验与云备份隔离**
-   - 本地备份文件自动标记 `isExcludedFromBackup = true`，防止通过 iCloud / 电脑换机迁移时将旧设备的缓存备份带入新设备；
-   - 生成原始备份 `OriginalGestalt.plist` 时自动计算并持久化记录 `SHA-256` 完整性摘要；还原原始备份时强制核对 `SHA-256`、`CacheVersion`、`CacheUUID`、`CacheData` 长度与本机硬件 `ProductType`，从根源上杜绝跨系统升级或损坏备份覆写导致的基带/eSIM 异常。
+6. **双重原厂金库备份（跨卸载重装不丢备份）、四重指纹防呆与一键恢复原机出厂参数**
+   - **沙盒 + 系统安全金库双冗余备份**：生成原始备份 `OriginalGestalt.plist` 时同步计算 `SHA-256` 摘要并镜像锁定至系统级共享容器安全金库（标记 `isExcludedFromBackup = true` 防换机污染）——**即使侧载证书过期卸载重装应用，也能自动无损找回最初未修改的原厂备份**，并支持手动导入/导出外部 `.plist` 备份及首次备份脏状态检测；
+   - **全模块一键恢复原机出厂参数**：主页与 `MobileGestalt` 页顶均内置「一键恢复原机出厂参数」，强制核对 `SHA-256`、`CacheVersion`、`CacheUUID`、`CacheData` 长度与真实内核硬件 `ProductType`，同步清空本地自定义开关残留、锁屏文字/铭牌、伪监管文件与拨号盘缓存；跨 iOS 版本 OTA 升级拦截时可直接一键联动「重建系统纯净原厂缓存」。
 7. **重签证书 `App Group` 自动探测与高危软砖项拆除**
    - 运行时通过 `SecTaskCopyValueForEntitlement` 与纯 Swift Mach-O `LC_CODE_SIGNATURE` 签名段解析自动匹配任意重签工具注入的可用 `group.*` 容器；
    - 默认移除并拦截上游版本中存在软砖/无限设置向导隐患的高危功能（如 iPhone 正则盲改切片的 iPadOS 模式、个人零售设备的监管模式开关、非缓存键注入等）。
 8. **完善机型适配、iOS 27 进阶 AI 能力解锁与实用工具优化**
    - 补全 iPhone 15 / 16 / 17 / Air / 18 / Duo 全系列及 M 系列 iPad 监管型号映射与硬件特征表，修复原版“80% 充电上限”与“开机提示音”硬件判断互换笔误及自定义键值恒写入 `true` 的 Bug；
-   - **Apple 智能子能力打包与 iOS 27 进阶 AI 解锁（`v0.6.2`）**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；新增 **「解锁 iOS 27 进阶 AI 能力」** 合并开关，支持为 iPhone 15 Pro / 16 / 17 等机型一键解锁默认仅在最新代硬件设备树 (`IODeviceTree:/product`) 中开启的**个人实时翻译 (`Personal Translator`)** 与 **iOS 27 音频智能 (`Audio Intelligence`)**（注：**iPhone 18 系列机型硬件底层已默认开启上述能力，无需额外开启，故应用内默认不展示该选项**，国行设备仅需开启「解除地区限制」即可完整激活）；
+   - **Apple 智能子能力打包与 iOS 27 进阶 AI 解锁**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；常驻展示 **「解锁 iOS 27 进阶 AI 能力 [测试特性]」** 开关，实时检测本机系统库与原厂 `CacheData` 槽位状态，按需解锁**个人实时翻译 (`Personal Translator`)** 与 **iOS 27 音频智能 (`Audio Intelligence`)**（原厂已开启机型自动显示原生锁定保护，早期 `27.0` 未内置槽位的固件也会明确标注）；
    - 新增 iOS 26/27「液态玻璃低功耗渲染（省电模式）」开关与机型外层描述同步；
    - 修复文件浏览器搜索栏失效与失焦清空问题，采用 `stat()` 动态探测本机实时最大 Inode 基线配合 `pathleak` 加速容器扫描（并为动态壁纸与拨号盘页面加入异步加载进度动画），同时新增核心缓存目录 0 秒一键直达入口；
 9. **新增应用存档管理与容器缓存清理模块（`v0.6.0`）**
@@ -49,6 +49,16 @@
     - **Apple 智能 (Apple Intelligence) 激活四要素一键体检面板 (`AppleIntelligenceCheckupCard`)**：实时聚合核验「销售地区 `LL/LL/A`」、「美版监管型号 `Axxxx`（基于真实主板型号防伪装误判）」、「端侧 AI 芯片准入」及「系统实时生效回读」，并在原生 AI 机型上自动锁定 `InternalInstall` 互斥开关，支持一键自动配齐全部缺失项；
     - **影像与健康进阶能力解锁（`CacheData` 二进制硬件槽位直写）**：针对 `libMobileGestalt.dylib` 中 `_MGCacheSetValueForKey` 的 `validity` 短路机制（仅写 `CacheExtra` 会被系统直接忽略的硬件设备树属性），通过运行时动态槽位解析直接写入 `CacheData`，新增 **相册与相机「混音 (Audio Mix)」**、**空间音频录制与 FaceTime 空间音频**、**按下快门瞬间抓拍 (Responsive Shutter)** 与 **健康「高血压趋势评估模式」** 4 项开关，并内置本机原生硬件防降级保护锁；
     - **全链路沙盒逃逸与文件编辑安全加固（`v0.7.2`）**：修复内置 Plist 编辑器因 `@Binding` 原地变异导致保存回旧值的 Bug；重构 `WorseQuerySwift` 支持只读容器令牌保留（`requireWrite: false`），修复 `System` / `AppGroup` 容器浏览、容器排序重复扫描、符号链接类型识别、壁纸与拨号盘父容器授权、存档备份还原 xattr 核验与 Zip Slip 防护等 24 个文件的边界缺陷。
+11. **全量 `MobileGestalt` 槽位双写晋升、14 项底层硬件实验开关与 6 大跨容器系统模块（`v0.8.0` 测试特性）**
+    - **14 项既有功能晋升 `CacheData + CacheExtra` 全量双写**：将灵动岛、全天候显示、液态玻璃低功耗渲染、80% 充电上限、开机提示音、车祸检测、PWM 防频闪、相机控制键、操作按钮、轻点唤醒、台前调度等 14 项既有功能全面纳入运行时 `CacheData` 槽位双写表，彻底突破 `_MGCacheSetValueForKey` 槽位短路；
+    - **新增 14 项 `[测试特性]` 二进制 `CacheData` 硬件特性包**（均经真机 `libMobileGestalt.dylib` 校验 `slot >= 0, queryType == 11` 且带原生硬件防降级锁）：日韩版真·相机快门静音（3 槽联动）、高低功耗双麦并发拾音（录音棚叠录底座）、相册局部光影重绘与新一代色调映射、超取景框捕获与 P3 广色域立体声视频、相机控制电容滑动变焦与触觉阻尼完整面板、旧机型显示电池循环次数与生产日期、户外高亮全天候显示与 Flipbook 帧缓冲、CarPlay Ultra 多屏车载协议、120Hz 触控采样事件投递、AirPods 临床听力均衡与低功耗助听器模式（3 槽联动）、睡眠呼吸暂停风险趋势检测、解除美版血氧软件专利限制、户外极限运动模式与日光照射监测、端侧 Siri Hub 路由与指令模型动态剪枝，并附「国行普通话来电询问 + 海外 Apple 智能」共存配置指南；
+    - **6 大跳出 `MobileGestalt` 的跨容器实验模块（`[测试特性]`）**：
+      1. **`CSStore2` 极速容器与中文应用名映射引擎 (`CSStoreResolver` / `CSStoreEngine`)**：解析 LaunchServices `"bdsl"` 二进制数据库，`<50ms` 秒级映射全部应用容器与 AppGroup UUID（自动降级回退 `pathleak`）；
+      2. **物理电池真实寿命与芯片温控遥测 (`PowerTelemetryView`)**：基于 APFS `clonefile()` 零锁只读快照解析 `CurrentPowerlog.PLSQL`，查看原始毫安时容量 (`RawMaxCapacity`)、精确循环次数、实时充放电瓦数、电芯温度及历史热节流事件；
+      3. **系统崩溃与 Jetsam 杀后台分析器 (`CrashDiagnosticsView`)**：解析 `osanalytics` `.ips` 诊断日志，分类统计内存强杀 (`298`)、进程崩溃 (`309`) 与看门狗重置 (`210`)，支持安全清理日志释放空间；
+      4. **锁屏防丢资产铭牌与伪监管死锁体检 (`ConfigView`)**：支持 `AssetTagInformation` 锁屏铭牌定制，并实时体检第三方伪监管残留（防 OTA 升级后触发 Setup Assistant 403 激活死锁，支持保留锁屏文字单独清理）；
+      5. **跨容器 `AppGroup` 分流规则注入与 Safari 书签导出 (`AppGroupHubView`)**：一键生成或向 Surge 共享组注入国行普通话来电询问直连 + 海外 AI 分流 `.sgmodule`，并支持通过零锁快照无损导出 Safari 书签（HTML / JSON）；
+      6. **语音备忘录与通话录音无损提取 + 端侧 AI 模型体检 (`VoiceMemosAIView`)**：跨容器关联 `CloudRecordings.db` 标题批量打包导出无损 `.m4a` 音轨，并只读探测离线翻译与语音模型缓存。
 
 ---
 
@@ -67,7 +77,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.7.2_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.8.0_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)
@@ -96,6 +106,7 @@ chmod +x ipabuild.sh
 - **[huamidev / GestaltX](https://github.com/huamidev/GestaltX)** — 特别感谢 `GestaltX` 项目的优秀工程设计与思路启发，本分支的本机 `libMobileGestalt.dylib` 查询描述符动态偏移解析、变更对比预览（Diff Preview）、写后磁盘读回校验、运行时重签 `App Group` 自动探测以及液态玻璃低功耗渲染键值等改进均借鉴并参考了 `GestaltX` 的设计。
 - **[KirbySD](https://www.v2ex.com/t/1246550)** — 感谢分享 `MobileGestalt` 二进制 `CacheData` 中 `green-tea` / `not-green-tea` 布尔槽位的原始研究思路。
 - **[PoomSmart / MGKeys](https://github.com/PoomSmart/MGKeys)** — 感谢长期维护与整理 `MobileGestalt` 混淆键值映射表。
+- **[kolbicz / WQFiles](https://github.com/kolbicz/WQFiles)** — 感谢分享 LaunchServices `.csstore` (`"bdsl"`) 容器图谱解析研究思路（GPLv3）。
 
 ### 上游主项目与漏洞研究致谢
 - **[jailbreakdotparty / Erosion](https://github.com/jailbreakdotparty/Erosion)** & **[lunginspector](https://github.com/lunginspector)** — 上游主仓库与核心架构作者

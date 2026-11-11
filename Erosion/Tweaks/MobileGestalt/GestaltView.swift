@@ -30,18 +30,25 @@ struct GestaltView: View {
     @State private var mgProductType = ""
     
     @State private var showInfoSheet = false
+    @State private var pendingPreviewAfterInfoSheet = false
     @State private var idiotButtonTimerComplete = false
     @State private var mgBaselineDict: NSDictionary = [:]
-    @State private var showDiffSheet = false
+    @State private var diffPreviewPayload: MGDiffPreviewPayload? = nil
     @State private var showInspectorSheet = false
-    @State private var pendingDiffs: [MGDiffItem] = []
-    @State private var pendingCandidateDict: NSMutableDictionary? = nil
+    @State private var hasLoadedInitialData = false
     @State private var hasPromptedBuildMismatch = false
     @State private var hasWriteAccess = false
+    @State private var showBackupImporter = false
+    @State private var dualVaultReady = false
+
+    private struct MGDiffPreviewPayload: Identifiable {
+        let id = UUID()
+        let diffs: [MGDiffItem]
+        let candidate: NSMutableDictionary
+    }
     
     var body: some View {
-        NavigationStack {
-            List {
+        List {
                 Section {
                     NavigationLink {
                         MGInspectorView(store: store)
@@ -60,6 +67,33 @@ struct GestaltView: View {
                         }
                         .padding(.vertical, 2)
                     }
+
+                    HStack(spacing: 10) {
+                        Image(systemName: dualVaultReady ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                            .font(.title3)
+                            .foregroundStyle(dualVaultReady ? Color.green : Color.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(dualVaultReady ? "双重原厂安全备份已锁定" : "本地原厂备份已就绪")
+                                .font(.subheadline.weight(.semibold))
+                            Text(dualVaultReady ? "沙盒备份 + 系统金库双冗余 · SHA-256 已校验（卸载重装不丢失）" : "已启用 SHA-256 完整性校验与防零字节原位回滚")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Button {
+                            promptFactoryRestore()
+                        } label: {
+                            Text("一键恢复原厂")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.orange.opacity(0.16), in: Capsule())
+                                .foregroundStyle(Color.orange)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!hasWriteAccess && !weOnADebugBuild)
+                    }
+                    .padding(.vertical, 2)
                 }
                 Section {
                     if mgOverrideGates {
@@ -143,7 +177,9 @@ struct GestaltView: View {
                 
                 Section {
                     AppleIntelligenceCheckupCard(store: store, hasWriteAccess: hasWriteAccess) {
-                        showInspectorSheet = true
+                        Alertinator.shared.runWhenPresentationIdle {
+                            showInspectorSheet = true
+                        }
                     }
 
                     PlainToggle("启用安全研究设备界面 (SRD UI)", minVrs: 26.0, isOn: store.mgKeyBinding([MGKey.srd]))
@@ -176,16 +212,32 @@ struct GestaltView: View {
                             }
                         }
                     }
-                    if !isAdvAppleIntellHD() || mgOverrideGates {
-                        PlainToggle(
-                            "解锁 iOS 27 进阶 AI 能力",
-                            subtitle: "开启端侧个人实时翻译与通话/录音音频智能摘要",
-                            infoType: .info,
-                            infoTitle: "iOS 27 进阶 AI 能力说明",
-                            infoMessage: MGMsg.advAppleIntell,
-                            minVrs: 27.0,
-                            isOn: store.mgKeyBinding(MGKey.advAppIntellKeys)
-                        )
+                    if raveSupported() || mgOverrideGates {
+                        let advCanModify = store.canModifySlotRules(MGKey.advAppIntellRules)
+                        let advNativeOn = isAdvAppleIntellHD()
+                        if advNativeOn && !mgOverrideGates {
+                            PlainToggle(
+                                "解锁 iOS 27 进阶 AI 能力 [测试特性]",
+                                subtitle: "✅ 本机硬件已原生开启（无需额外修改，已锁定防误关）",
+                                infoType: .info,
+                                infoTitle: "iOS 27 进阶 AI 能力说明",
+                                infoMessage: MGMsg.advAppleIntell,
+                                isOn: .constant(true)
+                            )
+                            .disabled(true)
+                        } else {
+                            PlainToggle(
+                                "解锁 iOS 27 进阶 AI 能力 [测试特性]",
+                                subtitle: advCanModify
+                                    ? "开启端侧个人实时翻译与通话/录音音频智能增强"
+                                    : "当前系统固件 (iOS \(vrs.majorVersion).\(vrs.minorVersion) \(buildNumber())) 尚未内置此进阶槽位（通常需 iOS 27.1+，不影响常规通话录音与转写）",
+                                infoType: .info,
+                                infoTitle: "iOS 27 进阶 AI 能力说明",
+                                infoMessage: MGMsg.advAppleIntell,
+                                isOn: store.mgSlotRulesBinding(MGKey.advAppIntellRules)
+                            )
+                            .disabled(!advCanModify)
+                        }
                     }
                     if !isAppleIntellHD() || mgOverrideGates {
                         HStack(spacing: 10) {
@@ -232,7 +284,7 @@ struct GestaltView: View {
                 } header: {
                     HeaderLabel("地区与功能准入 (Eligibility)", symbol: "flag")
                 } footer: {
-                    Text("注：iPhone 18 系列硬件设备树已原生开启全部 Apple 智能与 iOS 27 进阶 AI 能力（个人实时翻译 / 音频智能），无需额外开启，故默认不展示相关选项（国行机型仅需开启“解除地区限制”即可完整激活）。")
+                    Text("注：原生支持 Apple 智能的机型默认隐藏旧机型专用的“Apple 智能总开关”与“机型伪装”（国行机型仅需开启“解除地区限制”与下方“green-tea 底层限制”即可激活）；“解锁 iOS 27 进阶 AI 能力”将根据当前机型与固件版本实时展示开关或原生状态。")
                 }
 
                 Section {
@@ -325,6 +377,180 @@ struct GestaltView: View {
                 } footer: {
                     Text("本组能力由设备树 (IODeviceTree) 映射至二进制 CacheData 布尔槽位，必须通过动态槽位偏移直接写入 CacheData 才能绕过系统 _MGCacheSetValueForKey 有效性短路检查。本机已原生开启的硬件能力会自动锁定以防误关降级；应用后请手动重启手机生效。")
                 }
+
+                Section {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "flask.fill")
+                            .foregroundStyle(Color.orange)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("测试特性专区（Experimental · CacheData 动态槽位）")
+                                .font(.subheadline.weight(.semibold))
+                            Text("以下能力全部通过本机 libMobileGestalt.dylib 实时解析二进制布尔槽位偏移并执行零白苹果写前校验。受各机型物理传感器与 eligibilityd 策略差异影响，实际表现可能因设备而异，修改后请重启设备测试。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Button {
+                            Alertinator.shared.alert(title: "测试特性说明", body: MGMsg.expNotice)
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .foregroundStyle(Color.orange)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 2)
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 日版/韩版真·相机快门静音",
+                        subtitle: "组合修改 3 个真实 CacheData 快门音豁免槽位，无需改美版即可尝试静音快门",
+                        infoTitle: "日韩版相机快门静音（测试特性）",
+                        infoMessage: MGMsg.expShutterMuteInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.shutterRelaxation, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.shutterKeyboardMutePreserve, targetValue: false, required: false),
+                            MGSlotRule(key: MGKey.shutterLegacyMutePreserve, targetValue: false, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 高低功耗双麦并发拾音 (录音棚叠录底座)",
+                        subtitle: "解锁语音备忘录伴奏叠录与多轨人声分离所需的双麦并发硬件标记",
+                        infoTitle: "高低功耗双麦并发（测试特性）",
+                        infoMessage: MGMsg.expStudioMicsInfo,
+                        rules: [MGSlotRule(key: MGKey.concurrentHPLPMics, targetValue: true)]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 相册局部光影重绘与新一代色调映射",
+                        subtitle: "开启 PhotosLocalLight + ToneMapping + HDR 深度延迟渲染管线",
+                        infoTitle: "相册光影与色调映射增强（测试特性）",
+                        infoMessage: MGMsg.expPhotoToneInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.photosLocalLight, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.toneMapping, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.hdrDeferredProcessing, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 超取景框捕获与 P3 广色域立体声视频",
+                        subtitle: "同步开启 SpatialOverCapture、立体声视频拾音与 P3 广色域录制",
+                        infoTitle: "空间超取景与立体声视频（测试特性）",
+                        infoMessage: MGMsg.expSpatialStereoInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.spatialOverCapture, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.stereoAudioRec, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.p3VideoRec, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 相机控制电容滑动变焦与触觉阻尼完整面板",
+                        subtitle: "补齐电容触敏相机控制、物理档位阻尼与微幅触觉反馈 4 项槽位",
+                        infoTitle: "相机控制完整交互包（测试特性）",
+                        infoMessage: MGMsg.expCamControlInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.camButton, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.touchSensitiveCamControl, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.hardwareDetents, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.cameraHaptics, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 旧机型显示电池循环次数与生产日期",
+                        subtitle: "在旧款机型“关于本机 / 电池健康”中展示循环计数与首次使用日期",
+                        infoTitle: "旧机型电池健康详情（测试特性）",
+                        infoMessage: MGMsg.expLegacyBatteryInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.legacyBatteryInfo, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.legacyDynamicEndOfCharge, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 户外高亮全天候显示与翻页帧缓冲",
+                        subtitle: "解锁 HighLuminanceAOD 与低功耗 Flipbook 息屏显示管线（非 LTPO 屏耗电较高）",
+                        infoTitle: "户外高亮 AOD（测试特性）",
+                        infoMessage: MGMsg.expHighLumAODInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.highLuminanceAOD, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.aodFlipbook, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] CarPlay Ultra (新一代多屏全液晶车载)",
+                        subtitle: "启用新一代多仪表盘接管 CarPlay 2.0 车载协议栈标记",
+                        infoTitle: "CarPlay Ultra（测试特性）",
+                        infoMessage: MGMsg.expCarPlay2Info,
+                        rules: [MGSlotRule(key: MGKey.carPlay2, targetValue: true)]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 120Hz 触控采样事件投递管线",
+                        subtitle: "开启 TouchDelivery120Hz 触控上报（注：60Hz 屏幕无法突破物理显示刷新率）",
+                        infoTitle: "120Hz 触控采样投递（测试特性）",
+                        infoMessage: MGMsg.expTouch120Info,
+                        rules: [MGSlotRule(key: MGKey.touchDelivery120Hz, targetValue: true)]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] AirPods 临床听力均衡与低功耗助听器模式",
+                        subtitle: "开启 hearingaid 均衡、低功耗音频与降功耗 3 个连续硬件槽位",
+                        infoTitle: "临床听力与助听器模式（测试特性）",
+                        infoMessage: MGMsg.expHearingAidInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.hearingAidEQ, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.hearingAidLE, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.hearingAidPowerRed, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 睡眠呼吸暂停风险趋势检测",
+                        subtitle: "开启“健康 -> 呼吸紊乱”睡眠呼吸暂停评估页面支持",
+                        infoTitle: "睡眠呼吸暂停检测（测试特性）",
+                        infoMessage: MGMsg.expSleepApneaInfo,
+                        rules: [MGSlotRule(key: MGKey.breathingDisturbances, targetValue: true)]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 解除美版血氧软件专利限制",
+                        subtitle: "将 USLegallyCompliantBloodOxygen 设为 false（国行机型原生未受限无需开启）",
+                        infoTitle: "解除美版血氧限制（测试特性）",
+                        infoMessage: MGMsg.expUSBloodOxygenInfo,
+                        rules: [MGSlotRule(key: MGKey.usBloodOxygen, targetValue: false)]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 户外极限运动模式与日光照射时长监测",
+                        subtitle: "同步解锁 WorkoutUltraMode 与环境日光照射统计槽位",
+                        infoTitle: "极限运动与日光监测（测试特性）",
+                        infoMessage: MGMsg.expWorkoutUltraInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.workoutUltra, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.timeInDaylight, targetValue: true, required: false)
+                        ]
+                    )
+
+                    experimentalSlotRuleRow(
+                        title: "[测试特性] 端侧 Siri Hub 路由与指令模型动态剪枝",
+                        subtitle: "开启离线端侧 Siri 意图路由及低运存端侧权重指令剪枝支持",
+                        infoTitle: "端侧 Siri Hub 与模型剪枝（测试特性）",
+                        infoMessage: MGMsg.expSiriHubInfo,
+                        rules: [
+                            MGSlotRule(key: MGKey.siriHub, targetValue: true, required: true),
+                            MGSlotRule(key: MGKey.onDeviceSiri, targetValue: true, required: false),
+                            MGSlotRule(key: MGKey.modelPruning, targetValue: true, required: false)
+                        ]
+                    )
+                } header: {
+                    HeaderLabel("实验性底层特性挖掘（测试特性）", symbol: "flask")
+                } footer: {
+                    Text("所有标记 [测试特性] 的开关均严格运行在已校验的 8 字节布尔 CacheData 槽位内（零白苹果风险），但实际功能效果取决于本机协处理器与系统版本；修改后需手动重启手机生效。")
+                }
                 
                 Section {
                     if !isCrashDectHD() || mgOverrideGates {
@@ -374,27 +600,20 @@ struct GestaltView: View {
                         }
                         
                         Button {
-                            mgRevert()
+                            promptFactoryRestore()
                         } label: {
                             Label("还原原始备份", systemImage: "xmark")
                         }
                         .disabled(!hasWriteAccess && !weOnADebugBuild)
                         
                         Button(role: .destructive) {
-                            Alertinator.shared.alert(title: "确定要彻底重置 MobileGestalt 吗？", body: MGMsg.mgReset, actionLabel: "确认重置", action: {
-                                do {
-                                    // Never destroy OriginalGestalt.plist during system cache rebuild (SEC-M1-05)
-                                    if fm.fileExists(atPath: MGURL.savedGestaltURL.path) {
-                                        let archiveURL = URL.documentsDirectory.appendingPathComponent("ArchivedOriginalGestalt_\(Int(Date().timeIntervalSince1970)).plist")
-                                        try? fm.copyItem(at: MGURL.savedGestaltURL, to: archiveURL)
-                                        mgExcludeFromCloudBackup(archiveURL)
-                                    }
-                                    try fm.removeItem(at: MGURL.fsGestaltURL)
-                                    store.mgCurrentDict = NSMutableDictionary()
-                                    Alertinator.shared.alert(title: "已重置 MobileGestalt！", body: MGMsg.mgResetComp, showCancel: false, actionLabel: "退出应用", action: { exitinator() })
-                                } catch {
-                                    print("(mg) failed to reset mobilegestalt: \(error.localizedDescription)")
-                                    Alertinator.shared.alert(title: "重置 MobileGestalt 失败！", body: AppMsg.opFailed)
+                            Alertinator.shared.alert(title: "确定要彻底重建原厂 MobileGestalt 缓存吗？", body: MGMsg.mgReset, actionLabel: "确认重建", action: {
+                                switch mgExecuteCleanCacheRebuild() {
+                                case .success:
+                                    Alertinator.shared.alert(title: "已准备原厂缓存重建！", body: MGMsg.mgResetComp, showCancel: false, actionLabel: "退出并手动重启", action: { exitinator() })
+                                case .failure(let err):
+                                    print("(mg) failed to reset mobilegestalt: \(err.localizedDescription)")
+                                    Alertinator.shared.alert(title: "重建缓存失败！", body: err.localizedDescription)
                                 }
                             })
                         } label: {
@@ -422,6 +641,9 @@ struct GestaltView: View {
                                     Button("导出原始备份 (OriginalGestalt)") {
                                         presentShareSheet(with: MGURL.savedGestaltURL)
                                     }
+                                    Button("导入外部原始备份 (.plist)") {
+                                        showBackupImporter = true
+                                    }
                                     if fm.fileExists(atPath: MGURL.preApplyGestaltURL.path) {
                                         Button("导出上次写入前快照 (PreApply)") {
                                             presentShareSheet(with: MGURL.preApplyGestaltURL)
@@ -431,6 +653,8 @@ struct GestaltView: View {
                                         Alertinator.shared.alert(title: "警告！", body: MGMsg.mgResetSavWarn, actionLabel: "确认覆盖", action: {
                                             try? fm.removeItem(at: MGURL.savedGestaltURL)
                                             try? fm.removeItem(at: MGURL.savedGestaltSHA256URL)
+                                            try? fm.removeItem(at: MGURL.systemVaultGestaltURL)
+                                            try? fm.removeItem(at: MGURL.systemVaultSHA256URL)
                                             store.mgCurrentDict = mgLoadData()
                                         })
                                     }
@@ -448,11 +672,38 @@ struct GestaltView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    HStack {
+                                        Text("跨卸载系统金库冗余备份")
+                                        Spacer()
+                                        Text(dualVaultReady ? "已同步锁定" : "待同步")
+                                            .font(.caption)
+                                            .foregroundStyle(dualVaultReady ? Color.green : .secondary)
+                                    }
                                 } footer: {
-                                    Text("防白苹果安全协议已永久锁定无零字节窗口原位覆盖（pwrite + F_FULLFSYNC），完整保留系统文件 Inode 与 POSIX 权限属性，并在任何校验异常时自动原位回滚。")
+                                    Text("防白苹果安全协议已永久锁定无零字节窗口原位覆盖（pwrite + F_FULLFSYNC）与系统级安全金库双备份冗余，即使侧载掉签卸载重装应用也不会丢失原厂初始备份。")
                                 }
                             }
                             .navigationTitle("Gestalt 设置")
+                            .fileImporter(
+                                isPresented: $showBackupImporter,
+                                allowedContentTypes: [.propertyList],
+                                allowsMultipleSelection: false
+                            ) { result in
+                                switch result {
+                                case .success(let urls):
+                                    guard let first = urls.first else { return }
+                                    switch mgImportExternalOriginalBackup(from: first) {
+                                    case .success(let msg):
+                                        Haptic.shared.play(.soft)
+                                        store.mgCurrentDict = mgLoadData()
+                                        Alertinator.shared.alert(title: "导入原始备份成功！", body: msg)
+                                    case .failure(let err):
+                                        Alertinator.shared.alert(title: "导入原始备份失败！", body: err.localizedDescription)
+                                    }
+                                case .failure(let err):
+                                    Alertinator.shared.alert(title: "选择文件失败", body: err.localizedDescription)
+                                }
+                            }
                         } label: {
                             Label("高级设置", systemImage: "gear")
                         }
@@ -464,7 +715,9 @@ struct GestaltView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("应用", role: .adaptiveConfirm) {
                         if !hasShownSheet {
-                            showInfoSheet = true
+                            Alertinator.shared.runWhenPresentationIdle {
+                                showInfoSheet = true
+                            }
                         } else {
                             prepareApplyPreview()
                         }
@@ -472,7 +725,12 @@ struct GestaltView: View {
                     .disabled(!hasWriteAccess && !weOnADebugBuild)
                 }
             }
-            .sheet(isPresented: $showInfoSheet) {
+            .sheet(isPresented: $showInfoSheet, onDismiss: {
+                if pendingPreviewAfterInfoSheet {
+                    pendingPreviewAfterInfoSheet = false
+                    prepareApplyPreview(isFromSheet: true)
+                }
+            }) {
                 NavigationStack {
                     VStack {
                         InfoSheet(title: "使用前必读") {
@@ -483,12 +741,10 @@ struct GestaltView: View {
                             InfoSheetCell(title: "解除地区限制（国行解锁）", symbol: "map", context: MGMsg.region)
                         } button: {
                             Button(idiotButtonTimerComplete ? "我已知晓，查看变更预览" : "请阅读上方提示（4 秒）...") {
-                                showInfoSheet = false
                                 hasShownSheet = true
                                 idiotButtonTimerComplete = false
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                    prepareApplyPreview(isFromSheet: true)
-                                }
+                                pendingPreviewAfterInfoSheet = true
+                                showInfoSheet = false
                             }
                             .buttonStyle(ConfirmButtonStyle())
                             .padding(.horizontal, 30)
@@ -504,6 +760,7 @@ struct GestaltView: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("取消") {
+                                pendingPreviewAfterInfoSheet = false
                                 showInfoSheet = false
                                 idiotButtonTimerComplete = false
                             }
@@ -511,11 +768,11 @@ struct GestaltView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showDiffSheet) {
+            .sheet(item: $diffPreviewPayload) { payload in
                 NavigationStack {
                     List {
                         Section {
-                            ForEach(pendingDiffs) { item in
+                            ForEach(payload.diffs) { item in
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(item.label)
                                         .font(.subheadline.weight(.semibold))
@@ -542,7 +799,7 @@ struct GestaltView: View {
                                 .padding(.vertical, 4)
                             }
                         } header: {
-                            Text("共 \(pendingDiffs.count) 项键值变更")
+                            Text("共 \(payload.diffs.count) 项键值变更")
                         } footer: {
                             Text("点击“确认写入”后将自动备份当前缓存、执行原位写入并进行完整读回校验；若校验异常将自动回滚原文件。")
                         }
@@ -552,18 +809,14 @@ struct GestaltView: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button("取消") {
-                                showDiffSheet = false
-                                pendingCandidateDict = nil
+                                diffPreviewPayload = nil
                             }
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("确认写入") {
-                                let candidate = pendingCandidateDict
-                                showDiffSheet = false
-                                pendingCandidateDict = nil
-                                if let candidate {
-                                    mgCommit(candidate)
-                                }
+                                let candidate = payload.candidate
+                                diffPreviewPayload = nil
+                                mgCommit(candidate)
                             }
                             .fontWeight(.semibold)
                         }
@@ -596,9 +849,13 @@ struct GestaltView: View {
                         Alertinator.shared.alert(title: "获取 MobileGestalt 写入权限失败！", body: "修改将无法保存生效，请尝试重启本应用后再试。")
                     }
                 }
-                store.mgCurrentDict = mgLoadData()
+                if !hasLoadedInitialData {
+                    hasLoadedInitialData = true
+                    store.mgCurrentDict = mgLoadData()
+                } else {
+                    dualVaultReady = mgHasSyncedSystemVault()
+                }
             }
-        }
     }
 
     @ViewBuilder
@@ -629,6 +886,39 @@ struct GestaltView: View {
                 infoTitle: infoTitle,
                 infoMessage: infoMessage,
                 isOn: store.mgFeatureSlotBinding(keys)
+            )
+            .disabled(!canModify)
+        }
+    }
+
+    @ViewBuilder
+    private func experimentalSlotRuleRow(
+        title: String,
+        subtitle: String,
+        infoTitle: String,
+        infoMessage: String,
+        rules: [MGSlotRule]
+    ) -> some View {
+        let canModify = store.canModifySlotRules(rules)
+        let isNativeSatisfied = store.isSlotRulesNativeSatisfied(rules)
+        if isNativeSatisfied && !mgOverrideGates {
+            PlainToggle(
+                title,
+                subtitle: "✅ 本机原厂默认已满足目标状态（无需额外修改，已锁定防误改）",
+                infoType: .info,
+                infoTitle: infoTitle,
+                infoMessage: infoMessage,
+                isOn: .constant(true)
+            )
+            .disabled(true)
+        } else {
+            PlainToggle(
+                title,
+                subtitle: canModify ? subtitle : "当前系统版本未包含或无法解析此实验性二进制槽位",
+                infoType: .info,
+                infoTitle: infoTitle,
+                infoMessage: infoMessage,
+                isOn: store.mgSlotRulesBinding(rules)
             )
             .disabled(!canModify)
         }
@@ -667,7 +957,7 @@ struct GestaltView: View {
             MGKey.stageMgr,
             MGKey.modelNameOuter1,
             MGKey.modelNameOuter2
-        ] + MGKey.appIntellAllKeys + MGKey.advAppIntellKeys + MGKey.mediaHealthAllKeys + MGKey.ipadosCacheEx
+        ] + MGKey.appIntellAllKeys + MGKey.advAppIntellKeys + MGKey.mediaHealthAllKeys + MGKey.experimentalCacheSlotKeys + MGKey.ipadosCacheEx
         for key in knownTweakKeys {
             if !mgPlistValuesEqual(curExtra[key], ogExtra[key]) {
                 return false
@@ -708,16 +998,23 @@ struct GestaltView: View {
             guard preCheck.0 else {
                 throw preCheck.1
             }
-            if !fm.fileExists(atPath: MGURL.savedGestaltURL.path) {
-                try mgSaveOriginalBackupWithDigest(mgData)
-            } else if !fm.fileExists(atPath: MGURL.savedGestaltSHA256URL.path),
-                      let existingOgData = try? Data(contentsOf: MGURL.savedGestaltURL),
-                      mgValidatePlistData(existingOgData).0 {
-                let hex = mgComputeSHA256Hex(existingOgData)
-                try? Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
-                mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+            let vaultOutcome = try mgEnsureOriginalBackupWithVault(liveData: mgData)
+            dualVaultReady = mgHasSyncedSystemVault()
+            if vaultOutcome.recoveredFromVault {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Alertinator.shared.alert(
+                        title: "已自动找回原厂初始备份！",
+                        body: "检测到应用曾卸载重装，已从系统安全金库无损恢复你最初未修改的原厂 MobileGestalt 备份（SHA-256 校验通过）。"
+                    )
+                }
+            } else if let dirtyWarn = vaultOutcome.suspectedDirtyWarning {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Alertinator.shared.alert(
+                        title: "首次备份异常状态提示",
+                        body: "\(dirtyWarn)\n\n当前系统状态已被保存为初始备份。若希望获取 100% 纯净原厂基线，可在右上角菜单选择「清除并重建缓存」并重启，或在「高级设置」导入你之前保存的原厂备份。"
+                    )
+                }
             }
-            mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
             
             guard let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
                   let ogCacheExtra = ogDict["CacheExtra"] as? NSDictionary,
@@ -849,7 +1146,7 @@ struct GestaltView: View {
             cacheExtra.removeObject(forKey: MGKey.regionInfo)
             cacheExtra.removeObject(forKey: "0L5PkT61qoH1b/B1USWqjQ")
         }
-        for conflictKey in ["iyfxmLogGVIaH7aEgqwcIA", "4snMZS8LJkSctKypt2m+xA", "hiHut/WR+B9Lx/vd0WyeNg", "green-tea", "not-green-tea", "wapi"] + MGKey.mediaHealthAllKeys {
+        for conflictKey in ["iyfxmLogGVIaH7aEgqwcIA", "4snMZS8LJkSctKypt2m+xA", "hiHut/WR+B9Lx/vd0WyeNg", "green-tea", "not-green-tea", "wapi"] + MGKey.advAppIntellKeys + MGKey.mediaHealthAllKeys + MGKey.experimentalCacheSlotKeys {
             cacheExtra.removeObject(forKey: conflictKey)
         }
         return candidate
@@ -866,9 +1163,13 @@ struct GestaltView: View {
                 Alertinator.shared.alert(title: "没有待应用的更改", body: "当前各项配置与系统缓存文件中的内容完全一致，无需重复写入。", showCancel: true)
                 return
             }
-            pendingCandidateDict = candidate
-            pendingDiffs = diffs
-            showDiffSheet = true
+            let payload = MGDiffPreviewPayload(diffs: diffs, candidate: candidate)
+            if diffPreviewPayload != nil {
+                diffPreviewPayload = nil
+            }
+            Alertinator.shared.runWhenPresentationIdle {
+                diffPreviewPayload = payload
+            }
         } catch {
             Alertinator.shared.alert(title: "无法生成变更预览", body: "\(error.localizedDescription)")
         }
@@ -910,78 +1211,53 @@ struct GestaltView: View {
         }
     }
     
+    private func promptFactoryRestore() {
+        Alertinator.shared.alert(
+            title: "确认一键恢复本机原厂参数？",
+            body: MGMsg.revertConfirm,
+            actionLabel: "确认恢复原厂",
+            action: {
+                mgRevert()
+            }
+        )
+    }
+
     private func mgRevert() {
-        do {
-            let integrityCheck = mgVerifyOriginalBackupIntegrity()
-            guard integrityCheck.0 else {
-                Alertinator.shared.alert(title: "原始备份完整性校验未通过！", body: integrityCheck.1, showCancel: true)
-                return
-            }
-            guard let mgDictToApply = NSMutableDictionary(contentsOf: MGURL.savedGestaltURL) else {
-                throw "找不到原始备份文件 OriginalGestalt.plist！"
-            }
-            
-            if let liveDict = NSDictionary(contentsOf: MGURL.fsGestaltURL) {
-                let ogBuild = mgDictToApply["CacheVersion"] as? String ?? ""
-                let liveBuild = liveDict["CacheVersion"] as? String ?? ""
-                if !ogBuild.isEmpty && !liveBuild.isEmpty && ogBuild != liveBuild {
-                    Alertinator.shared.alert(
-                        title: "已拦截跨系统版本还原！",
-                        body: "原始备份来自旧版系统 (\(ogBuild))，与当前系统 (\(liveBuild)) 二进制缓存结构不同，直接覆盖可能导致异常。\n\n如需恢复当前系统的原厂状态，请关闭对应功能开关后点“应用”，或使用菜单中的“清除并重建缓存”并重启设备。",
-                        showCancel: true
-                    )
-                    return
+        switch mgExecuteFactoryRestore(alsoResetConfigAndKeypad: false) {
+        case .restoredSuccessfully(let details):
+            print("[*] successfully reverted and verified mobilegestalt!")
+            Haptic.shared.play(.soft)
+            mgEnableDeviceName = false
+            store.mgCurrentDict = mgLoadData()
+            Alertinator.shared.alert(
+                title: "已恢复并校验原厂参数！",
+                body: details,
+                actionLabel: "立即注销",
+                action: { mgr.shouldRespring = true }
+            )
+        case .blockedNeedsCleanRebuild(let title, let reason):
+            Alertinator.shared.alert(
+                title: title,
+                body: reason,
+                actionLabel: "重建系统纯净原厂缓存",
+                action: {
+                    switch mgExecuteCleanCacheRebuild(alsoResetConfigAndKeypad: false) {
+                    case .success:
+                        Alertinator.shared.alert(
+                            title: "已准备原厂缓存重建！",
+                            body: MGMsg.mgResetComp,
+                            showCancel: false,
+                            actionLabel: "退出并手动重启",
+                            action: { exitinator() }
+                        )
+                    case .failure(let err):
+                        Alertinator.shared.alert(title: "重建缓存失败！", body: err.localizedDescription)
+                    }
                 }
-
-                let ogUUID = mgDictToApply["CacheUUID"] as? String ?? ""
-                let liveUUID = liveDict["CacheUUID"] as? String ?? ""
-                if !ogUUID.isEmpty && !liveUUID.isEmpty && ogUUID.caseInsensitiveCompare(liveUUID) != .orderedSame {
-                    Alertinator.shared.alert(
-                        title: "已拦截不匹配的缓存布局还原！",
-                        body: "原始备份的 CacheUUID (\(ogUUID)) 与当前设备系统 (\(liveUUID)) 不一致，直接覆盖存在白苹果与丢 eSIM 风险，安全护栏已阻止还原。",
-                        showCancel: true
-                    )
-                    return
-                }
-
-                let ogCacheLen = (mgDictToApply["CacheData"] as? Data)?.count ?? 0
-                let liveCacheLen = (liveDict["CacheData"] as? Data)?.count ?? 0
-                if ogCacheLen > 0 && liveCacheLen > 0 && ogCacheLen != liveCacheLen {
-                    Alertinator.shared.alert(
-                        title: "已拦截长度不一致的二进制缓存还原！",
-                        body: "原始备份的 CacheData 长度 (\(ogCacheLen) 字节) 与当前系统 (\(liveCacheLen) 字节) 不一致，直接写入会破坏基带与 eSIM 槽位，已强制拦截！",
-                        showCancel: true
-                    )
-                    return
-                }
-
-                let ogExtra = mgDictToApply["CacheExtra"] as? NSDictionary
-                let ogProd = ogExtra?[MGKey.prodType] as? String ?? ""
-                let actualHW = currentOriginalMachineName()
-                if !ogProd.isEmpty && !actualHW.isEmpty && ogProd != actualHW && ogProd != machineName() {
-                    Alertinator.shared.alert(
-                        title: "已拦截跨机型备份还原！",
-                        body: "检测到该备份文件来自其他机型 (\(ogProd))，与当前设备硬件 (\(actualHW)) 不符（可能由旧机备份迁移带入），直接写入会导致白苹果软砖，已强制拦截！",
-                        showCancel: true
-                    )
-                    return
-                }
-            }
-            
-            let data = try PropertyListSerialization.data(fromPropertyList: mgDictToApply, format: .binary, options: 0)
-            let res = mgWriteDetailed(data)
-            
-            if res.0 {
-                print("[*] successfully reverted and verified mobilegestalt!")
-                Haptic.shared.play(.soft)
-                store.mgCurrentDict = mgLoadData()
-                Alertinator.shared.alert(title: "已还原并校验原始备份！", body: MGMsg.revertComp, actionLabel: "立即注销", action: { mgr.shouldRespring = true })
-            } else {
-                throw res.1
-            }
-        } catch {
-            print("(mg) failed to revert mobilegestalt: \(error.localizedDescription)")
-            Alertinator.shared.alert(title: "还原 MobileGestalt 失败！", body: "\(error.localizedDescription)")
+            )
+        case .failed(let reason):
+            print("(mg) failed to revert mobilegestalt: \(reason)")
+            Alertinator.shared.alert(title: "还原 MobileGestalt 失败！", body: reason)
         }
     }
 }

@@ -208,6 +208,11 @@ struct CacheCleanerView: View {
         .navigationTitle("容器缓存清理")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索应用名称或 Bundle ID")
+        .onChange(of: includeSystemContainers) {
+            if includeSystemContainers && !entries.contains(where: { $0.bundleID.hasPrefix("com.apple.") && $0.bundleID != "com.apple.mobilesafari" }) && !isScanning {
+                scanCaches()
+            }
+        }
         .onAppear {
             if entries.isEmpty && !isScanning {
                 scanCaches()
@@ -222,27 +227,42 @@ struct CacheCleanerView: View {
     }
 
     private func scanCaches() {
+        let wantSystem = includeSystemContainers
         isScanning = true
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .utility).async {
             let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
             var result: [ContainerCacheEntry] = []
             let selfBID = Bundle.main.bundleIdentifier ?? "com.jbdotparty.Erosion"
 
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
+
+                // Fast pre-filter via CSStore2 without touching containermanagerd IPC!
+                if let knownBID = CSStoreEngine.shared.bundleID(forContainerPath: url.path, allowDiscovery: false) {
+                    if knownBID == selfBID || Self.protectedBundleIDs.contains(knownBID) {
+                        continue
+                    }
+                    if !wantSystem && knownBID.hasPrefix("com.apple.") && knownBID != "com.apple.mobilesafari" {
+                        continue
+                    }
+                }
+
+                guard let bid = getBIDFromXattr(url),
+                      !bid.isEmpty,
+                      bid != selfBID,
+                      !Self.protectedBundleIDs.contains(bid) else { continue }
+
+                if !wantSystem && bid.hasPrefix("com.apple.") && bid != "com.apple.mobilesafari" {
+                    continue
+                }
+
                 let wasActive = wq.hasActiveAccess(path: url.path)
-                guard wq.grantAccess(path: url.path).0 else { continue }
+                guard wq.grantAccess(path: url.path, requireWrite: false).0 else { continue }
                 defer {
                     if !wasActive {
                         wq.releaseAccess(path: url.path)
                     }
                 }
-
-                var buf = [CChar](repeating: 0, count: 512)
-                let len = getxattr(url.path, "com.apple.containermanager.identifier", &buf, 511, 0, XATTR_NOFOLLOW)
-                guard len > 0 else { continue }
-                let bid = String(cString: buf)
-                guard !bid.isEmpty, bid != selfBID, !Self.protectedBundleIDs.contains(bid) else { continue }
 
                 let cachesURL = url.appendingPathComponent("Library/Caches")
                 let tmpURL = url.appendingPathComponent("tmp")

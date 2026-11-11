@@ -10,15 +10,14 @@ import UIKit
 
 @MainActor
 public func presentShareSheet(with url: URL) {
-    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-       let window = windowScene.windows.first,
-       var topController = window.rootViewController {
-        
-        while let presentedViewController = topController.presentedViewController {
-            topController = presentedViewController
-        }
-        
+    Alertinator.shared.runWhenPresentationIdle {
+        guard let topController = Alertinator.resolveActivePresenter() else { return }
         let activityViewController = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let popover = activityViewController.popoverPresentationController {
+            popover.sourceView = topController.view
+            popover.sourceRect = CGRect(x: topController.view.bounds.midX, y: topController.view.bounds.midY, width: 1, height: 1)
+            popover.permittedArrowDirections = []
+        }
         topController.present(activityViewController, animated: true)
     }
 }

@@ -193,7 +193,13 @@ final class KeypadManager: ObservableObject {
     
     func resetKeypadItems() -> Bool {
         do {
-            let base = mpContainerPath()
+            var base = mpContainerPath()
+            if base.isEmpty {
+                base = fsHandlers.getContainerPath(forMatch: "com.apple.mobilephone")
+                if !base.isEmpty {
+                    UserDefaults.standard.set(base, forKey: "mpContainerPath")
+                }
+            }
             guard !base.isEmpty, wq.grantAccess(path: base).0 else { return false }
             let filesURL = URL(fileURLWithPath: base).appendingPathComponent("Library/Caches/TelephonyUI-10")
             let targetPrefix = getFileRegCode()

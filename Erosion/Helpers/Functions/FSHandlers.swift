@@ -11,7 +11,51 @@ import UIKit
 let fsHandlers = FSHandlers()
 
 class FSHandlers {
-    func getDirPaths(_ path: String, maxInode: Int64 = 15000000) -> [String] {
+    private let cacheLock = NSLock()
+    private let scanSerialLock = NSLock()
+    private var dirPathsCache: [String: [String]] = [:]
+
+    func invalidateCache() {
+        cacheLock.lock()
+        dirPathsCache.removeAll()
+        cacheLock.unlock()
+        clearXattrBIDCache()
+    }
+
+    func getDirPaths(_ path: String, maxInode: Int64 = 15000000, forceRefresh: Bool = false) -> [String] {
+        let normKey = CSStoreEngine.normalizeVarPath(path)
+
+        if !forceRefresh {
+            cacheLock.lock()
+            if let cached = dirPathsCache[normKey], !cached.isEmpty {
+                cacheLock.unlock()
+                return cached
+            }
+            cacheLock.unlock()
+        }
+
+        // Single-flight: prevent 5 concurrent views from launching 5 parallel pathleak loops!
+        scanSerialLock.lock()
+        defer { scanSerialLock.unlock() }
+
+        if !forceRefresh {
+            cacheLock.lock()
+            if let cached = dirPathsCache[normKey], !cached.isEmpty {
+                cacheLock.unlock()
+                return cached
+            }
+            cacheLock.unlock()
+        }
+
+        // [测试特性] Try MCM / LaunchServices CSStore2 fast container graph (<50ms) first
+        if let fastPaths = CSStoreEngine.shared.containerPaths(forRoot: normKey), fastPaths.count >= 2 {
+            print("(fs) 已通过 CSStore2 极速映射获取 \(normKey) 下 \(fastPaths.count) 个容器路径")
+            cacheLock.lock()
+            dirPathsCache[normKey] = fastPaths
+            cacheLock.unlock()
+            return fastPaths
+        }
+
         let baselineURL = fm.temporaryDirectory.appendingPathComponent(".baseline_\(UUID().uuidString)")
         var baselineInode: UInt64 = 0
 
@@ -38,18 +82,36 @@ class FSHandlers {
         } else {
             targetMaxInode = userMax
         }
-        print("(fs) 正在通过 pathleak 枚举目录: \(path) (上限: \(targetMaxInode))")
-        let leakedPaths = pathleak(path, targetMaxInode) ?? []
+        print("(fs) 正在通过多线程 pathleak 枚举目录: \(normKey) (上限: \(targetMaxInode))")
+        let leakedPaths = pathleak(normKey, targetMaxInode) ?? []
         print("(fs) pathleak 枚举完成，共找到 \(leakedPaths.count) 个容器路径")
+        if !leakedPaths.isEmpty {
+            cacheLock.lock()
+            dirPathsCache[normKey] = leakedPaths
+            cacheLock.unlock()
+        }
         return leakedPaths
     }
     
     func getContainerPath(at containerURL: URL = FSURL.appContainers, forMatch match: String, hashOnly: Bool = false) -> String {
+        let normRoot = CSStoreEngine.normalizeVarPath(containerURL.path)
+        if normRoot == "/var/mobile/Containers/Data/Application" {
+            let (snapLoaded, fastHit) = CSStoreEngine.shared.lookupAppContainer(forBundleID: match)
+            if let fastHit, !fastHit.isEmpty {
+                let url = URL(fileURLWithPath: fastHit)
+                return hashOnly ? url.lastPathComponent : url.path
+            }
+            // If CSStore2 is active and did not list this app, it is uninstalled/not initialized — do not brute-force!
+            if snapLoaded {
+                return ""
+            }
+        }
+
         let containers = getDirPaths(containerURL.path)
         for path in containers {
             let url = URL(fileURLWithPath: path)
             if let appName = getBIDFromXattr(url) {
-                if appName == match {
+                if appName.caseInsensitiveCompare(match) == .orderedSame {
                     if hashOnly {
                         return url.lastPathComponent
                     }

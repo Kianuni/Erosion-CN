@@ -137,6 +137,35 @@ func mgKeyDisplayName(_ key: String) -> String {
         MGKey.actButton: "操作按钮",
         MGKey.tapToWake: "轻点唤醒",
         MGKey.stageMgr: "台前调度",
+        MGKey.shutterRelaxation: "[测试] 地区相机快门音豁免",
+        MGKey.shutterKeyboardMutePreserve: "[测试] 键盘静音保留强制快门音",
+        MGKey.shutterLegacyMutePreserve: "[测试] 旧机型保留强制快门音",
+        MGKey.concurrentHPLPMics: "[测试] 高低功耗双麦并发拾音",
+        MGKey.photosLocalLight: "[测试] 相册局部光效重绘",
+        MGKey.toneMapping: "[测试] 动态色调映射",
+        MGKey.hdrDeferredProcessing: "[测试] HDR 深度延迟渲染",
+        MGKey.spatialOverCapture: "[测试] 超取景框空间捕获",
+        MGKey.stereoAudioRec: "[测试] 立体声视频拾音",
+        MGKey.p3VideoRec: "[测试] P3 广色域视频录制",
+        MGKey.touchSensitiveCamControl: "[测试] 电容触敏相机控制",
+        MGKey.hardwareDetents: "[测试] 物理触感档位阻尼",
+        MGKey.cameraHaptics: "[测试] 相机微幅触觉反馈",
+        MGKey.legacyBatteryInfo: "[测试] 旧机型电池循环与日期显示",
+        MGKey.legacyDynamicEndOfCharge: "[测试] 旧机型智能充电截止",
+        MGKey.highLuminanceAOD: "[测试] 户外高亮全天候显示",
+        MGKey.aodFlipbook: "[测试] AOD 低功耗翻页帧缓冲",
+        MGKey.carPlay2: "[测试] CarPlay Ultra 新一代车载",
+        MGKey.touchDelivery120Hz: "[测试] 120Hz 触控采样投递",
+        MGKey.hearingAidEQ: "[测试] 临床助听器音频均衡",
+        MGKey.hearingAidLE: "[测试] 助听器低功耗音频",
+        MGKey.hearingAidPowerRed: "[测试] 助听器降功耗模式",
+        MGKey.breathingDisturbances: "[测试] 睡眠呼吸暂停风险检测",
+        MGKey.usBloodOxygen: "[测试] 美版血氧软件限制开关",
+        MGKey.workoutUltra: "[测试] 户外极限运动模式",
+        MGKey.timeInDaylight: "[测试] 日光照射时长监测",
+        MGKey.siriHub: "[测试] 端侧 Siri Hub 意图路由",
+        MGKey.onDeviceSiri: "[测试] 离线端侧 Siri 能力",
+        MGKey.modelPruning: "[测试] 端侧指令模型动态剪枝",
         "uKc7FPnEO++lVhHWHFlGbQ": "iPad 设备模式",
         "mG0AnH/Vy1veoqoLRAIgTA": "多任务浮动应用",
         "UCG5MkVahJxG1YULbbd5Bg": "多任务侧拉覆盖",
@@ -231,32 +260,372 @@ func mgComputeSHA256Hex(_ data: Data) -> String {
     return digest.map { String(format: "%02x", $0) }.joined()
 }
 
-func mgSaveOriginalBackupWithDigest(_ data: Data) throws {
-    try data.write(to: MGURL.savedGestaltURL, options: .atomic)
-    mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
-    let hex = mgComputeSHA256Hex(data)
-    try Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
-    mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+enum MGFactoryRestoreOutcome {
+    case restoredSuccessfully(details: String)
+    case blockedNeedsCleanRebuild(title: String, reason: String)
+    case failed(reason: String)
 }
 
-func mgVerifyOriginalBackupIntegrity() -> (Bool, String) {
-    guard let data = try? Data(contentsOf: MGURL.savedGestaltURL), !data.isEmpty else {
-        return (false, "找不到或无法读取原始备份文件 OriginalGestalt.plist！")
+func mgSyncSystemVaultBackup(_ data: Data, hexDigest: String) {
+    let vaultDir = MGURL.systemVaultGestaltURL.deletingLastPathComponent()
+    if !FileManager.default.isWritableFile(atPath: vaultDir.path) {
+        _ = wq.grantAccess(path: vaultDir.path)
+    }
+    guard FileManager.default.isWritableFile(atPath: vaultDir.path) else { return }
+    do {
+        try data.write(to: MGURL.systemVaultGestaltURL, options: .atomic)
+        mgExcludeFromCloudBackup(MGURL.systemVaultGestaltURL)
+        try Data(hexDigest.utf8).write(to: MGURL.systemVaultSHA256URL, options: .atomic)
+        mgExcludeFromCloudBackup(MGURL.systemVaultSHA256URL)
+    } catch {
+        print("(mg-vault) sync system vault failed: \(error.localizedDescription)")
+    }
+}
+
+func mgSaveOriginalBackupWithDigest(_ data: Data) throws {
+    let hex = mgComputeSHA256Hex(data)
+    try data.write(to: MGURL.savedGestaltURL, options: .atomic)
+    mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
+    try Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+    mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+    mgSyncSystemVaultBackup(data, hexDigest: hex)
+}
+
+func mgVerifyBackupFileIntegrity(plistURL: URL, sha256URL: URL, requireDigestFile: Bool = false) -> (Bool, String) {
+    guard let data = try? Data(contentsOf: plistURL), !data.isEmpty else {
+        return (false, "找不到或无法读取备份文件 \(plistURL.lastPathComponent)！")
     }
     let check = mgValidatePlistData(data)
     guard check.0 else {
-        return (false, "原始备份文件结构已损坏：\(check.1)")
+        return (false, "备份文件结构已损坏：\(check.1)")
     }
-    if FileManager.default.fileExists(atPath: MGURL.savedGestaltSHA256URL.path),
-       let savedHexData = try? Data(contentsOf: MGURL.savedGestaltSHA256URL),
+    if FileManager.default.fileExists(atPath: sha256URL.path),
+       let savedHexData = try? Data(contentsOf: sha256URL),
        let savedHex = String(data: savedHexData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
        savedHex.count == 64 {
         let actualHex = mgComputeSHA256Hex(data)
         if actualHex.caseInsensitiveCompare(savedHex) != .orderedSame {
-            return (false, "原始备份文件 SHA-256 完整性摘要校验未通过（预期 \(savedHex.prefix(12))...，实际 \(actualHex.prefix(12))...），可能已被意外篡改或损坏，已拦截还原！")
+            return (false, "备份文件 SHA-256 完整性摘要校验未通过（预期 \(savedHex.prefix(12))...，实际 \(actualHex.prefix(12))...），可能已被篡改或损坏！")
         }
+    } else if requireDigestFile {
+        return (false, "缺少对应的 SHA-256 完整性校验文件！")
     }
     return (true, "ok")
+}
+
+func mgVerifyOriginalBackupIntegrity() -> (Bool, String) {
+    return mgVerifyBackupFileIntegrity(plistURL: MGURL.savedGestaltURL, sha256URL: MGURL.savedGestaltSHA256URL)
+}
+
+func mgHasSyncedSystemVault() -> Bool {
+    return mgVerifyBackupFileIntegrity(
+        plistURL: MGURL.systemVaultGestaltURL,
+        sha256URL: MGURL.systemVaultSHA256URL,
+        requireDigestFile: true
+    ).0
+}
+
+func mgDetectSuspectedThirdPartyModification(in dict: NSDictionary) -> String? {
+    let extra = dict["CacheExtra"] as? NSDictionary ?? [:]
+    let kernelMachine = machineName()
+    if let plistProd = extra[MGKey.prodType] as? String,
+       !plistProd.isEmpty,
+       !kernelMachine.isEmpty,
+       plistProd != kernelMachine {
+        return "检测到机型标识符 (\(plistProd)) 与内核真实硬件型号 (\(kernelMachine)) 不符（可能曾开启机型伪装）"
+    }
+    let regCode = extra[MGKey.regionCode] as? String ?? ""
+    if regCode == "LL",
+       case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: dict, checkWapiSlot: true),
+       let wOff = layout.wapiOffset,
+       data[wOff] == 1 {
+        return "检测到销售地区已处于美版 (LL)，但底层仍带有国行硬件独有的 WAPI 标记（说明安装本应用前设备已改过地区）"
+    }
+    return nil
+}
+
+/// Ensures `OriginalGestalt.plist` exists cleanly:
+/// - Recovers true factory backup from SystemGroup vault across sideload app uninstall/reinstall;
+/// - Mirrors valid local backup into SystemGroup vault if missing;
+/// - Warns if first-ever install encounters an already-modified system plist.
+func mgEnsureOriginalBackupWithVault(liveData: Data) throws -> (recoveredFromVault: Bool, suspectedDirtyWarning: String?) {
+    let liveDict = (try? PropertyListSerialization.propertyList(from: liveData, options: [], format: nil) as? NSDictionary) ?? [:]
+    let liveBuild = liveDict["CacheVersion"] as? String ?? ""
+    let liveUUID = liveDict["CacheUUID"] as? String ?? ""
+    let kernelHW = machineName()
+
+    let fm = FileManager.default
+    if fm.fileExists(atPath: MGURL.savedGestaltURL.path) {
+        if !fm.fileExists(atPath: MGURL.savedGestaltSHA256URL.path),
+           let existingOgData = try? Data(contentsOf: MGURL.savedGestaltURL),
+           mgValidatePlistData(existingOgData).0 {
+            let hex = mgComputeSHA256Hex(existingOgData)
+            try? Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+            mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+        }
+        mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
+
+        // Sync to SystemGroup vault if vault is missing or outdated while local backup matches live OS build
+        if mgVerifyOriginalBackupIntegrity().0,
+           let localData = try? Data(contentsOf: MGURL.savedGestaltURL),
+           let localDict = NSDictionary(contentsOf: MGURL.savedGestaltURL) {
+            let localBuild = localDict["CacheVersion"] as? String ?? ""
+            let vaultValid = mgHasSyncedSystemVault()
+            let vaultBuild = (NSDictionary(contentsOf: MGURL.systemVaultGestaltURL)?["CacheVersion"] as? String) ?? ""
+            if !vaultValid || (!localBuild.isEmpty && localBuild == liveBuild && vaultBuild != liveBuild) {
+                mgSyncSystemVaultBackup(localData, hexDigest: mgComputeSHA256Hex(localData))
+            }
+        }
+        return (false, nil)
+    }
+
+    // Documents/OriginalGestalt.plist is missing (first install OR sideload uninstall+reinstall):
+    // Try recovering from SystemGroup vault first!
+    let vaultDir = MGURL.systemVaultGestaltURL.deletingLastPathComponent()
+    if !fm.isReadableFile(atPath: vaultDir.path) {
+        _ = wq.grantAccess(path: vaultDir.path)
+    }
+    if mgHasSyncedSystemVault(),
+       let vaultData = try? Data(contentsOf: MGURL.systemVaultGestaltURL),
+       let vaultDict = try? PropertyListSerialization.propertyList(from: vaultData, options: [], format: nil) as? NSDictionary {
+        let vaultBuild = vaultDict["CacheVersion"] as? String ?? ""
+        let vaultUUID = vaultDict["CacheUUID"] as? String ?? ""
+        let vaultExtra = vaultDict["CacheExtra"] as? NSDictionary
+        let vaultProd = vaultExtra?[MGKey.prodType] as? String ?? ""
+        let vaultLen = (vaultDict["CacheData"] as? Data)?.count ?? 0
+        let liveLen = (liveDict["CacheData"] as? Data)?.count ?? 0
+
+        let hwMatches = vaultProd.isEmpty || kernelHW.isEmpty || vaultProd == kernelHW
+        let buildMatches = !vaultBuild.isEmpty && vaultBuild == liveBuild
+        let uuidMatches = !vaultUUID.isEmpty && vaultUUID.caseInsensitiveCompare(liveUUID) == .orderedSame
+        let lenMatches = vaultLen > 0 && vaultLen == liveLen
+
+        if hwMatches && buildMatches && uuidMatches && lenMatches {
+            let hex = mgComputeSHA256Hex(vaultData)
+            try vaultData.write(to: MGURL.savedGestaltURL, options: .atomic)
+            mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
+            try Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+            mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+            print("[*] (mg-vault) 检测到应用重装，已从系统安全金库无损找回原厂备份 (\(vaultBuild))！")
+            return (true, nil)
+        }
+    }
+
+    // True first-ever backup on this OS build: inspect whether system plist was already modified by another tool
+    let dirtyReason = mgDetectSuspectedThirdPartyModification(in: liveDict)
+    try mgSaveOriginalBackupWithDigest(liveData)
+    return (false, dirtyReason)
+}
+
+func mgImportExternalOriginalBackup(from externalURL: URL) -> Result<String, Error> {
+    let scoped = externalURL.startAccessingSecurityScopedResource()
+    defer {
+        if scoped { externalURL.stopAccessingSecurityScopedResource() }
+    }
+    do {
+        let data = try Data(contentsOf: externalURL)
+        let preCheck = mgValidatePlistData(data)
+        guard preCheck.0,
+              let importedDict = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? NSDictionary else {
+            throw NSError(domain: "Erosion.MGImport", code: 1, userInfo: [NSLocalizedDescriptionKey: preCheck.1])
+        }
+
+        let impExtra = importedDict["CacheExtra"] as? NSDictionary
+        let impProd = impExtra?[MGKey.prodType] as? String ?? ""
+        let kernelHW = machineName()
+        if !impProd.isEmpty && !kernelHW.isEmpty && impProd != kernelHW {
+            throw NSError(domain: "Erosion.MGImport", code: 2, userInfo: [NSLocalizedDescriptionKey: "拒绝导入：该备份机型 (\(impProd)) 与本机真实硬件 (\(kernelHW)) 不一致！"])
+        }
+
+        let vaultDir = MGURL.fsGestaltURL.deletingLastPathComponent()
+        if !FileManager.default.isReadableFile(atPath: vaultDir.path) {
+            _ = wq.grantAccess(path: vaultDir.path)
+        }
+        if let liveDict = NSDictionary(contentsOf: MGURL.fsGestaltURL) {
+            let impBuild = importedDict["CacheVersion"] as? String ?? ""
+            let liveBuild = liveDict["CacheVersion"] as? String ?? ""
+            if !impBuild.isEmpty && !liveBuild.isEmpty && impBuild != liveBuild {
+                throw NSError(domain: "Erosion.MGImport", code: 3, userInfo: [NSLocalizedDescriptionKey: "拒绝导入：该备份系统版本 (\(impBuild)) 与当前系统 (\(liveBuild)) 不一致！"])
+            }
+            let impUUID = importedDict["CacheUUID"] as? String ?? ""
+            let liveUUID = liveDict["CacheUUID"] as? String ?? ""
+            if !impUUID.isEmpty && !liveUUID.isEmpty && impUUID.caseInsensitiveCompare(liveUUID) != .orderedSame {
+                throw NSError(domain: "Erosion.MGImport", code: 4, userInfo: [NSLocalizedDescriptionKey: "拒绝导入：该备份的 CacheUUID 与当前系统不匹配！"])
+            }
+            let impLen = (importedDict["CacheData"] as? Data)?.count ?? 0
+            let liveLen = (liveDict["CacheData"] as? Data)?.count ?? 0
+            if impLen > 0 && liveLen > 0 && impLen != liveLen {
+                throw NSError(domain: "Erosion.MGImport", code: 5, userInfo: [NSLocalizedDescriptionKey: "拒绝导入：该备份的 CacheData 字节长度 (\(impLen)) 与当前系统 (\(liveLen)) 不一致！"])
+            }
+        }
+
+        if FileManager.default.fileExists(atPath: MGURL.savedGestaltURL.path) {
+            let archiveURL = URL.documentsDirectory.appendingPathComponent("ArchivedOriginalGestalt_\(Int(Date().timeIntervalSince1970)).plist")
+            try? FileManager.default.copyItem(at: MGURL.savedGestaltURL, to: archiveURL)
+            mgExcludeFromCloudBackup(archiveURL)
+        }
+
+        try mgSaveOriginalBackupWithDigest(data)
+        let buildStr = (importedDict["CacheVersion"] as? String) ?? "当前版本"
+        let shaPrefix = String(mgComputeSHA256Hex(data).prefix(12))
+        return .success("已成功校验并导入原厂备份（版本：\(buildStr)，机型：\(impProd)，SHA-256：\(shaPrefix)...），同时已同步锁定至系统安全金库。")
+    } catch {
+        return .failure(error)
+    }
+}
+
+func mgResetLocalTweakPreferences() {
+    let ud = UserDefaults.standard
+    if let raw = ud.string(forKey: "mgCustKeyArray"),
+       var arr = [MGCustomKey](rawValue: raw) {
+        for idx in arr.indices {
+            arr[idx].isOn = false
+        }
+        ud.set(arr.rawValue, forKey: "mgCustKeyArray")
+    }
+    ud.set("", forKey: "mgDeviceName")
+    ud.set(false, forKey: "mgOverrideGates")
+}
+
+func mgExecuteCleanCacheRebuild(alsoResetConfigAndKeypad: Bool = false) -> Result<Void, Error> {
+    let fm = FileManager.default
+    let cacheDir = MGURL.fsGestaltURL.deletingLastPathComponent()
+    if !fm.isWritableFile(atPath: cacheDir.path) {
+        _ = wq.grantAccess(path: cacheDir.path)
+    }
+    do {
+        if fm.fileExists(atPath: MGURL.savedGestaltURL.path) {
+            let archiveURL = URL.documentsDirectory.appendingPathComponent("ArchivedOriginalGestalt_\(Int(Date().timeIntervalSince1970)).plist")
+            try? fm.copyItem(at: MGURL.savedGestaltURL, to: archiveURL)
+            mgExcludeFromCloudBackup(archiveURL)
+            try? fm.removeItem(at: MGURL.savedGestaltURL)
+        }
+        try? fm.removeItem(at: MGURL.savedGestaltSHA256URL)
+        try? fm.removeItem(at: MGURL.systemVaultGestaltURL)
+        try? fm.removeItem(at: MGURL.systemVaultSHA256URL)
+
+        mgResetLocalTweakPreferences()
+        if alsoResetConfigAndKeypad {
+            try? ConfigView.resetSystemConfigSafely()
+            _ = KeypadManager.shared.resetKeypadItems()
+        }
+
+        if fm.fileExists(atPath: MGURL.fsGestaltURL.path) {
+            try fm.removeItem(at: MGURL.fsGestaltURL)
+        }
+        GestaltStore.shared.mgCurrentDict = NSMutableDictionary()
+        return .success(())
+    } catch {
+        return .failure(error)
+    }
+}
+
+func mgExecuteFactoryRestore(alsoResetConfigAndKeypad: Bool) -> MGFactoryRestoreOutcome {
+    let fm = FileManager.default
+    let cacheDir = MGURL.fsGestaltURL.deletingLastPathComponent()
+    if !fm.isWritableFile(atPath: cacheDir.path) {
+        let res = wq.grantAccess(path: cacheDir.path)
+        if !res.0 && !fm.isWritableFile(atPath: cacheDir.path) {
+            return .failed(reason: "获取 MobileGestalt 目录写入权限失败，请完全退出并重新打开本应用后再试。")
+        }
+    }
+
+    // If local Documents backup is missing, try recovering from SystemGroup vault first
+    if !fm.fileExists(atPath: MGURL.savedGestaltURL.path),
+       mgHasSyncedSystemVault(),
+       let vaultData = try? Data(contentsOf: MGURL.systemVaultGestaltURL) {
+        let hex = mgComputeSHA256Hex(vaultData)
+        try? vaultData.write(to: MGURL.savedGestaltURL, options: .atomic)
+        mgExcludeFromCloudBackup(MGURL.savedGestaltURL)
+        try? Data(hex.utf8).write(to: MGURL.savedGestaltSHA256URL, options: .atomic)
+        mgExcludeFromCloudBackup(MGURL.savedGestaltSHA256URL)
+    }
+
+    let integrityCheck = mgVerifyOriginalBackupIntegrity()
+    guard integrityCheck.0 else {
+        return .blockedNeedsCleanRebuild(
+            title: "原始备份缺失或校验未通过！",
+            reason: "\(integrityCheck.1)\n\n你可以选择下方的「重建系统纯净原厂缓存」，让 iOS 在重启时直接从主板硬件熔丝重新生成 100% 原厂参数。"
+        )
+    }
+
+    guard let mgDictToApply = NSMutableDictionary(contentsOf: MGURL.savedGestaltURL) else {
+        return .blockedNeedsCleanRebuild(
+            title: "无法读取原始备份！",
+            reason: "未找到有效的 OriginalGestalt.plist。可使用下方「重建系统纯净原厂缓存」在重启时自动重建原厂配置。"
+        )
+    }
+
+    if let liveDict = NSDictionary(contentsOf: MGURL.fsGestaltURL) {
+        let ogBuild = mgDictToApply["CacheVersion"] as? String ?? ""
+        let liveBuild = liveDict["CacheVersion"] as? String ?? ""
+        if !ogBuild.isEmpty && !liveBuild.isEmpty && ogBuild != liveBuild {
+            return .blockedNeedsCleanRebuild(
+                title: "已安全拦截跨 iOS 版本备份覆盖",
+                reason: "检测到原始备份来自旧版系统 (\(ogBuild))，而当前系统已升级至 \(liveBuild)，二进制槽位布局已变化，直接覆盖存在风险。\n\n点击下方「重建系统纯净原厂缓存」即可安全删除旧缓存，并在重启后由 \(liveBuild) 系统自动重算 100% 原厂参数！"
+            )
+        }
+
+        let ogUUID = mgDictToApply["CacheUUID"] as? String ?? ""
+        let liveUUID = liveDict["CacheUUID"] as? String ?? ""
+        if !ogUUID.isEmpty && !liveUUID.isEmpty && ogUUID.caseInsensitiveCompare(liveUUID) != .orderedSame {
+            return .blockedNeedsCleanRebuild(
+                title: "已安全拦截不匹配的 CacheUUID 还原",
+                reason: "原始备份的 CacheUUID (\(ogUUID)) 与当前系统 (\(liveUUID)) 不一致，安全护栏已阻止直接覆盖。\n\n点击「重建系统纯净原厂缓存」并重启即可安全恢复 100% 原厂状态。"
+            )
+        }
+
+        let ogCacheLen = (mgDictToApply["CacheData"] as? Data)?.count ?? 0
+        let liveCacheLen = (liveDict["CacheData"] as? Data)?.count ?? 0
+        if ogCacheLen > 0 && liveCacheLen > 0 && ogCacheLen != liveCacheLen {
+            return .blockedNeedsCleanRebuild(
+                title: "已安全拦截长度不一致的二进制缓存还原",
+                reason: "原始备份的 CacheData 长度 (\(ogCacheLen) 字节) 与当前系统 (\(liveCacheLen) 字节) 不一致，已阻止直接写入！\n\n点击「重建系统纯净原厂缓存」并重启即可安全恢复 100% 原厂状态。"
+            )
+        }
+
+        let ogExtra = mgDictToApply["CacheExtra"] as? NSDictionary
+        let ogProd = ogExtra?[MGKey.prodType] as? String ?? ""
+        let actualHW = machineName()
+        if !ogProd.isEmpty && !actualHW.isEmpty && ogProd != actualHW {
+            return .blockedNeedsCleanRebuild(
+                title: "已拦截跨机型备份还原！",
+                reason: "该备份来自其他机型 (\(ogProd))，与本机真实硬件 (\(actualHW)) 不符，直接写入会导致白苹果软砖！请点击「重建系统纯净原厂缓存」恢复本机原厂配置。"
+            )
+        }
+    }
+
+    do {
+        let data = try PropertyListSerialization.data(fromPropertyList: mgDictToApply, format: .binary, options: 0)
+        let res = mgWriteDetailed(data, allowVerifiedFactoryRestore: true)
+        guard res.0 else {
+            return .failed(reason: res.1)
+        }
+
+        mgResetLocalTweakPreferences()
+        var extraResetNotes: [String] = []
+        if alsoResetConfigAndKeypad {
+            if (try? ConfigView.resetSystemConfigSafely()) != nil {
+                extraResetNotes.append("已清除锁屏文字/资产铭牌与伪监管残留")
+            }
+            if KeypadManager.shared.resetKeypadItems() {
+                extraResetNotes.append("已重置自定义拨号键盘缓存")
+            }
+        }
+
+        if let freshBytes = try? Data(contentsOf: MGURL.fsGestaltURL),
+           let freshDict = try? PropertyListSerialization.propertyList(from: freshBytes, options: [.mutableContainersAndLeaves], format: nil) as? NSMutableDictionary {
+            GestaltStore.shared.mgCurrentDict = freshDict
+        }
+
+        var summary = MGMsg.revertComp
+        if !extraResetNotes.isEmpty {
+            summary += "\n\n附加恢复项：" + extraResetNotes.joined(separator: "；") + "。"
+        }
+        return .restoredSuccessfully(details: summary)
+    } catch {
+        return .failed(reason: error.localizedDescription)
+    }
 }
 
 func mgIsDangerousCacheExtraKey(_ key: String) -> String? {
@@ -284,7 +653,7 @@ func mgIsDangerousCacheExtraKey(_ key: String) -> String? {
     return blocked[key]
 }
 
-func mgWriteDetailed(_ data: Data) -> (Bool, String) {
+func mgWriteDetailed(_ data: Data, allowVerifiedFactoryRestore: Bool = false) -> (Bool, String) {
     let preCheck = mgValidatePlistData(data)
     guard preCheck.0 else {
         print("(mg) pre-write validation failed: \(preCheck.1)")
@@ -297,12 +666,22 @@ func mgWriteDetailed(_ data: Data) -> (Bool, String) {
         return (false, msg)
     }
 
-    // Strict pre-write CacheData transition verification against live on-disk plist
+    // Strict pre-write CacheData verification:
+    // - Normal edits enforce allowedOffsets transition check against liveDiskDict;
+    // - SHA-256 verified factory backup restoration validates targetDict directly against loaded libMobileGestalt.dylib
+    //   so even previously corrupted eSIM / cellular / ISP bytes in liveDiskDict can be healed back to factory state!
     if let liveDiskDict = try? PropertyListSerialization.propertyList(from: originalBytes, options: [], format: nil) as? NSDictionary,
        let targetDict = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? NSDictionary {
-        if case .failure(let cacheErr) = MGCacheDataCoordinator.shared.validateTransition(from: liveDiskDict, to: targetDict) {
-            print("[!] (mg) CacheData pre-write check rejected write: \(cacheErr.localizedDescription)")
-            return (false, cacheErr.localizedDescription)
+        if allowVerifiedFactoryRestore {
+            if case .failure(let targetErr) = MGCacheDataCoordinator.shared.resolveValidated(for: targetDict) {
+                print("[!] (mg) Factory restore target CacheData validation failed: \(targetErr.localizedDescription)")
+                return (false, targetErr.localizedDescription)
+            }
+        } else {
+            if case .failure(let cacheErr) = MGCacheDataCoordinator.shared.validateTransition(from: liveDiskDict, to: targetDict) {
+                print("[!] (mg) CacheData pre-write check rejected write: \(cacheErr.localizedDescription)")
+                return (false, cacheErr.localizedDescription)
+            }
         }
     }
 
@@ -551,9 +930,34 @@ func isAppleIntellHD() -> Bool {
     return hdDevices.contains(m) || m.hasPrefix("iPhone19,")
 }
 
+func isAudioIntellFirmwareSupported() -> Bool {
+    if case .success(let layout) = MGCacheDataLayout.resolveFromLoadedLibrary(),
+       layout.slotIndex(forKey: MGKey.audioIntell) != nil {
+        return true
+    }
+    return mgQueryLiveRaw(forKey: MGKey.audioIntell) != nil
+}
+
+func isAdvAppleIntellFirmwareSupported() -> Bool {
+    if case .success(let layout) = MGCacheDataLayout.resolveFromLoadedLibrary() {
+        return MGKey.advAppIntellKeys.contains { layout.slotIndex(forKey: $0) != nil }
+    }
+    return MGKey.advAppIntellKeys.contains { mgQueryLiveRaw(forKey: $0) != nil }
+}
+
 func isAdvAppleIntellHD() -> Bool {
-    let m = currentOriginalMachineName()
-    return m.hasPrefix("iPhone19,")
+    if GestaltStore.shared.isSlotRulesNativeSatisfied(MGKey.advAppIntellRules) {
+        return true
+    }
+    if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
+       case .success((let layout, _)) = MGCacheDataCoordinator.shared.resolveValidated(for: ogDict) {
+        let presentKeys = MGKey.advAppIntellKeys.filter { layout.slotIndex(forKey: $0) != nil }
+        if !presentKeys.isEmpty,
+           presentKeys.allSatisfy({ MGCacheDataCoordinator.shared.originalSlotValue(forKey: $0, layout: layout, savedOriginalDict: ogDict) == true }) {
+            return true
+        }
+    }
+    return false
 }
 
 func isCrashDectHD() -> Bool {

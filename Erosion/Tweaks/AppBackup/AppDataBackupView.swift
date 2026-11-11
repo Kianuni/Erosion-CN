@@ -57,6 +57,10 @@ enum AppContainerDirectoryHelper {
         if let known = knownAppNames[bundleID] {
             return "\(known) (\(bundleID))"
         }
+        if let csName = CSStoreEngine.shared.localizedName(forBundleID: bundleID),
+           !csName.isEmpty, csName != bundleID {
+            return "\(csName) (\(bundleID))"
+        }
         return bundleID
     }
 
@@ -292,6 +296,11 @@ struct AppDataBackupView: View {
         .fileImporter(isPresented: $showBackupImporter, allowedContentTypes: [.zip, .item]) { result in
             handleImportBackup(result)
         }
+        .onChange(of: includeSystemApps) {
+            if includeSystemApps && !containers.contains(where: { $0.bundleID.hasPrefix("com.apple.") }) && !isScanning {
+                scanAllContainers()
+            }
+        }
         .onAppear {
             loadLocalBackups()
             if containers.isEmpty && !isScanning {
@@ -345,13 +354,25 @@ struct AppDataBackupView: View {
     ]
 
     private func scanAllContainers() {
+        let wantSystem = includeSystemApps
         isScanning = true
         scanProgressText = "正在扫描本机应用数据容器..."
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .utility).async {
             let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
             var discovered: [AppSaveContainerItem] = []
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
+
+                if let fastBID = CSStoreEngine.shared.bundleID(forContainerPath: url.path, allowDiscovery: false) {
+                    if Self.protectedSystemBundleIDs.contains(fastBID) { continue }
+                    if !wantSystem && fastBID.hasPrefix("com.apple.") { continue }
+                }
+
+                guard let bid = getBIDFromXattr(url),
+                      !bid.isEmpty,
+                      !Self.protectedSystemBundleIDs.contains(bid) else { continue }
+                if !wantSystem && bid.hasPrefix("com.apple.") { continue }
+
                 let wasActive = wq.hasActiveAccess(path: url.path)
                 guard wq.grantAccess(path: url.path, requireWrite: false).0 else { continue }
                 defer {
@@ -359,12 +380,6 @@ struct AppDataBackupView: View {
                         wq.releaseAccess(path: url.path)
                     }
                 }
-
-                var buf = [CChar](repeating: 0, count: 512)
-                let len = getxattr(url.path, "com.apple.containermanager.identifier", &buf, 511, 0, XATTR_NOFOLLOW)
-                guard len > 0 else { continue }
-                let bid = String(cString: buf)
-                guard !bid.isEmpty, !Self.protectedSystemBundleIDs.contains(bid) else { continue }
 
                 let docsURL = url.appendingPathComponent("Documents")
                 let prefsURL = url.appendingPathComponent("Library/Preferences")

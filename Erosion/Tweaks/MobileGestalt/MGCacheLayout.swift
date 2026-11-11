@@ -41,6 +41,53 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
     static let audioIntellKey = "rb2tKZxlj0Gm2tBmUQSLqQ"         // supports-audio-intelligence
     static let personalTranslatorKey = "M1n2sAqf33NAOgZRGxQYBA"  // supports-personal-translator
 
+    // Promoted Existing Hardware & UI Boolean Slot Keys (verified slot >= 0, qtype = 11)
+    static let islandKey = "YlEtTtHlNesRBMal1CqRaA"              // DeviceSupportsDynamicIsland
+    static let aodKey = "2OOJf1VhaM7NxfRok3HbWQ"                 // DeviceSupportsAlwaysOnDisplay
+    static let aoTimeKey = "j8/Omm6s1lsmTDFsXjsBfA"              // DeviceSupportsAlwaysOnTime
+    static let aodVibrancyKey = "ykpu7qyhqFweVMKtxNylWA"         // DeviceSupportsAODVibrancy
+    static let liquidGlassLowPowerKey = "SAGvsp6O6kAQ4fEfDJpC4Q" // DeviceSupportsLiquidGlassLowPower
+    static let chargeLimKey = "37NVydb//GP/GrhuTN+exg"           // DeviceSupports80ChargeLimit
+    static let bootChimeKey = "QHxt+hGLaBPbQJbXiUJX3w"           // DeviceSupportsBootChime
+    static let crashDetKey = "HCzWusHQwZDea6nNhaKndw"            // DeviceSupportsCollisionSOS
+    static let pwmKey = "6IejgN+1Fmu5/QrZFOIeNw"                 // DeviceSupportsPulseWidthMaximization
+    static let appPencilKey = "yhHcB0iH0d1XzPO/CFd3ow"           // DeviceSupportsApplePencil
+    static let camButtonKey = "CwvKxM2cEogD3p+HYgaW0Q"           // CameraButtonCapability
+    static let actButtonKey = "cT44WE1EohiwRzhsZ8xEsw"           // RingerButtonCapability
+    static let tapToWakeKey = "yZf3GTRMGTuwSV/lD7Cagw"           // DeviceSupportsTapToWake
+    static let stageMgrKey = "qeaj75wk3HF4DwQ8qbIi7g"            // DeviceSupportsEnhancedMultitasking
+
+    // [测试特性] Newly Mined Experimental Boolean Slot Keys (100% verified slot >= 0, qtype = 11)
+    static let shutterRelaxationKey = "P4ZJVy/zYuLy4ejRKP+0DA"          // DeviceSupportsRegionalCameraShutterRelaxation
+    static let shutterKeyboardMutePreserveKey = "bGUN8lS6sYzy3xhePubp8A"// KeyboardMutePreservesRegionalShutterClickBehavior
+    static let shutterLegacyMutePreserveKey = "Bim3FC83Te8QX1kfSpqYKQ"  // KeyboardMutePreservesRegionalShutterClickBehaviorForLegacyDevices
+    static let concurrentHPLPMicsKey = "dI30ovtFUIeLioNQKDMbGQ"         // DeviceSupportsConcurrentHPLPMics
+    static let photosLocalLightKey = "m9ORTKMgu9A+zF+A61Zz5A"           // DeviceSupportsPhotosLocalLight
+    static let toneMappingKey = "Lcu6Zck+C/+AMO8qULacDw"                // DeviceSupportsToneMapping
+    static let hdrDeferredProcessingKey = "JkZlE8z9YwHjE1hnbMhcgA"      // DeviceSupportsHDRDeferredProcessing
+    static let spatialOverCaptureKey = "SjQQ07G8UacM7E69G7dPbg"         // DeviceSupportsSpatialOverCapture
+    static let stereoAudioRecKey = "YlK+0xmxNWhNn/+r8SM8kA"             // DeviceSupportsStereoAudioRecording
+    static let p3VideoRecKey = "1eBwtCIwbIDdC80wiyzfow"                 // DeviceSupportsP3ColorspaceVideoRecording
+    static let touchSensitiveCamControlKey = "lyJZrSDc8J8eQ5Zb7A1Rvw"   // DeviceSupportsTouchSensitiveCameraControl
+    static let hardwareDetentsKey = "V9pLLbPQhyb75bbdTioZVw"            // DeviceSupportsHardwareDetents
+    static let cameraHapticsKey = "XriAxQ+JY1z5nt5f3ftXVw"              // DeviceSupportsCameraHaptics
+    static let legacyBatteryInfoKey = "Rq0MF/w+gXM66Ii4fkWOzg"          // DeviceShowsBatteryModelInformationLegacyHW
+    static let legacyDynamicEndOfChargeKey = "nfR1IphTGCaoFNu3NrCtWQ"   // DeviceSupportsDynamicEndOfChargeLegacyHW
+    static let highLuminanceAODKey = "7brdL5xrEUWnlF9C0kdg5A"           // DeviceSupportsHighLuminanceAlwaysOnDisplay
+    static let aodFlipbookKey = "aoJSd/MXk7M40NgXTM6x+g"                // DeviceSupportsAlwaysOnDisplayFlipbook
+    static let carPlay2Key = "PR+xeEtTAiUN0R25+EYGfw"                   // DeviceSupportsCarPlay2
+    static let touchDelivery120HzKey = "2OK50OGmkXM1ospsh766WQ"         // TouchDelivery120Hz
+    static let hearingAidEQKey = "SMgTCc2v9AU2ziIHRX8qww"               // hearingaid-audio-equalization
+    static let hearingAidLEKey = "RyXm3yMC4ejlFvwlEI509w"               // hearingaid-low-energy-audio
+    static let hearingAidPowerRedKey = "u3c0R+31Df4SUTHrICQkTg"         // hearingaid-power-reduction
+    static let breathingDisturbancesKey = "e0HV2blYUDBk/MsMEQACNA"      // DeviceSupportsBreathingDisturbancesMeasurements
+    static let usBloodOxygenKey = "E4vGMChwcVRKD8hMVxnRvg"              // DeviceSupportsUSLegallyCompliantBloodOxygen
+    static let workoutUltraKey = "fu+4kyf8VcMBtgbMyJlLtg"               // WorkoutUltraMode
+    static let timeInDaylightKey = "8gVfz9/8R1OtWBBtI0o/+Q"             // DeviceSupportsTimeInDaylight
+    static let siriHubKey = "waGD2UTpntjbDXD1r3oALQ"                    // DeviceSupportsSiriHub
+    static let onDeviceSiriKey = "O/7gbXWA5X2IRPVtDRU+bw"               // OnDeviceSiriCapability
+    static let modelPruningKey = "m4xs4mhvxnAopYrApoLDMw"               // DeviceSupportsInstructionFollowingPruningModels
+
     static let optionalFeatureSlotKeys: Set<String> = [
         audioMixKey,
         spatialAudioRecKey,
@@ -51,7 +98,52 @@ struct MGCacheDataLayout: Codable, Equatable, Sendable {
         photosCleanUpKey,
         handwritingSynthKey,
         audioIntellKey,
-        personalTranslatorKey
+        personalTranslatorKey,
+        // Promoted existing toggles
+        islandKey,
+        aodKey,
+        aoTimeKey,
+        aodVibrancyKey,
+        liquidGlassLowPowerKey,
+        chargeLimKey,
+        bootChimeKey,
+        crashDetKey,
+        pwmKey,
+        appPencilKey,
+        camButtonKey,
+        actButtonKey,
+        tapToWakeKey,
+        stageMgrKey,
+        // Newly mined experimental toggles
+        shutterRelaxationKey,
+        shutterKeyboardMutePreserveKey,
+        shutterLegacyMutePreserveKey,
+        concurrentHPLPMicsKey,
+        photosLocalLightKey,
+        toneMappingKey,
+        hdrDeferredProcessingKey,
+        spatialOverCaptureKey,
+        stereoAudioRecKey,
+        p3VideoRecKey,
+        touchSensitiveCamControlKey,
+        hardwareDetentsKey,
+        cameraHapticsKey,
+        legacyBatteryInfoKey,
+        legacyDynamicEndOfChargeKey,
+        highLuminanceAODKey,
+        aodFlipbookKey,
+        carPlay2Key,
+        touchDelivery120HzKey,
+        hearingAidEQKey,
+        hearingAidLEKey,
+        hearingAidPowerRedKey,
+        breathingDisturbancesKey,
+        usBloodOxygenKey,
+        workoutUltraKey,
+        timeInDaylightKey,
+        siriHubKey,
+        onDeviceSiriKey,
+        modelPruningKey
     ]
 
     static let mediaHealthSlotKeys: Set<String> = [
@@ -753,6 +845,92 @@ final class MGCacheDataCoordinator {
             return ("audio-intell-slot", "iOS 27 音频智能底层槽位 (Audio Intelligence)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
         case MGCacheDataLayout.personalTranslatorKey:
             return ("personal-translator-slot", "个人实时翻译底层槽位 (Personal Translator)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.islandKey:
+            return ("dynamic-island-slot", "灵动岛底层槽位 (DynamicIsland)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.aodKey:
+            return ("aod-slot", "全天候显示底层槽位 (AOD)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.aoTimeKey:
+            return ("aotime-slot", "全天候显示时间槽位 (AlwaysOnTime)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.aodVibrancyKey:
+            return ("aod-vibrancy-slot", "全天候显示鲜艳度槽位 (AODVibrancy)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.liquidGlassLowPowerKey:
+            return ("liquid-glass-lp-slot", "液态玻璃低功耗槽位 (LiquidGlassLowPower)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.chargeLimKey:
+            return ("charge-limit-slot", "80% 充电上限底层槽位 (80ChargeLimit)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.bootChimeKey:
+            return ("boot-chime-slot", "开关机提示音底层槽位 (BootChime)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.crashDetKey:
+            return ("crash-det-slot", "车祸检测底层槽位 (CollisionSOS)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.pwmKey:
+            return ("pwm-slot", "PWM 调光底层槽位 (PulseWidthMaximization)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.appPencilKey:
+            return ("apple-pencil-slot", "Apple Pencil 底层槽位", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.camButtonKey:
+            return ("cam-button-slot", "相机控制按键底层槽位 (CameraButton)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.actButtonKey:
+            return ("action-button-slot", "操作按钮底层槽位 (RingerButton)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.tapToWakeKey:
+            return ("tap-to-wake-slot", "轻点唤醒底层槽位 (TapToWake)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.stageMgrKey:
+            return ("stage-mgr-slot", "台前调度底层槽位 (EnhancedMultitasking)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.shutterRelaxationKey:
+            return ("shutter-relax-slot", "[测试] 地区快门音豁免槽位 (RegionalCameraShutterRelaxation)", "true (0x01 · 允许静音)", "false (0x00 · 强制快门音)")
+        case MGCacheDataLayout.shutterKeyboardMutePreserveKey:
+            return ("shutter-kb-mute-slot", "[测试] 保留地区强制快门音 (KeyboardMutePreservesShutter)", "true (0x01 · 保留强制音)", "false (0x00 · 已解除强制音)")
+        case MGCacheDataLayout.shutterLegacyMutePreserveKey:
+            return ("shutter-legacy-mute-slot", "[测试] 旧机型保留强制快门音 (LegacyShutterPreserve)", "true (0x01 · 保留强制音)", "false (0x00 · 已解除强制音)")
+        case MGCacheDataLayout.concurrentHPLPMicsKey:
+            return ("concurrent-mics-slot", "[测试] 高低功耗双麦并发槽位 (ConcurrentHPLPMics)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.photosLocalLightKey:
+            return ("photos-local-light-slot", "[测试] 相册局部光效重绘槽位 (PhotosLocalLight)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.toneMappingKey:
+            return ("tone-mapping-slot", "[测试] 动态色调映射槽位 (ToneMapping)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hdrDeferredProcessingKey:
+            return ("hdr-deferred-slot", "[测试] HDR 深度延迟渲染槽位 (HDRDeferredProcessing)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.spatialOverCaptureKey:
+            return ("spatial-overcapture-slot", "[测试] 超取景框空间捕获槽位 (SpatialOverCapture)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.stereoAudioRecKey:
+            return ("stereo-audio-rec-slot", "[测试] 立体声视频拾音槽位 (StereoAudioRecording)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.p3VideoRecKey:
+            return ("p3-video-rec-slot", "[测试] P3 广色域视频录制槽位 (P3ColorspaceVideo)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.touchSensitiveCamControlKey:
+            return ("touch-cam-control-slot", "[测试] 电容触敏相机控制槽位 (TouchSensitiveCameraControl)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hardwareDetentsKey:
+            return ("hw-detents-slot", "[测试] 物理触感档位阻尼槽位 (HardwareDetents)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.cameraHapticsKey:
+            return ("camera-haptics-slot", "[测试] 相机微幅触觉反馈槽位 (CameraHaptics)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.legacyBatteryInfoKey:
+            return ("legacy-battery-info-slot", "[测试] 旧机型电池健康详情槽位 (BatteryModelInfoLegacyHW)", "true (0x01 · 显示循环/日期)", "false (0x00 · 默认隐藏)")
+        case MGCacheDataLayout.legacyDynamicEndOfChargeKey:
+            return ("legacy-dyn-eoc-slot", "[测试] 旧机型智能充电截止槽位 (DynamicEndOfChargeLegacyHW)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.highLuminanceAODKey:
+            return ("high-lum-aod-slot", "[测试] 户外高亮息屏显示槽位 (HighLuminanceAOD)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.aodFlipbookKey:
+            return ("aod-flipbook-slot", "[测试] AOD 低功耗翻页帧缓冲槽位 (AODFlipbook)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.carPlay2Key:
+            return ("carplay2-slot", "[测试] CarPlay Ultra 多屏车载槽位 (CarPlay2)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.touchDelivery120HzKey:
+            return ("touch-120hz-slot", "[测试] 120Hz 触控投递槽位 (TouchDelivery120Hz)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hearingAidEQKey:
+            return ("hearingaid-eq-slot", "[测试] 临床助听均衡器槽位 (hearingaid-audio-equalization)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hearingAidLEKey:
+            return ("hearingaid-le-slot", "[测试] 助听低功耗音频槽位 (hearingaid-low-energy-audio)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.hearingAidPowerRedKey:
+            return ("hearingaid-pwr-slot", "[测试] 助听降功耗模式槽位 (hearingaid-power-reduction)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.breathingDisturbancesKey:
+            return ("sleep-apnea-slot", "[测试] 睡眠呼吸紊乱检测槽位 (BreathingDisturbances)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.usBloodOxygenKey:
+            return ("us-blood-oxygen-slot", "[测试] 美版血氧软件限制槽位 (USLegallyCompliantBloodOxygen)", "true (0x01 · 受专利限制)", "false (0x00 · 已解除血氧限制)")
+        case MGCacheDataLayout.workoutUltraKey:
+            return ("workout-ultra-slot", "[测试] 户外极限运动模式槽位 (WorkoutUltraMode)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.timeInDaylightKey:
+            return ("daylight-time-slot", "[测试] 日光照射时长监测槽位 (TimeInDaylight)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.siriHubKey:
+            return ("siri-hub-slot", "[测试] 端侧 Siri Hub 路由槽位 (DeviceSupportsSiriHub)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.onDeviceSiriKey:
+            return ("ondevice-siri-slot", "[测试] 离线端侧 Siri 能力槽位 (OnDeviceSiriCapability)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
+        case MGCacheDataLayout.modelPruningKey:
+            return ("model-pruning-slot", "[测试] 端侧指令模型剪枝槽位 (InstructionFollowingPruningModels)", "true (0x01 · 已启用)", "false (0x00 · 默认关闭)")
         default:
             return (key, "硬件特性槽位 (\(key))", "true (0x01)", "false (0x00)")
         }

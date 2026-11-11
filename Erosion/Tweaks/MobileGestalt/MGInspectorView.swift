@@ -70,8 +70,9 @@ struct AppleIntelligenceCheckupCard: View {
         // 4. Hardware AI Eligibility & Sub-capabilities
         let nativeAI = isAppleIntellHD()
         let nativeAdvAI = isAdvAppleIntellHD()
+        let advSlotsSupported = store.canModifySlotRules(MGKey.advAppIntellRules)
         let stagedAI = nativeAI || store.mgKeyBinding(MGKey.appIntellAllKeys).wrappedValue
-        let stagedAdvAI = !raveSupported() || nativeAdvAI || store.mgKeyBinding(MGKey.advAppIntellKeys).wrappedValue
+        let stagedAdvAI = !raveSupported() || !advSlotsSupported || nativeAdvAI || store.isAdvAppleIntellStagedOrActive()
         let aiReady = stagedAI
         let liveAI = mgQueryLiveBool(forKey: MGKey.appIntell) ?? nativeAI
 
@@ -79,12 +80,12 @@ struct AppleIntelligenceCheckupCard: View {
         if nativeAdvAI {
             aiDetail = "本机 (\(originalHardwareProductType())) 原生支持全部 AI 与 iOS 27 进阶能力"
         } else if nativeAI {
-            if raveSupported() {
+            if raveSupported() && advSlotsSupported {
                 aiDetail = stagedAdvAI
                     ? "本机原生支持 AI · 已开启 iOS 27 进阶翻译/音频智能"
                     : "本机原生支持 AI（可按需开启下方 iOS 27 进阶 AI）"
             } else {
-                aiDetail = "本机 (\(originalHardwareProductType())) 硬件原生支持 Apple 智能"
+                aiDetail = "本机 (\(originalHardwareProductType())) 硬件原生支持 Apple 智能（含通话录音与转写）"
             }
         } else {
             aiDetail = stagedAI
@@ -170,7 +171,8 @@ struct AppleIntelligenceCheckupCard: View {
             }
 
             HStack(spacing: 10) {
-                if !allReady || (raveSupported() && !isAdvAppleIntellHD() && !store.mgKeyBinding(MGKey.advAppIntellKeys).wrappedValue) {
+                let canUnlockAdvAI = raveSupported() && store.canModifySlotRules(MGKey.advAppIntellRules) && !isAdvAppleIntellHD() && !store.isAdvAppleIntellStagedOrActive()
+                if !allReady || canUnlockAdvAI {
                     Button {
                         Haptic.shared.play(.soft)
                         store.applyAppleIntelligenceOneClickFix()
@@ -201,6 +203,21 @@ struct AppleIntelligenceCheckupCard: View {
                     .padding(.vertical, 6)
                     .background(Color(.secondarySystemFill), in: Capsule())
                     .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Alertinator.shared.alert(title: "普通话来电询问共存指南（测试特性）", body: MGMsg.callScreeningGuide)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "phone.badge.waveform.fill")
+                        Text("来电询问共存指南 [测试]")
+                    }
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.15), in: Capsule())
+                    .foregroundStyle(Color.orange)
                 }
                 .buttonStyle(.plain)
             }
@@ -254,7 +271,25 @@ struct MGInspectorView: View {
         CuratedProbeItem(title: "液态玻璃低功耗渲染", key: MGKey.liquidGlassLowPower, category: "显示与硬件特征"),
         CuratedProbeItem(title: "灵动岛特性 (DynamicIsland)", key: MGKey.island, category: "显示与硬件特征"),
         CuratedProbeItem(title: "全天候显示 (AOD)", key: MGKey.AOD, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "Apple 内部安装模式 (InternalInstall)", key: MGKey.intInstall, category: "显示与硬件特征")
+        CuratedProbeItem(title: "80% 充电上限 (80ChargeLimit)", key: MGKey.chargeLim, category: "显示与硬件特征"),
+        CuratedProbeItem(title: "开关机提示音 (BootChime)", key: MGKey.bootChime, category: "显示与硬件特征"),
+        CuratedProbeItem(title: "操作按钮 (ActionButton)", key: MGKey.actButton, category: "显示与硬件特征"),
+        CuratedProbeItem(title: "Apple 内部安装模式 (InternalInstall)", key: MGKey.intInstall, category: "显示与硬件特征"),
+        // [测试特性] Experimental Slots
+        CuratedProbeItem(title: "[测试] 地区相机快门音豁免", key: MGKey.shutterRelaxation, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 高低功耗双麦并发拾音", key: MGKey.concurrentHPLPMics, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 相册局部光影重绘", key: MGKey.photosLocalLight, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 超取景框空间捕获", key: MGKey.spatialOverCapture, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 立体声视频拾音", key: MGKey.stereoAudioRec, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 旧机型显示电池循环与日期", key: MGKey.legacyBatteryInfo, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 户外高亮全天候显示", key: MGKey.highLuminanceAOD, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] CarPlay Ultra 多屏车载", key: MGKey.carPlay2, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 120Hz 触控采样投递", key: MGKey.touchDelivery120Hz, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 临床助听器音频均衡", key: MGKey.hearingAidEQ, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 睡眠呼吸暂停风险检测", key: MGKey.breathingDisturbances, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 美版血氧软件限制开关", key: MGKey.usBloodOxygen, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 户外极限运动模式", key: MGKey.workoutUltra, category: "测试特性 (CacheData 实验项)"),
+        CuratedProbeItem(title: "[测试] 端侧 Siri Hub 意图路由", key: MGKey.siriHub, category: "测试特性 (CacheData 实验项)")
     ]
 
     var body: some View {
