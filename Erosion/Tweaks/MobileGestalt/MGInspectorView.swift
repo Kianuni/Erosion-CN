@@ -62,11 +62,7 @@ struct AppleIntelligenceCheckupCard: View {
         let liveGreenTea = mgQueryLiveBool(forKey: MGCacheDataLayout.greenTeaKey) ?? false
         let liveIntInstall = mgQueryLiveBool(forKey: MGKey.intInstall) ?? false
         let liveSiriHub = mgQueryLiveBool(forKey: MGKey.siriHub) ?? false
-        let nativeAudioIntell = isNativeAudioIntellHD()
-        let liveAdvAIConflict = !isAdvAppleIntellHD() && (
-            (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false) ||
-            (!nativeAudioIntell && (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false))
-        )
+        let liveAdvAIConflict = isLiveAdvAIConflictActive()
         let gateLiveOK = !liveGreenTea && !liveIntInstall && !liveSiriHub && !liveAdvAIConflict
 
         var gateDetail: String

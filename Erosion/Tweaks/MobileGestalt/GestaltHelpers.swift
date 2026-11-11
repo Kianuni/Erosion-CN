@@ -979,6 +979,10 @@ func isAdvAppleIntellFirmwareSupported() -> Bool {
 }
 
 func isNativeAudioIntellHD() -> Bool {
+    let m = currentOriginalMachineName()
+    if m.hasPrefix("iPhone") || m.hasPrefix("iPad") {
+        return false
+    }
     if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
        case .success((let layout, _)) = MGCacheDataCoordinator.shared.resolveValidated(for: ogDict),
        layout.slotIndex(forKey: MGKey.audioIntell) != nil {
@@ -987,15 +991,61 @@ func isNativeAudioIntellHD() -> Bool {
     return false
 }
 
+func isNativePersonalTranslatorHD() -> Bool {
+    guard isAppleIntellHD() else { return false }
+    if case .success(let layout) = MGCacheDataCoordinator.shared.libraryLayout(),
+       let slotIdx = layout.slotIndex(forKey: MGKey.personalTranslator) {
+        if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL) {
+            if let val = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.personalTranslator, layout: layout, savedOriginalDict: ogDict) {
+                return val
+            }
+            if let ogData = ogDict["CacheData"] as? Data,
+               ogData.count == layout.byteCount,
+               layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
+                return ogData[slotIdx * 8] == 1
+            }
+        }
+        if let recorded = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.personalTranslator, layout: layout, savedOriginalDict: nil) {
+            return recorded
+        }
+    }
+    return currentOriginalMachineName().hasPrefix("iPhone19,")
+}
+
 func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: NSDictionary?) -> Bool {
     let m = currentOriginalMachineName()
-    // Personal Translator (M1n2sAqf33NAOgZRGxQYBA) is false on all factory iPhones/iPads (including iPhone19,7)
-    // and forcing it to true breaks ModelCatalog ServerDiffusionInpainting (Photos High-Quality Clean Up).
-    // Meanwhile, Audio Intelligence (rb2tKZxlj0Gm2tBmUQSLqQ) IS natively true on iPhone 18 Pro / Pro Max (iPhone19,*).
-    if key == MGKey.personalTranslator && (m.hasPrefix("iPhone") || m.hasPrefix("iPad")) {
+    // Ground-truth verified via MGInspector on live iPhone 18 Pro Max (iPhone19,7) running iOS 27:
+    // - rb2tKZxlj0Gm2tBmUQSLqQ (Audio Intelligence, slot #178) is natively FALSE (0x00) on iPhone/iPad,
+    //   and forcing it to 1 breaks Photos High-Quality Clean Up ("消除此照片时出错。请稍后再试。").
+    // - M1n2sAqf33NAOgZRGxQYBA (Personal Translator, slot #266) IS natively TRUE (0x01) on iPhone 18 Pro series (iPhone19,*)
+    //   in factory OriginalGestalt.plist, and works natively with Photos High-Quality Clean Up.
+    if key == MGKey.audioIntell && (m.hasPrefix("iPhone") || m.hasPrefix("iPad")) {
         return false
     }
+    if key == MGKey.personalTranslator {
+        guard isAppleIntellHD() else { return false }
+        if let val = MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) {
+            return val
+        }
+        if let ogData = savedOrig?["CacheData"] as? Data,
+           ogData.count == layout.byteCount,
+           let slotIdx = layout.slotIndex(forKey: key),
+           layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
+            return ogData[slotIdx * 8] == 1
+        }
+        return m.hasPrefix("iPhone19,")
+    }
     return MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) ?? false
+}
+
+func isLiveAdvAIConflictActive() -> Bool {
+    if isAdvAppleIntellHD() {
+        return false
+    }
+    let nativePersonalTranslator = isNativePersonalTranslatorHD()
+    let nativeAudioIntell = isNativeAudioIntellHD()
+    return (!nativePersonalTranslator && (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false))
+        || (!nativeAudioIntell && (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false))
 }
 
 func isAdvAppleIntellHD() -> Bool {

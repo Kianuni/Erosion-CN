@@ -196,10 +196,7 @@ struct VoiceMemosAIView: View {
     @ViewBuilder
     private func audioIntellStatusRow() -> some View {
         let nativeAudio = isNativeAudioIntellHD()
-        let liveConflict = !isAdvAppleIntellHD() && (
-            (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false) ||
-            (!nativeAudio && (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false))
-        )
+        let liveConflict = isLiveAdvAIConflictActive()
         let stagedConflict = GestaltStore.shared.isAdvAppleIntellConflictActive()
 
         if isAdvAppleIntellHD() || (nativeAudio && !stagedConflict && !liveConflict) {
