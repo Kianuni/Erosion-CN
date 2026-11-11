@@ -195,12 +195,16 @@ struct VoiceMemosAIView: View {
 
     @ViewBuilder
     private func audioIntellStatusRow() -> some View {
-        let liveActive = (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false) || (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false)
+        let nativeAudio = isNativeAudioIntellHD()
+        let liveConflict = !isAdvAppleIntellHD() && (
+            (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false) ||
+            (!nativeAudio && (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false))
+        )
         let stagedConflict = GestaltStore.shared.isAdvAppleIntellConflictActive()
 
-        if isAdvAppleIntellHD() {
-            liveAIRow(title: "iOS 27 进阶音频智能 (原生硬件支持)", active: true)
-        } else if stagedConflict || liveActive {
+        if isAdvAppleIntellHD() || (nativeAudio && !stagedConflict && !liveConflict) {
+            liveAIRow(title: "iOS 27 音频智能 (本机硬件原生支持)", active: true)
+        } else if stagedConflict || liveConflict {
             NavigationLink(destination: GestaltView()) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {

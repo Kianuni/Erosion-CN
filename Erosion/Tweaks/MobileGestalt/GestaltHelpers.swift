@@ -978,6 +978,26 @@ func isAdvAppleIntellFirmwareSupported() -> Bool {
     return MGKey.advAppIntellKeys.contains { mgQueryLiveRaw(forKey: $0) != nil }
 }
 
+func isNativeAudioIntellHD() -> Bool {
+    if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
+       case .success((let layout, _)) = MGCacheDataCoordinator.shared.resolveValidated(for: ogDict),
+       layout.slotIndex(forKey: MGKey.audioIntell) != nil {
+        return MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.audioIntell, layout: layout, savedOriginalDict: ogDict) == true
+    }
+    return false
+}
+
+func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: NSDictionary?) -> Bool {
+    let m = currentOriginalMachineName()
+    // Personal Translator (M1n2sAqf33NAOgZRGxQYBA) is false on all factory iPhones/iPads (including iPhone19,7)
+    // and forcing it to true breaks ModelCatalog ServerDiffusionInpainting (Photos High-Quality Clean Up).
+    // Meanwhile, Audio Intelligence (rb2tKZxlj0Gm2tBmUQSLqQ) IS natively true on iPhone 18 Pro / Pro Max (iPhone19,*).
+    if key == MGKey.personalTranslator && (m.hasPrefix("iPhone") || m.hasPrefix("iPad")) {
+        return false
+    }
+    return MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) ?? false
+}
+
 func isAdvAppleIntellHD() -> Bool {
     let m = currentOriginalMachineName()
     if m.hasPrefix("iPhone") || m.hasPrefix("iPad") {

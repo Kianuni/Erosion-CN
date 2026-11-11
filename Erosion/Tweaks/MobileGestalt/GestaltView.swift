@@ -254,8 +254,10 @@ struct GestaltView: View {
                             PlainToggle(
                                 "解锁 iOS 27 进阶 AI 能力 [测试特性]",
                                 subtitle: advConflictOn
-                                    ? "⚠️ 检测到已开启（会导致照片“高质量”消除报错），请直接关闭并应用恢复"
-                                    : "已由防呆护栏自动锁定：iPhone/iPad 强开会导致 ModelCatalog 校验断路使照片“高质量”消除报错",
+                                    ? "⚠️ 检测到已开启冲突槽位（会导致照片“高质量”消除报错），请直接关闭并应用恢复"
+                                    : (isNativeAudioIntellHD()
+                                        ? "✅ 本机已原生支持音频智能；Personal Translator 已锁定防误开（强开会导致照片高质量消除报错）"
+                                        : "已由防呆护栏自动锁定：iPhone/iPad 强开会导致 ModelCatalog 校验断路使照片“高质量”消除报错"),
                                 infoType: .warning,
                                 infoTitle: "iOS 27 进阶 AI 防呆锁定说明",
                                 infoMessage: MGMsg.advAppleIntell,

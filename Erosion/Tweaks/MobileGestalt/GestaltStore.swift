@@ -822,11 +822,14 @@ final class GestaltStore: ObservableObject {
             }
         }
         if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
+            let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
             for key in MGKey.advAppIntellKeys {
                 if let slotIdx = layout.featureSlotIndices[key],
                    layout.validateSingleBooleanSlot(slotIdx, in: data),
                    data[slotIdx * 8] == 1 {
-                    return true
+                    if !isAdvAISlotNativeTrue(key, layout: layout, savedOrig: savedOrig) {
+                        return true
+                    }
                 }
             }
         }
@@ -857,10 +860,8 @@ final class GestaltStore: ObservableObject {
                     for k in MGKey.advAppIntellKeys {
                         if let slotIdx = layout.featureSlotIndices[k],
                            layout.validateSingleBooleanSlot(slotIdx, in: data) {
-                            let origVal = isAdvAppleIntellHD()
-                                ? (MGCacheDataCoordinator.shared.originalSlotValue(forKey: k, layout: layout, savedOriginalDict: savedOrig) ?? false)
-                                : false
-                            data[slotIdx * 8] = origVal ? 1 : 0
+                            let nativeVal = isAdvAISlotNativeTrue(k, layout: layout, savedOrig: savedOrig)
+                            data[slotIdx * 8] = nativeVal ? 1 : 0
                         }
                     }
                     let testDict = NSMutableDictionary(dictionary: self.mgCurrentDict)
@@ -911,13 +912,13 @@ final class GestaltStore: ObservableObject {
                     }
                 }
             }
-            // Heal non-native Personal Translator / Audio Intelligence slots that break ModelCatalog High-Quality Photos Clean Up
+            // Heal non-native Personal Translator / Audio Intelligence slots while preserving native Audio Intelligence (1) on iPhone 18 Pro series
             if !isAdvAppleIntellHD() {
                 for key in MGKey.advAppIntellKeys {
                     if let slotIdx = layout.featureSlotIndices[key],
-                       layout.validateSingleBooleanSlot(slotIdx, in: data),
-                       data[slotIdx * 8] == 1 {
-                        data[slotIdx * 8] = 0
+                       layout.validateSingleBooleanSlot(slotIdx, in: data) {
+                        let nativeVal = isAdvAISlotNativeTrue(key, layout: layout, savedOrig: savedOrig)
+                        data[slotIdx * 8] = nativeVal ? 1 : 0
                     }
                     self.cacheExtra.removeObject(forKey: key)
                 }
