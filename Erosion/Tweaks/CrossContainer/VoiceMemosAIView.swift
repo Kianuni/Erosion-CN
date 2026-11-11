@@ -195,44 +195,43 @@ struct VoiceMemosAIView: View {
 
     @ViewBuilder
     private func audioIntellStatusRow() -> some View {
-        let liveActive = mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false
-        let fwSupported = isAudioIntellFirmwareSupported()
-        let staged = GestaltStore.shared.isAdvAppleIntellStagedOrActive()
+        let liveActive = (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false) || (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false)
+        let stagedConflict = GestaltStore.shared.isAdvAppleIntellConflictActive()
 
-        if liveActive {
-            liveAIRow(title: "iOS 27 进阶音频智能 (可选增强)", active: true)
-        } else if !fwSupported {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text("iOS 27 进阶音频智能 (可选增强)")
-                        .font(.footnote)
-                    Spacer()
-                    Text("当前固件无此项 (27.1+)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                Text("当前 iOS \(vrs.majorVersion).\(vrs.minorVersion) (\(buildNumber())) 固件尚未引入该进阶槽位；上方常规通话录音与语音转写已完整就绪")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 1)
-        } else {
+        if isAdvAppleIntellHD() {
+            liveAIRow(title: "iOS 27 进阶音频智能 (原生硬件支持)", active: true)
+        } else if stagedConflict || liveActive {
             NavigationLink(destination: GestaltView()) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text("iOS 27 进阶音频智能 (可选增强)")
+                        Text("iOS 27 进阶 AI 实验槽位")
                             .font(.footnote)
                         Spacer()
-                        Text(staged ? "⏳ 已勾选 · 去应用" : "未开启 · 去开启")
+                        Text(stagedConflict ? "⚠️ 已开启 · 去关闭修复" : "⏳ 已关闭 · 待重启生效")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Color.orange)
                     }
-                    Text("位置：MobileGestalt 修改 → 地区与功能准入 → 解锁 iOS 27 进阶 AI 能力")
+                    Text("提示：iPhone/iPad 强开此实验槽位会导致照片“高质量”消除报错，建议保持关闭（不影响常规通话录音与转写）")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 1)
             }
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("常规通话录音与语音备忘录转写")
+                        .font(.footnote)
+                    Spacer()
+                    Text((mgQueryLiveBool(forKey: MGKey.appIntell) ?? false) ? "✅ 已完整就绪" : "待激活主开关")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle((mgQueryLiveBool(forKey: MGKey.appIntell) ?? false) ? Color.green : Color.secondary)
+                }
+                Text("已由主 Apple 智能开关原生驱动；实验性 AudioIntelligence 槽位已保持关闭以保障照片“高质量”消除正常")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 1)
         }
     }
 

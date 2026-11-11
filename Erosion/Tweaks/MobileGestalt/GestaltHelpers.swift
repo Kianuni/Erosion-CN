@@ -979,6 +979,10 @@ func isAdvAppleIntellFirmwareSupported() -> Bool {
 }
 
 func isAdvAppleIntellHD() -> Bool {
+    let m = currentOriginalMachineName()
+    if m.hasPrefix("iPhone") || m.hasPrefix("iPad") {
+        return false
+    }
     if GestaltStore.shared.isSlotRulesNativeSatisfied(MGKey.advAppIntellRules) {
         return true
     }

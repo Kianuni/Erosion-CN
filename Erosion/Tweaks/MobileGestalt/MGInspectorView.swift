@@ -50,36 +50,41 @@ struct AppleIntelligenceCheckupCard: View {
         let liveRegModel = mgQueryLiveString(forKey: MGKey.regModelNumber) ?? ""
         let regModelLiveOK = !liveRegModel.isEmpty && (liveRegModel == stagedRegModel || isNativeNonRestrictedRegion)
 
-        // 3. China CacheData Gate (green-tea == 0) & InternalInstall / SiriHub Mutual Exclusion
+        // 3. China CacheData Gate (green-tea == 0) & InternalInstall / SiriHub / AdvAI Mutual Exclusion
         let intInstallConflict = store.isEnabled([MGKey.intInstall]) || store.isEnabled([MGKey.intBuild])
         let siriHubConflict = store.isSiriHubConflictActive()
+        let advAIConflict = store.isAdvAppleIntellConflictActive()
         var greenTeaCleared = true
         if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: store.mgCurrentDict) {
             greenTeaCleared = (data[layout.greenTeaOffset] == 0 && data[layout.notGreenTeaOffset] == 1)
         }
-        let gateReady = !intInstallConflict && !siriHubConflict && greenTeaCleared
+        let gateReady = !intInstallConflict && !siriHubConflict && !advAIConflict && greenTeaCleared
         let liveGreenTea = mgQueryLiveBool(forKey: MGCacheDataLayout.greenTeaKey) ?? false
         let liveIntInstall = mgQueryLiveBool(forKey: MGKey.intInstall) ?? false
         let liveSiriHub = mgQueryLiveBool(forKey: MGKey.siriHub) ?? false
-        let gateLiveOK = !liveGreenTea && !liveIntInstall && !liveSiriHub
+        let liveAdvAIConflict = !isAdvAppleIntellHD() && (
+            (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false) ||
+            (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false)
+        )
+        let gateLiveOK = !liveGreenTea && !liveIntInstall && !liveSiriHub && !liveAdvAIConflict
 
         var gateDetail: String
         if intInstallConflict {
             gateDetail = "⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）"
         } else if siriHubConflict {
             gateDetail = "⚠️ 检测到已开启 SiriHub 路由（会卡死“正在添加 Siri 支持内容”，可一键修复）"
+        } else if advAIConflict {
+            gateDetail = "⚠️ 检测到已开启进阶 AI 实验槽位（会导致照片“高质量”消除报错，可一键修复）"
         } else if !greenTeaCleared {
             gateDetail = "国行 green-tea 限制槽位未解除（建议开启下方底层解除）"
         } else {
-            gateDetail = "green-tea=false · 无内部调试与 SiriHub 冲突"
+            gateDetail = "green-tea=false · 无内部调试、SiriHub 与消除冲突"
         }
 
         // 4. Hardware AI Eligibility & Sub-capabilities
         let nativeAI = isAppleIntellHD()
         let nativeAdvAI = isAdvAppleIntellHD()
-        let advSlotsSupported = store.canModifySlotRules(MGKey.advAppIntellRules)
         let stagedAI = nativeAI || store.mgKeyBinding(MGKey.appIntellAllKeys).wrappedValue
-        let stagedAdvAI = !raveSupported() || !advSlotsSupported || nativeAdvAI || store.isAdvAppleIntellStagedOrActive()
         let aiReady = stagedAI
         let liveAI = mgQueryLiveBool(forKey: MGKey.appIntell) ?? nativeAI
 
@@ -87,13 +92,7 @@ struct AppleIntelligenceCheckupCard: View {
         if nativeAdvAI {
             aiDetail = "本机 (\(originalHardwareProductType())) 原生支持全部 AI 与 iOS 27 进阶能力"
         } else if nativeAI {
-            if raveSupported() && advSlotsSupported {
-                aiDetail = stagedAdvAI
-                    ? "本机原生支持 AI · 已开启 iOS 27 进阶翻译/音频智能"
-                    : "本机原生支持 AI（可按需开启下方 iOS 27 进阶 AI）"
-            } else {
-                aiDetail = "本机 (\(originalHardwareProductType())) 硬件原生支持 Apple 智能（含通话录音与转写）"
-            }
+            aiDetail = "本机 (\(originalHardwareProductType())) 硬件原生支持 Apple 智能（含照片消除、通话录音与转写）"
         } else {
             aiDetail = stagedAI
                 ? "已开启旧机型 AI 总开关与消除/手写子能力（需配合机型伪装）"
@@ -178,15 +177,14 @@ struct AppleIntelligenceCheckupCard: View {
             }
 
             HStack(spacing: 10) {
-                let canUnlockAdvAI = raveSupported() && store.canModifySlotRules(MGKey.advAppIntellRules) && !isAdvAppleIntellHD() && !store.isAdvAppleIntellStagedOrActive()
-                if !allReady || canUnlockAdvAI {
+                if !allReady {
                     Button {
                         Haptic.shared.play(.soft)
                         store.applyAppleIntelligenceOneClickFix()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "bolt.fill")
-                            Text(allReady ? "一键加开 iOS 27 进阶 AI" : "一键配齐缺失项")
+                            Text("一键配齐 / 修复")
                         }
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12)

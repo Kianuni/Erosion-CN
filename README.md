@@ -38,7 +38,7 @@
    - 默认移除并拦截上游版本中存在软砖/无限设置向导隐患的高危功能（如 iPhone 正则盲改切片的 iPadOS 模式、个人零售设备的监管模式开关、非缓存键注入等）。
 8. **完善机型适配、iOS 27 进阶 AI 能力解锁与实用工具优化**
    - 补全 iPhone 15 / 16 / 17 / Air / 18 / Duo 全系列及 M 系列 iPad 监管型号映射与硬件特征表，修复原版“80% 充电上限”与“开机提示音”硬件判断互换笔误及自定义键值恒写入 `true` 的 Bug；
-   - **Apple 智能子能力打包与 iOS 27 进阶 AI 解锁**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；常驻展示 **「解锁 iOS 27 进阶 AI 能力 [测试特性]」** 开关，实时检测本机系统库与原厂 `CacheData` 槽位状态，按需解锁**个人实时翻译 (`Personal Translator`)** 与 **iOS 27 音频智能 (`Audio Intelligence`)**（原厂已开启机型自动显示原生锁定保护，早期 `27.0` 未内置槽位的固件也会明确标注）；
+   - **Apple 智能子能力打包与进阶槽位冲突保护**：「启用 Apple 智能开关」自动联动解锁旧机型缺失的相册「消除」(Clean Up) 与备忘录「手写体合成」能力；针对实验性 `Personal Translator` / `Audio Intelligence` 槽位在 iPhone / iPad 上强开会导致 `ModelCatalog` 资产校验断路、使照片「高质量」消除报错的问题，内置自动防呆锁定与一键修复；
    - 新增 iOS 26/27「液态玻璃低功耗渲染（省电模式）」开关与机型外层描述同步；
    - 修复文件浏览器搜索栏失效与失焦清空问题，采用 `stat()` 动态探测本机实时最大 Inode 基线配合 `pathleak` 加速容器扫描（并为动态壁纸与拨号盘页面加入异步加载进度动画），同时新增核心缓存目录 0 秒一键直达入口；
 9. **新增应用存档管理与容器缓存清理模块（`v0.6.0`）**
@@ -59,9 +59,9 @@
       4. **锁屏防丢资产铭牌与伪监管死锁体检 (`ConfigView`)**：支持 `AssetTagInformation` 锁屏铭牌定制，并实时体检第三方伪监管残留（防 OTA 升级后触发 Setup Assistant 403 激活死锁，支持保留锁屏文字单独清理）；
       5. **跨容器 `AppGroup` 分流规则注入与 Safari 书签导出 (`AppGroupHubView`)**：一键生成或向 Surge 共享组注入国行普通话来电询问直连 + 海外 AI 分流 `.sgmodule`，并支持通过零锁快照无损导出 Safari 书签（HTML / JSON）；
       6. **语音备忘录与通话录音无损提取 + 端侧 AI 模型体检 (`VoiceMemosAIView`)**：跨容器关联 `CloudRecordings.db` 标题批量打包导出无损 `.m4a` 音轨，并只读探测离线翻译与语音模型缓存。
-12. **地区解锁细化、脏环境一键直关、`SiriHub` 防呆护栏与 `Surge / Stash` 双格式分流生成（`v0.8.1 – v0.8.2`）**
+12. **地区解锁细化、脏环境一键直关、`SiriHub` / 照片「高质量消除」防冲突护栏与 `Surge / Stash` 双格式分流（`v0.8.1 – v0.8.3`）**
     - **新增地区修改细化子选项**：在「解除地区限制（国行 AI / 美版 LL/A）」下方提供双模式切换——默认 **「完整美版 LL + LL/A」**（同步映射美版监管型号 `Axxxx`，跨区域受限特性最完整）；可选 **「仅改区域代码 LL（保留 CH/A 后缀与双卡兼容）」**（仅将 `RegionCode` 改为 `LL`，完整保留原机 `CH/A` 销售地区后缀与原厂监管型号，满足基础 Apple 智能准入的同时避免国行双实体卡槽 + eSIM 机型的美版无卡槽型号映射冲突）；
-    - **污染基线布尔开关直关加固与 `SiriHub` 防卡死护栏**：若安装本应用前设备已被其他工具开启 `InternalInstall` / `InternalBuild` 等互斥项（导致 `OriginalGestalt.plist` 记录了脏值 `1`），直接关闭对应开关即可一键从 `CacheExtra` 彻底剥离残留键；同时针对实验区 `DeviceSupportsSiriHub` 在 iPhone / iPad 上会导致无限卡死「正在添加 Siri 支持内容」的问题加入自动防呆锁定与四要素体检一键修复；
+    - **污染基线布尔开关直关加固与双重 AI 资产冲突护栏（`v0.8.2 – v0.8.3`）**：若安装本应用前设备已被其他工具开启 `InternalInstall` / `InternalBuild` 等互斥项（导致 `OriginalGestalt.plist` 记录了脏值 `1`），直接关闭对应开关即可一键从 `CacheExtra` 彻底剥离残留键；同时针对在 iPhone / iPad 上开启会导致 Siri 无限卡死的 `DeviceSupportsSiriHub` 以及会导致**照片「高质量」消除报错**的 `Personal Translator` / `Audio Intelligence` 实验槽位，均已从一键配齐中移除并加入自动防呆锁定与四要素体检一键自愈修复；
     - **`Surge (.sgmodule)` + `Stash (.stoverride / YAML)` 双格式完整分流导出**：共享组中心支持切换导出 Surge 模块与 Stash 覆写文件（内置 `always-real-ip` / `fake-ip-filter`、Siri 主网关直连、PCC 隐私计算中继、OpenAI 及 Google 视觉智能全套置顶规则）。
 
 ---
@@ -81,7 +81,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.8.2_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.8.3_zh-Hans.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)
@@ -135,8 +135,8 @@
 ### Q5：开启「将“无线局域网”显示为“Wi-Fi”」有什么需要注意的副作用？
 开启后系统网络权限会完全切换为国际版逻辑——**会丢失国行独有的单应用「不允许联网（同时禁止 Wi-Fi 与蜂窝数据）」选项**（国际版仅允许关闭单个 App 的「蜂窝数据」，无法禁止其使用 Wi-Fi 联网）。如果你需要彻底禁止第三方输入法或离线 App 联网，请保持此项**关闭**；已开启者随时关闭开关重新应用并重启即可恢复。
 
-### Q6：我是 iPhone 18 Pro / Pro Max（iOS 27.0），还需要开「解锁 iOS 27 进阶 AI 能力」吗？要不要升 27.3 beta？
-* **建议直接在 `27.0` 开启**：硬件虽 100% 满血自带，但苹果在 `iOS 27.0` 首发固件设备树中将**个人实时翻译 (`Personal Translator`)** 与 **iOS 27 音频智能 (`Audio Intelligence`)** 槽位默认埋为 `false`，打开该开关并重启即可提前激活预埋能力。
+### Q6：为什么照片「消除」在「快速」模式下正常，切成「高质量」就报错“消除此照片时出错”？另外要不要升 27.3 beta？
+* **请关闭「解锁 iOS 27 进阶 AI 能力 `[测试特性]`」（`v0.8.3` 已内置自动防呆锁定与一键修复）**：真机实测与 `ModelCatalog.framework` 逆向表明，照片「快速」消除走本地独立 GAN 模型，而「高质量」消除由 `ModelCatalog` 调度云端扩散模型 (`ServerDiffusionInpainting`)。在 iPhone / iPad 上强行开启 `Personal Translator` / `Audio Intelligence` 实验槽位会导致 `ModelCatalog` 向 `mesu.apple.com` 校验不存在的机型资产而断路，连带使「高质量」消除报错（常规通话录音、语音备忘录转写与系统翻译无需此开关）。升级 `v0.8.3` 后关闭该项（或点击顶部体检卡片「一键配齐 / 修复」）并应用即可立即恢复。
 * **切勿盲目升级新测试版**：底层 `worse_query` 写入漏洞目前仅确认支持至 **`iOS 27.0 – 27.2.1` 及 `iOS 27.3 beta 1`**。请务必关闭系统自动更新，**切勿升级至 `27.3 beta 2` 及后续新测试版**，以免漏洞封堵后失去底层修改能力。
 
 ### Q7：自签证书 7 天过期、卸载重装 App 会导致修改失效或丢失原厂备份吗？

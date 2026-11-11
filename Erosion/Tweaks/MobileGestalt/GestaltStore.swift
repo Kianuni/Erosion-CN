@@ -42,7 +42,7 @@ enum MGMsg {
     static let intInstall = "此选项将启用部分遗留在正式版 iOS 中的 Apple 内部调试特性。注意：开启后可能会影响部分正常功能（如无法从 App Store 重新安装自带系统应用），且与 Apple 智能互斥。"
     static let intBuild = "此开关主要用于在“设置”应用中显示内部存储调试信息。在部分设备（尤其是 iPadOS）上可能引发兼容性问题。"
     static let appleIntellInfo = "为不支持 Apple 智能的旧机型开启端侧生成式 AI 总开关 (DeviceSupportsGenerativeModelSystems)，并自动同步解锁以下 2 项在旧芯片上默认关闭的子能力标记：\n\n• 相册“消除”功能 (Photos Clean Up)\n• 备忘录“手写体合成” (Handwriting Synthesis)\n\n注：旧机型若需实际下载端侧 AI 模型，通常还需配合下方的“机型伪装”与上方的“解除地区限制”使用（修改后请手动重启手机生效）。"
-    static let advAppleIntell = "【测试特性】一键解锁 2 项进阶端侧 AI 二进制 CacheData 能力槽位：\n\n1. 个人实时翻译 (Personal Translator · M1n2sAqf33NAOgZRGxQYBA)：电话、FaceTime 与信息中的系统级实时同声传译及个人音色保留翻译能力；\n2. iOS 27 音频智能 (Audio Intelligence · rb2tKZxlj0Gm2tBmUQSLqQ)：语音备忘录与通话录音的端侧进阶流式摘要与环境人声理解增强。\n\n注：部分早期 iOS 27.0 初始固件尚未内置上述进阶键值槽位（通常需 iOS 27.1 / 27.2+），常规通话录音与语音备忘录转写已由上方 Apple 智能与地区准入完整解锁，不受影响（修改后请手动重启手机生效）。"
+    static let advAppleIntell = "【防呆护栏警告】真机实测与 ModelCatalog.framework 逆向确认：个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA) 与 iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ) 在 iPhone / iPad 原厂设备树中默认均为 false（关联 Vision Pro / AirPods 配件协同与特定硬件形态资产）。\n\n⚠️ 在 iPhone / iPad 上强行开启后，系统 ModelCatalog (modelcatalogd) 向 mesu.apple.com 校验模型可用性时找不到匹配当前 iPhone 机型的资产包，会导致由 ModelCatalog 统一调度的云端推理管线断路——直接造成照片【“高质量”消除 (ServerDiffusionInpainting)】报错失效（提示“消除此照片时出错。请稍后再试。”）！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整解锁，无需开启此项。安全护栏已默认锁定防误开；若此前在旧版本中曾开启，直接关闭此开关（或点击顶部体检卡片一键修复）并应用即可立即恢复高质量消除。"
     static let audioMixInfo = "通过本机系统库实时动态解析 CameracinematicAudioTrackRendering (aVL5GE3tx0LSCI/ErfrJGA) 二进制 CacheData 布尔槽位并设为 true，解锁相册与相机视频编辑中的“混音 (Audio Mix)”功能，支持“标准 / 语音突显 / 录音棚 / 电影效果”四档人声与环境音分离混音（应用后请手动重启手机生效）。"
     static let spatialAudioInfo = "通过本机系统库实时动态解析 spatial-audio-recording 与 spatial-facetime-audio 二进制 CacheData 布尔槽位并同步设为 true，解锁相机视频录制时的 3D 空间音频拾音及 FaceTime 通话空间声场渲染能力（应用后请手动重启手机生效）。"
     static let responsiveShutterInfo = "通过本机系统库实时动态解析 ResponsiveShutter (gQDt76Te0SPw7N8oTLrBFw) 二进制 CacheData 布尔槽位并设为 true，降低相机按下快门至成像管线的触发延迟，实现手指按下瞬间零延迟抓拍（应用后请手动重启手机生效）。"
@@ -812,13 +812,83 @@ final class GestaltStore: ObservableObject {
         )
     }
 
+    func isAdvAppleIntellConflictActive() -> Bool {
+        if isAdvAppleIntellHD() {
+            return false
+        }
+        for key in MGKey.advAppIntellKeys {
+            if (self.cacheExtra[key] as? NSNumber)?.intValue == 1 {
+                return true
+            }
+        }
+        if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
+            for key in MGKey.advAppIntellKeys {
+                if let slotIdx = layout.featureSlotIndices[key],
+                   layout.validateSingleBooleanSlot(slotIdx, in: data),
+                   data[slotIdx * 8] == 1 {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    func mgSafeAdvAppleIntellGuardrailBinding() -> Binding<Bool> {
+        return Binding<Bool>(
+            get: {
+                return self.isAdvAppleIntellConflictActive()
+            },
+            set: { enabled in
+                if enabled {
+                    Alertinator.shared.alert(
+                        title: "安全护栏已拦截冲突开关！",
+                        body: MGMsg.advAppleIntell
+                    )
+                    return
+                }
+                switch MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
+                case .failure:
+                    self.objectWillChange.send()
+                    for k in MGKey.advAppIntellKeys {
+                        self.disableBooleanExtraKey(k, enableValue: 1)
+                    }
+                case .success((let layout, var data)):
+                    let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
+                    for k in MGKey.advAppIntellKeys {
+                        if let slotIdx = layout.featureSlotIndices[k],
+                           layout.validateSingleBooleanSlot(slotIdx, in: data) {
+                            let origVal = isAdvAppleIntellHD()
+                                ? (MGCacheDataCoordinator.shared.originalSlotValue(forKey: k, layout: layout, savedOriginalDict: savedOrig) ?? false)
+                                : false
+                            data[slotIdx * 8] = origVal ? 1 : 0
+                        }
+                    }
+                    let testDict = NSMutableDictionary(dictionary: self.mgCurrentDict)
+                    if let testExtra = testDict["CacheExtra"] as? NSMutableDictionary {
+                        for k in MGKey.advAppIntellKeys {
+                            testExtra.removeObject(forKey: k)
+                        }
+                    }
+                    testDict["CacheData"] = data
+                    if case .success = layout.validatePlist(testDict) {
+                        self.objectWillChange.send()
+                        for k in MGKey.advAppIntellKeys {
+                            self.cacheExtra.removeObject(forKey: k)
+                        }
+                        self.mgCurrentDict["CacheData"] = data
+                    }
+                }
+            }
+        )
+    }
+
     func applyAppleIntelligenceOneClickFix() {
         self.objectWillChange.send()
         // 1. Apply user's selected region unlock mode (defaults to full US LL + LL/A + Axxxx; respects LL-only mode if selected)
         self.applyRegionUnlock(mode: self.currentRegionUnlockMode)
-        // 2. Clear conflicting InternalInstall / InternalBuild / SiriHub CacheExtra flags
-        self.mgPullKeys([MGKey.intInstall, MGKey.intBuild, MGKey.siriHub])
-        // 3. Unlock Mainland China green-tea / not-green-tea slots if originally restricted, and heal accidental SiriHub toggle
+        // 2. Clear conflicting InternalInstall / InternalBuild / SiriHub / non-native AdvAI CacheExtra flags
+        self.mgPullKeys([MGKey.intInstall, MGKey.intBuild, MGKey.siriHub] + MGKey.advAppIntellKeys)
+        // 3. Unlock Mainland China green-tea / not-green-tea slots if originally restricted, and heal accidental SiriHub / AdvAI toggles
         if case .success((let layout, var data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
             let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
             let origFlags = MGCacheDataCoordinator.shared.originalFlags(for: layout, savedOriginalDict: savedOrig)
@@ -841,21 +911,23 @@ final class GestaltStore: ObservableObject {
                     }
                 }
             }
+            // Heal non-native Personal Translator / Audio Intelligence slots that break ModelCatalog High-Quality Photos Clean Up
+            if !isAdvAppleIntellHD() {
+                for key in MGKey.advAppIntellKeys {
+                    if let slotIdx = layout.featureSlotIndices[key],
+                       layout.validateSingleBooleanSlot(slotIdx, in: data),
+                       data[slotIdx * 8] == 1 {
+                        data[slotIdx * 8] = 0
+                    }
+                    self.cacheExtra.removeObject(forKey: key)
+                }
+            }
             // 4. For non-native AI hardware, enable AI keys in both CacheExtra & CacheData slots
             if !isAppleIntellHD() {
                 for key in MGKey.appIntellAllKeys {
                     self.cacheExtra[key] = 1
                     if let slotIdx = layout.featureSlotIndices[key], layout.validateSingleBooleanSlot(slotIdx, in: data) {
                         data[slotIdx * 8] = 1
-                    }
-                }
-            }
-            // 5. For iOS 27 devices whose firmware includes Personal Translator / Audio Intelligence slots and aren't natively enabled, unlock those CacheData slots cleanly
-            if raveSupported() && !isAdvAppleIntellHD() {
-                for key in MGKey.advAppIntellKeys {
-                    if let slotIdx = layout.featureSlotIndices[key], layout.validateSingleBooleanSlot(slotIdx, in: data) {
-                        data[slotIdx * 8] = 1
-                        self.cacheExtra.removeObject(forKey: key)
                     }
                 }
             }
@@ -872,10 +944,7 @@ final class GestaltStore: ObservableObject {
     }
 
     func isAdvAppleIntellStagedOrActive() -> Bool {
-        if self.mgSlotRulesBinding(MGKey.advAppIntellRules).wrappedValue {
-            return true
-        }
-        return MGKey.advAppIntellKeys.contains { self.isKeyEnabled($0) }
+        return isAdvAppleIntellConflictActive()
     }
 
     func cacheResolutionFailureReason() -> String? {

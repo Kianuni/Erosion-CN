@@ -238,8 +238,8 @@ struct GestaltView: View {
                         }
                     }
                     if raveSupported() || mgOverrideGates {
-                        let advCanModify = store.canModifySlotRules(MGKey.advAppIntellRules)
                         let advNativeOn = isAdvAppleIntellHD()
+                        let advConflictOn = store.isAdvAppleIntellConflictActive()
                         if advNativeOn && !mgOverrideGates {
                             PlainToggle(
                                 "解锁 iOS 27 进阶 AI 能力 [测试特性]",
@@ -253,15 +253,15 @@ struct GestaltView: View {
                         } else {
                             PlainToggle(
                                 "解锁 iOS 27 进阶 AI 能力 [测试特性]",
-                                subtitle: advCanModify
-                                    ? "开启端侧个人实时翻译与通话/录音音频智能增强"
-                                    : "当前系统固件 (iOS \(vrs.majorVersion).\(vrs.minorVersion) \(buildNumber())) 尚未内置此进阶槽位（通常需 iOS 27.1+，不影响常规通话录音与转写）",
-                                infoType: .info,
-                                infoTitle: "iOS 27 进阶 AI 能力说明",
+                                subtitle: advConflictOn
+                                    ? "⚠️ 检测到已开启（会导致照片“高质量”消除报错），请直接关闭并应用恢复"
+                                    : "已由防呆护栏自动锁定：iPhone/iPad 强开会导致 ModelCatalog 校验断路使照片“高质量”消除报错",
+                                infoType: .warning,
+                                infoTitle: "iOS 27 进阶 AI 防呆锁定说明",
                                 infoMessage: MGMsg.advAppleIntell,
-                                isOn: store.mgSlotRulesBinding(MGKey.advAppIntellRules)
+                                isOn: store.mgSafeAdvAppleIntellGuardrailBinding()
                             )
-                            .disabled(!advCanModify)
+                            .disabled(!advConflictOn)
                         }
                     }
                     if !isAppleIntellHD() || mgOverrideGates {
