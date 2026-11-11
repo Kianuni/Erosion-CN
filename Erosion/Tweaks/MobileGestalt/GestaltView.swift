@@ -560,17 +560,17 @@ struct GestaltView: View {
                         ]
                     )
 
-                    experimentalSlotRuleRow(
-                        title: "[测试特性] 端侧 Siri Hub 路由与指令模型动态剪枝",
-                        subtitle: "开启离线端侧 Siri 意图路由及低运存端侧权重指令剪枝支持",
-                        infoTitle: "端侧 Siri Hub 与模型剪枝（测试特性）",
+                    PlainToggle(
+                        "[测试特性] 端侧 Siri Hub 路由与指令模型动态剪枝",
+                        subtitle: store.isSiriHubConflictActive()
+                            ? "⚠️ 检测到已开启（会卡死“正在添加 Siri 支持内容”），请直接关闭并重启恢复"
+                            : "已由防呆护栏自动锁定：SiriHub 属家居中枢专属路由，iPhone/iPad 开启会卡死 Siri",
+                        infoType: .warning,
+                        infoTitle: "端侧 Siri Hub 防呆锁定说明",
                         infoMessage: MGMsg.expSiriHubInfo,
-                        rules: [
-                            MGSlotRule(key: MGKey.siriHub, targetValue: true, required: true),
-                            MGSlotRule(key: MGKey.onDeviceSiri, targetValue: true, required: false),
-                            MGSlotRule(key: MGKey.modelPruning, targetValue: true, required: false)
-                        ]
+                        isOn: store.mgSafeSiriHubGuardrailBinding()
                     )
+                    .disabled(!store.isSiriHubConflictActive())
                 } header: {
                     HeaderLabel("实验性底层特性挖掘（测试特性）", symbol: "flask")
                 } footer: {

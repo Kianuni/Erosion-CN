@@ -62,7 +62,7 @@ enum MGMsg {
     static let expSleepApneaInfo = "【测试特性】开启 DeviceSupportsBreathingDisturbancesMeasurements (e0HV2blYUDBk/MsMEQACNA) 槽位，解锁“健康 -> 呼吸 -> 呼吸紊乱”睡眠呼吸暂停风险趋势评估页面（需配合 Apple Watch 睡眠监测数据，重启生效）。"
     static let expUSBloodOxygenInfo = "【测试特性】将 DeviceSupportsUSLegallyCompliantBloodOxygen (E4vGMChwcVRKD8hMVxnRvg) 槽位设为 false，解除美版 (LL/A) 设备因专利禁令触发的软件层血氧测量屏蔽（国行机型原生已为 false 无需开启，重启生效）。"
     static let expWorkoutUltraInfo = "【测试特性】同步开启 WorkoutUltraMode 与 DeviceSupportsTimeInDaylight 槽位，解锁极限户外运动辅助模式与健康“日光下时间”环境光监测统计入口（重启生效）。"
-    static let expSiriHubInfo = "【测试特性】同步开启 DeviceSupportsSiriHub、OnDeviceSiriCapability 与 InstructionFollowingPruningModels 槽位，启用离线端侧 Siri 意图枢纽路由与端侧大模型动态指令剪枝加速（重启生效）。"
+    static let expSiriHubInfo = "【防呆护栏警告】真机实测表明：DeviceSupportsSiriHub (waGD2UTpntjbDXD1r3oALQ) 属于带屏家居中枢硬件 (HomeAccessory / HomePad) 专属路由标记。\n\n⚠️ 在 iPhone / iPad 上开启会导致 assistantd 请求不存在的 SiriHub 模型资产，使 Apple 智能无限卡死在“正在添加 Siri 支持内容，更新完成前，Siri 将无法使用”！\n\n安全护栏已默认锁定禁止在 iPhone / iPad 上新开启此项；如果你在旧版本曾开启过此开关，可直接关闭此项（或使用顶部 Apple 智能体检卡片一键修复）并手动重启手机即可恢复正常。"
     static let spoofUseless = "伪装设备型号可能会导致面容 ID (Face ID) 等硬件功能失效！你的设备硬件本身已原生支持 Apple 智能，无需修改此项（国行设备只需开启上方“解除地区限制”即可）。"
     static let spoofAI = "对于不支持 Apple 智能的旧机型，仅开启开关无法下载端侧 AI 模型，还需伪装为支持的机型；但伪装机型可能导致面容 ID 失效。取消机型伪装后，请勿再次进入“设置 -> Apple 智能与 Siri”页面。"
     static let subtype = "仅在你想调整灵动岛纵向位置或屏幕分辨率特征时才修改设备子类型 (Subtype)。如需在非灵动岛机型开启灵动岛，请配合下方的“启用灵动岛”开关使用！"
@@ -743,13 +743,82 @@ final class GestaltStore: ObservableObject {
         )
     }
 
+    func isSiriHubConflictActive() -> Bool {
+        if (self.cacheExtra[MGKey.siriHub] as? NSNumber)?.intValue == 1 {
+            return true
+        }
+        if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict),
+           let slotIdx = layout.featureSlotIndices[MGKey.siriHub],
+           layout.validateSingleBooleanSlot(slotIdx, in: data),
+           data[slotIdx * 8] == 1 {
+            let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
+            let origVal = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.siriHub, layout: layout, savedOriginalDict: savedOrig) ?? false
+            return !origVal
+        }
+        return false
+    }
+
+    func mgSafeSiriHubGuardrailBinding() -> Binding<Bool> {
+        return Binding<Bool>(
+            get: {
+                return self.isSiriHubConflictActive()
+            },
+            set: { enabled in
+                if enabled {
+                    Alertinator.shared.alert(
+                        title: "安全护栏已拦截冲突开关！",
+                        body: MGMsg.expSiriHubInfo
+                    )
+                    return
+                }
+                let groupKeys = [MGKey.siriHub, MGKey.onDeviceSiri, MGKey.modelPruning]
+                switch MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
+                case .failure:
+                    self.objectWillChange.send()
+                    for k in groupKeys {
+                        self.disableBooleanExtraKey(k, enableValue: 1)
+                    }
+                case .success((let layout, var data)):
+                    let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
+                    for k in groupKeys {
+                        if let slotIdx = layout.featureSlotIndices[k],
+                           layout.validateSingleBooleanSlot(slotIdx, in: data) {
+                            // Never re-enable siriHub on iPhone/iPad even if OriginalGestalt was polluted
+                            let origVal: Bool
+                            if k == MGKey.siriHub {
+                                origVal = false
+                            } else {
+                                origVal = MGCacheDataCoordinator.shared.originalSlotValue(forKey: k, layout: layout, savedOriginalDict: savedOrig) ?? false
+                            }
+                            data[slotIdx * 8] = origVal ? 1 : 0
+                        }
+                    }
+                    let testDict = NSMutableDictionary(dictionary: self.mgCurrentDict)
+                    if let testExtra = testDict["CacheExtra"] as? NSMutableDictionary {
+                        for k in groupKeys {
+                            testExtra.removeObject(forKey: k)
+                        }
+                    }
+                    testDict["CacheData"] = data
+                    if case .success = layout.validatePlist(testDict) {
+                        self.objectWillChange.send()
+                        for k in groupKeys {
+                            self.cacheExtra.removeObject(forKey: k)
+                        }
+                        self.mgCurrentDict["CacheData"] = data
+                    }
+                }
+            }
+        )
+    }
+
     func applyAppleIntelligenceOneClickFix() {
         self.objectWillChange.send()
         // 1. Apply user's selected region unlock mode (defaults to full US LL + LL/A + Axxxx; respects LL-only mode if selected)
         self.applyRegionUnlock(mode: self.currentRegionUnlockMode)
-        // 2. Clear conflicting InternalInstall / InternalBuild flags
-        self.mgPullKeys([MGKey.intInstall, MGKey.intBuild])
-        // 3. Unlock Mainland China green-tea / not-green-tea slots if originally restricted
+        // 2. Clear conflicting InternalInstall / InternalBuild / SiriHub CacheExtra flags
+        self.mgPullKeys([MGKey.intInstall, MGKey.intBuild, MGKey.siriHub])
+        // 3. Unlock Mainland China green-tea / not-green-tea slots if originally restricted, and heal accidental SiriHub toggle
         if case .success((let layout, var data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict) {
             let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
             let origFlags = MGCacheDataCoordinator.shared.originalFlags(for: layout, savedOriginalDict: savedOrig)
@@ -757,6 +826,20 @@ final class GestaltStore: ObservableObject {
             if ogRegion == "CH" || ogRegion == "ZA" || origFlags?.greenTea == true || data[layout.greenTeaOffset] == 1 {
                 data[layout.greenTeaOffset] = 0
                 data[layout.notGreenTeaOffset] = 1
+            }
+            if let siriHubSlot = layout.featureSlotIndices[MGKey.siriHub],
+               layout.validateSingleBooleanSlot(siriHubSlot, in: data),
+               data[siriHubSlot * 8] == 1 {
+                let origSiriHub = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.siriHub, layout: layout, savedOriginalDict: savedOrig) ?? false
+                if !origSiriHub {
+                    data[siriHubSlot * 8] = 0
+                    for k in [MGKey.onDeviceSiri, MGKey.modelPruning] {
+                        if let idx = layout.featureSlotIndices[k], layout.validateSingleBooleanSlot(idx, in: data) {
+                            let origV = MGCacheDataCoordinator.shared.originalSlotValue(forKey: k, layout: layout, savedOriginalDict: savedOrig) ?? false
+                            data[idx * 8] = origV ? 1 : 0
+                        }
+                    }
+                }
             }
             // 4. For non-native AI hardware, enable AI keys in both CacheExtra & CacheData slots
             if !isAppleIntellHD() {

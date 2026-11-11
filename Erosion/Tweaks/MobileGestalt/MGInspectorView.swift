@@ -50,24 +50,28 @@ struct AppleIntelligenceCheckupCard: View {
         let liveRegModel = mgQueryLiveString(forKey: MGKey.regModelNumber) ?? ""
         let regModelLiveOK = !liveRegModel.isEmpty && (liveRegModel == stagedRegModel || isNativeNonRestrictedRegion)
 
-        // 3. China CacheData Gate (green-tea == 0) & InternalInstall Mutual Exclusion
+        // 3. China CacheData Gate (green-tea == 0) & InternalInstall / SiriHub Mutual Exclusion
         let intInstallConflict = store.isEnabled([MGKey.intInstall]) || store.isEnabled([MGKey.intBuild])
+        let siriHubConflict = store.isSiriHubConflictActive()
         var greenTeaCleared = true
         if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: store.mgCurrentDict) {
             greenTeaCleared = (data[layout.greenTeaOffset] == 0 && data[layout.notGreenTeaOffset] == 1)
         }
-        let gateReady = !intInstallConflict && greenTeaCleared
+        let gateReady = !intInstallConflict && !siriHubConflict && greenTeaCleared
         let liveGreenTea = mgQueryLiveBool(forKey: MGCacheDataLayout.greenTeaKey) ?? false
         let liveIntInstall = mgQueryLiveBool(forKey: MGKey.intInstall) ?? false
-        let gateLiveOK = !liveGreenTea && !liveIntInstall
+        let liveSiriHub = mgQueryLiveBool(forKey: MGKey.siriHub) ?? false
+        let gateLiveOK = !liveGreenTea && !liveIntInstall && !liveSiriHub
 
         var gateDetail: String
         if intInstallConflict {
             gateDetail = "⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）"
+        } else if siriHubConflict {
+            gateDetail = "⚠️ 检测到已开启 SiriHub 路由（会卡死“正在添加 Siri 支持内容”，可一键修复）"
         } else if !greenTeaCleared {
             gateDetail = "国行 green-tea 限制槽位未解除（建议开启下方底层解除）"
         } else {
-            gateDetail = "green-tea=false · 无内部调试冲突"
+            gateDetail = "green-tea=false · 无内部调试与 SiriHub 冲突"
         }
 
         // 4. Hardware AI Eligibility & Sub-capabilities

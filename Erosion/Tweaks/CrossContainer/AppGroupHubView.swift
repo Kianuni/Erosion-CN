@@ -24,6 +24,19 @@ struct SafariBookmarkRecord: Identifiable, Codable {
     let url: String
 }
 
+enum ProxyRuleFormat: String, CaseIterable, Identifiable {
+    case surgeModule = "surge"
+    case stashOverride = "stash"
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .surgeModule: return "Surge / Loon / 小火箭 (.sgmodule)"
+        case .stashOverride: return "Stash 覆写规则 (.stoverride / YAML)"
+        }
+    }
+}
+
 struct AppGroupHubView: View {
     @State private var isScanning = false
     @State private var scanSummary = "点击右上角刷新扫描本机共享应用组 (AppGroup)"
@@ -31,6 +44,8 @@ struct AppGroupHubView: View {
     @State private var safariBookmarksDBPath: String?
     @State private var bookmarks: [SafariBookmarkRecord] = []
     @State private var proxyPolicyName: String = "PROXY"
+    @State private var ruleFormat: ProxyRuleFormat = .surgeModule
+    @State private var hasAutoSelectedFormat = false
     @State private var showRulePreview = false
 
     private static let knownProxyGroupMap: [String: String] = [
@@ -85,6 +100,12 @@ struct AppGroupHubView: View {
             }
 
             Section {
+                Picker("规则格式", selection: $ruleFormat) {
+                    ForEach(ProxyRuleFormat.allCases) { fmt in
+                        Text(fmt.displayName).tag(fmt)
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("海外 AI 节点策略组名称")
                         .font(.caption.weight(.semibold))
@@ -97,23 +118,33 @@ struct AppGroupHubView: View {
                 .padding(.vertical, 2)
 
                 Button {
-                    exportSGModuleViaShareSheet()
+                    exportRuleFileViaShareSheet()
                 } label: {
-                    Label("导出 .sgmodule 分流模块文件 (通用分享)", systemImage: "square.and.arrow.up")
+                    Label(
+                        ruleFormat == .stashOverride
+                            ? "导出 .stoverride 覆写文件 (导入 Stash)"
+                            : "导出 .sgmodule 分流模块文件 (通用分享)",
+                        systemImage: "square.and.arrow.up"
+                    )
                 }
 
                 Button {
-                    UIPasteboard.general.string = buildSGModuleContent()
+                    UIPasteboard.general.string = currentRuleContent()
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
                         title: "已拷贝分流规则！",
-                        body: "规则内容已复制到系统剪贴板，可直接粘贴至 Surge / Stash / Loon / Shadowrocket 模块配置中。"
+                        body: ruleFormat == .stashOverride
+                            ? "Stash 覆写规则 (YAML) 已复制到剪贴板，可在 Stash「覆写」中新建或粘贴使用（请确保所选美区节点已开启 udp: true）。"
+                            : "Surge 模块规则已复制到系统剪贴板，可直接粘贴至 Surge / Loon / Shadowrocket 模块配置中。"
                     )
                 } label: {
-                    Label("拷贝模块规则源码至剪贴板", systemImage: "doc.on.doc")
+                    Label(
+                        ruleFormat == .stashOverride ? "拷贝 Stash YAML 覆写源码至剪贴板" : "拷贝模块规则源码至剪贴板",
+                        systemImage: "doc.on.doc"
+                    )
                 }
 
-                if let surge = surgeGroup {
+                if let surge = surgeGroup, ruleFormat == .surgeModule {
                     Button {
                         Alertinator.shared.alert(
                             title: "写入 Surge 共享组目录？ [测试特性]",
@@ -126,8 +157,11 @@ struct AppGroupHubView: View {
                     }
                 }
 
-                DisclosureGroup("预览生成的 .sgmodule 规则内容", isExpanded: $showRulePreview) {
-                    Text(buildSGModuleContent())
+                DisclosureGroup(
+                    ruleFormat == .stashOverride ? "预览生成的 Stash .stoverride (YAML) 内容" : "预览生成的 Surge .sgmodule 规则内容",
+                    isExpanded: $showRulePreview
+                ) {
+                    Text(currentRuleContent())
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -136,7 +170,7 @@ struct AppGroupHubView: View {
             } header: {
                 HeaderLabel("[测试特性] Apple 智能与普通话来电询问共存分流", symbol: "network.badge.shield.half.filled")
             } footer: {
-                Text("核心原理：将 guzzoni.apple.com 设为 DIRECT 并追加 always-real-ip 防 Fake-IP 劫持，保障国行 Siri 与普通话来电筛选秒通；同时仅将 apple-relay / gspe1-ssl 分流至海外策略组。")
+                Text("核心原理：将 guzzoni.apple.com / siri.apple.com / smoot.apple.com 设为 DIRECT 并加入真实 IP 白名单（always-real-ip / fake-ip-filter），保障国行 Siri 与普通话来电筛选秒通；同时将 gspe1-ssl、apple-relay.*、OpenAI 与 Google 视觉智能置顶分流至美区策略组（注意：所选美区节点需支持 UDP/QUIC）。")
             }
 
             if !proxyGroups.isEmpty {
@@ -236,42 +270,108 @@ struct AppGroupHubView: View {
         return trimmed.isEmpty ? "PROXY" : trimmed
     }
 
+    private func currentRuleContent() -> String {
+        switch ruleFormat {
+        case .surgeModule:
+            return buildSGModuleContent()
+        case .stashOverride:
+            return buildStashOverrideContent()
+        }
+    }
+
     private func buildSGModuleContent() -> String {
         let policy = sanitizedPolicy
         return """
         #!name=Erosion 国行 Apple 智能与来电询问分流 [测试特性]
-        #!desc=由 Erosion 生成：保持国行 Siri 与普通话询问来电原因 (guzzoni) 直连并规避 Fake-IP 劫持，同时将 Apple Intelligence 隐私云计算与地区校验分流至 \(policy)。
+        #!desc=由 Erosion 生成：保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、区域定位校验与视觉智能置顶分流至 \(policy)。
         #!category=Erosion
 
         [General]
-        always-real-ip = %APPEND% guzzoni.apple.com, *.siri.apple.com
+        skip-proxy = %APPEND% guzzoni.apple.com
+        always-real-ip = %APPEND% guzzoni.apple.com, *.guzzoni.apple.com, *.siri.apple.com
 
         [Rule]
-        # 国行 Siri 语音交互与普通话来电询问保持直连
-        DOMAIN,guzzoni.apple.com,DIRECT
+        # 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）
+        DOMAIN-SUFFIX,guzzoni.apple.com,DIRECT
         DOMAIN-SUFFIX,siri.apple.com,DIRECT
+        DOMAIN,dejavu.apple.com,DIRECT
+        DOMAIN,sequoia.apple.com,DIRECT
+        DOMAIN-SUFFIX,smoot.apple.com,DIRECT
 
-        # Apple Intelligence 隐私云计算与区域准入分流
-        DOMAIN,apple-relay.apple.com,\(policy)
-        DOMAIN,apple-relay.cloudflare.com,\(policy)
-        DOMAIN,apple-relay.fastly-edge.com,\(policy)
-        DOMAIN,cp4.cloudflare.com,\(policy)
+        # 2. Apple Intelligence 区域定位校验与 PCC 隐私云计算中继（请使用支持 UDP/QUIC 的低延迟美区节点）
         DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
-        DOMAIN-SUFFIX,smoot.apple.com,\(policy)
+        DOMAIN-SUFFIX,apple-relay.apple.com,\(policy)
+        DOMAIN-SUFFIX,apple-relay.cloudflare.com,\(policy)
+        DOMAIN-SUFFIX,apple-relay.fastly-edge.com,\(policy)
+        DOMAIN-SUFFIX,apple-relay.akamaized.net,\(policy)
+        DOMAIN-SUFFIX,cp4.cloudflare.com,\(policy)
+
+        # 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）
         DOMAIN-SUFFIX,openai.com,\(policy)
         DOMAIN-SUFFIX,chatgpt.com,\(policy)
+        DOMAIN-SUFFIX,oaistatic.com,\(policy)
+        DOMAIN-SUFFIX,oaiusercontent.com,\(policy)
+        DOMAIN-SUFFIX,google.com,\(policy)
+        DOMAIN-SUFFIX,googleapis.com,\(policy)
+        DOMAIN-SUFFIX,gstatic.com,\(policy)
         """
     }
 
-    private func exportSGModuleViaShareSheet() {
-        let outURL = fm.temporaryDirectory.appendingPathComponent("Erosion-AppleIntelligence-CN.sgmodule")
+    private func buildStashOverrideContent() -> String {
+        let policy = sanitizedPolicy
+        return """
+        name: "Erosion 国行 Apple 智能与来电询问分流"
+        desc: "保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、定位准入与视觉智能置顶分流至 \(policy)（请确保所选美区节点已开启 udp: true）。"
+
+        dns:
+          fake-ip-filter:
+            - "guzzoni.apple.com"
+            - "+.guzzoni.apple.com"
+            - "+.siri.apple.com"
+            - "dejavu.apple.com"
+            - "sequoia.apple.com"
+            - "+.smoot.apple.com"
+            - "+.push.apple.com"
+
+        rules:
+          # 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）
+          - DOMAIN-SUFFIX,guzzoni.apple.com,DIRECT
+          - DOMAIN-SUFFIX,siri.apple.com,DIRECT
+          - DOMAIN,dejavu.apple.com,DIRECT
+          - DOMAIN,sequoia.apple.com,DIRECT
+          - DOMAIN-SUFFIX,smoot.apple.com,DIRECT
+
+          # 2. Apple Intelligence 区域定位校验与 PCC 隐私云计算中继（置顶防 GEOSITE,apple,DIRECT 抢行）
+          - DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
+          - DOMAIN-SUFFIX,apple-relay.apple.com,\(policy)
+          - DOMAIN-SUFFIX,apple-relay.cloudflare.com,\(policy)
+          - DOMAIN-SUFFIX,apple-relay.fastly-edge.com,\(policy)
+          - DOMAIN-SUFFIX,apple-relay.akamaized.net,\(policy)
+          - DOMAIN-SUFFIX,cp4.cloudflare.com,\(policy)
+
+          # 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）
+          - DOMAIN-SUFFIX,openai.com,\(policy)
+          - DOMAIN-SUFFIX,chatgpt.com,\(policy)
+          - DOMAIN-SUFFIX,oaistatic.com,\(policy)
+          - DOMAIN-SUFFIX,oaiusercontent.com,\(policy)
+          - DOMAIN-SUFFIX,google.com,\(policy)
+          - DOMAIN-SUFFIX,googleapis.com,\(policy)
+          - DOMAIN-SUFFIX,gstatic.com,\(policy)
+        """
+    }
+
+    private func exportRuleFileViaShareSheet() {
+        let fileName = (ruleFormat == .stashOverride)
+            ? "Erosion-AppleIntelligence-CN.stoverride"
+            : "Erosion-AppleIntelligence-CN.sgmodule"
+        let outURL = fm.temporaryDirectory.appendingPathComponent(fileName)
         do {
             try? fm.removeItem(at: outURL)
-            try buildSGModuleContent().write(to: outURL, atomically: true, encoding: .utf8)
+            try currentRuleContent().write(to: outURL, atomically: true, encoding: .utf8)
             Haptic.shared.play(.soft)
             presentShareSheet(with: outURL)
         } catch {
-            Alertinator.shared.alert(title: "导出分流模块失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: "导出分流文件失败！", body: error.localizedDescription)
         }
     }
 
@@ -388,6 +488,14 @@ struct AppGroupHubView: View {
 
             DispatchQueue.main.async {
                 self.proxyGroups = foundProxies
+                if !self.hasAutoSelectedFormat {
+                    self.hasAutoSelectedFormat = true
+                    let hasSurge = foundProxies.contains { $0.groupID.hasPrefix("group.com.nssurge.inc.surge-ios") }
+                    let hasStash = foundProxies.contains { $0.groupID == "group.ws.stash.app" }
+                    if hasStash && !hasSurge {
+                        self.ruleFormat = .stashOverride
+                    }
+                }
                 self.safariBookmarksDBPath = foundSafariDB
                 self.bookmarks = extractedBookmarks
                 self.scanSummary = "共扫描 \(groupPaths.count) 个共享组容器 · 识别 \(foundProxies.count) 个代理工具与 \(extractedBookmarks.count) 条 Safari 书签"

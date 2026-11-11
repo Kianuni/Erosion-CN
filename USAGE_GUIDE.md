@@ -15,7 +15,7 @@
 
 ## 二、签名与安装说明
 
-1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.8.1_zh-Hans.ipa`**。
+1. 在 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 **`Erosion_v0.8.2_zh-Hans.ipa`**。
 2. 使用 **SideStore / AltStore / Feather / Sideloadly / Impactor** 配合个人 Apple ID 或带 App Group 权限的开发者证书签名安装：
    - 应用内置了运行时权限自动识别机制，可自动匹配签名工具重写后的 `group.*` 容器标识；
    - 升级新版本时推荐直接**覆盖安装**；同时 `v0.8.0+` 已新增**系统级安全金库双重原厂备份**（带 `SHA-256` 摘要校验），即使因自签证书过期卸载重装应用，首次打开时也会自动从系统金库无损找回最初的原厂备份（同时支持在 `高级设置 → 导入外部原始备份` 手动导入留底的 `.plist`）。
