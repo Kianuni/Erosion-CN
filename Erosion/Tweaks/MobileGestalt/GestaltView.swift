@@ -186,13 +186,38 @@ struct GestaltView: View {
                     if showRegionTweak || mgOverrideGates || store.mgRegionRestrictionsBinding().wrappedValue {
                         PlainToggle("解除地区限制（国行 AI / 美版 LL/A）", isOn: store.mgRegionRestrictionsBinding())
                         if store.mgRegionRestrictionsBinding().wrappedValue {
-                            HStack {
-                                Text("美版监管型号")
-                                Spacer()
-                                TextField("如 A3473", text: store.mgRegModelBinding())
-                                    .multilineTextAlignment(.trailing)
-                                    .textInputAutocapitalization(.characters)
-                                    .autocorrectionDisabled()
+                            HStack(spacing: 10) {
+                                Picker("修改模式", selection: store.mgRegionUnlockModeBinding()) {
+                                    Text("完整美版 LL + LL/A").tag(MGRegionUnlockMode.fullUS)
+                                    Text("仅改区域代码 LL（保留 CH/A 后缀与双卡兼容）").tag(MGRegionUnlockMode.regionCodeOnly)
+                                }
+                                Button {
+                                    Alertinator.shared.alert(title: "地区修改模式说明", body: MGMsg.regionModeInfo)
+                                } label: {
+                                    Image(systemName: "info.circle")
+                                        .frame(width: 24, height: 22)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if store.currentRegionUnlockMode == .fullUS {
+                                HStack {
+                                    Text("美版监管型号")
+                                    Spacer()
+                                    TextField("如 A3473", text: store.mgRegModelBinding())
+                                        .multilineTextAlignment(.trailing)
+                                        .textInputAutocapitalization(.characters)
+                                        .autocorrectionDisabled()
+                                }
+                            } else {
+                                let keptSuffix = store.strVal(forKey: MGKey.regionSysconfig)
+                                let keptModel = store.strVal(forKey: MGKey.regModelNumber)
+                                HStack {
+                                    Text("保留销售后缀与型号")
+                                    Spacer()
+                                    Text("\(keptSuffix.isEmpty ? "原厂" : keptSuffix) · \(keptModel.isEmpty ? "原厂" : keptModel)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -580,7 +605,7 @@ struct GestaltView: View {
                         PlainToggle("启用台前调度 (Stage Manager)", isOn: store.mgKeyBinding([MGKey.stageMgr]))
                         if !machineName().contains("iPad") {
                             PlainToggle("启用 iPadOS 界面与分屏（已由防白苹果护栏永久禁用）", infoType: .warning, infoMessage: MGMsg.ipadOS, isOn: store.mgTrollPadBinding())
-                                .disabled(true)
+                                .disabled(!store.mgTrollPadBinding().wrappedValue)
                         }
                     } header: {
                         HeaderLabel("iPadOS 多任务特性", symbol: "ipad")
@@ -1038,6 +1063,13 @@ struct GestaltView: View {
             }
             mgBaselineDict = parsedBaseline
             MGCacheDataCoordinator.shared.recordBaselineIfNeeded(liveDict: currentDict, savedOriginalDict: ogDict)
+            if !showRegionTweak,
+               case .success((let layout, let curData)) = MGCacheDataCoordinator.shared.resolveValidated(for: currentDict, checkWapiSlot: true) {
+                let origFlags = MGCacheDataCoordinator.shared.originalFlags(for: layout, savedOriginalDict: ogDict)
+                if origFlags?.greenTea == true || origFlags?.wapi == true || (layout.wapiOffset.map { curData[$0] == 1 } ?? false) {
+                    showRegionTweak = true
+                }
+            }
             switch MGCacheDataCoordinator.shared.resolveValidated(for: currentDict) {
             case .success((let layout, _)):
                 let wapiDesc = layout.wapiOffset.map { String(format: "0x%X", $0) } ?? "N/A"

@@ -334,6 +334,9 @@ func mgDetectSuspectedThirdPartyModification(in dict: NSDictionary) -> String? {
        plistProd != kernelMachine {
         return "检测到机型标识符 (\(plistProd)) 与内核真实硬件型号 (\(kernelMachine)) 不符（可能曾开启机型伪装）"
     }
+    if (extra[MGKey.intInstall] as? NSNumber)?.intValue == 1 || (extra[MGKey.intBuild] as? NSNumber)?.intValue == 1 {
+        return "检测到内部安装模式 (InternalInstall / InternalBuild) 处于开启状态（说明安装本应用前设备曾被其他工具修改，与 Apple 智能互斥；现在你可直接关闭对应开关清除该残留）"
+    }
     let regCode = extra[MGKey.regionCode] as? String ?? ""
     if regCode == "LL",
        case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: dict, checkWapiSlot: true),
@@ -485,6 +488,7 @@ func mgResetLocalTweakPreferences() {
     }
     ud.set("", forKey: "mgDeviceName")
     ud.set(false, forKey: "mgOverrideGates")
+    ud.removeObject(forKey: MGRegionUnlockMode.defaultsKey)
 }
 
 func mgExecuteCleanCacheRebuild(alsoResetConfigAndKeypad: Bool = false) -> Result<Void, Error> {
@@ -889,6 +893,35 @@ func usRegulatoryModelNumber(productType: String, originalRegModel: String = "")
     ]
     
     return productTypeMap[productType]
+}
+
+/// Maps Mainland China hardware ProductType back to factory Mainland China (CH/A) RegulatoryModelNumber
+/// when OriginalGestalt.plist was previously polluted with a US regulatory model by an external tool.
+func chinaRegulatoryModelNumber(productType: String) -> String? {
+    let chinaMap: [String: String] = [
+        // iPhone 15 Series
+        "iPhone15,4": "A3092",
+        "iPhone15,5": "A3096",
+        "iPhone16,1": "A3104",
+        "iPhone16,2": "A3108",
+        // iPhone 16 / 16e Series
+        "iPhone17,1": "A3294",
+        "iPhone17,2": "A3297",
+        "iPhone17,3": "A3288",
+        "iPhone17,4": "A3291",
+        "iPhone17,5": "A3410",
+        // iPhone 17 / Air / 17e Series
+        "iPhone18,1": "A3523",
+        "iPhone18,2": "A3526",
+        "iPhone18,3": "A3520",
+        "iPhone18,4": "A3518",
+        "iPhone18,5": "A3635",
+        // iPhone 18 / Duo Series
+        "iPhone19,2": "A3715", "iPhone19,6": "A3715",
+        "iPhone19,3": "A3718", "iPhone19,7": "A3718",
+        "iPhone19,4": "A3721", "iPhone19,8": "A3721"
+    ]
+    return chinaMap[productType]
 }
 
 // device info getters

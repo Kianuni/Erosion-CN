@@ -19,9 +19,18 @@ enum MGURL {
     static let systemVaultSHA256URL = URL(fileURLWithPath: "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/.erosion_factory_vault.sha256")
 }
 
+enum MGRegionUnlockMode: String, CaseIterable, Identifiable {
+    case fullUS = "full_us"
+    case regionCodeOnly = "ll_only"
+
+    static let defaultsKey = "mgRegionUnlockMode"
+    var id: String { rawValue }
+}
+
 enum MGMsg {
     // warnings
-    static let region = "开启后将自动把销售地区改为美版 (LL / LL/A) 并映射对应的美版监管型号 (Axxxx)，用于解锁国行/特定地区受限功能（如完整海外版 Apple 智能 + ChatGPT、快门静音等；注：台湾旗帜在简体中文系统字体下仍由 CoreText 拦截）。请遵守当地法律法规并自行承担使用风险。"
+    static let region = "开启后默认把销售地区改为完整美版 (LL + LL/A) 并映射对应美版监管型号 (Axxxx)；你也可在下方子选项切换为「仅改区域代码 LL（保留 CH/A 后缀与双卡兼容）」。请遵守当地法律法规并自行承担使用风险。"
+    static let regionModeInfo = "【地区修改模式细化说明】\n\n1. 完整美版 LL + LL/A（默认）：\n同时将区域代码改为 LL、系统销售地区改为 LL/A，并自动填入对应的美版监管型号 (Axxxx)，跨区域受限特性（海外版 Apple 智能、快门静音、健康区域特性等）一致性最完整。\n\n2. 仅改区域代码 LL（保留 CH/A 后缀与双卡兼容）：\n仅将区域代码 (RegionCode) 改为 LL，完整保留原机的销售地区后缀（如 CH/A）与原厂监管型号。既可满足基础 Apple 智能准入、让「设置 -> 关于本机」型号末尾继续显示 CH/A，也能避免国行双实体卡槽 + eSIM 机型（如 18 Pro / Pro Max）因映射无卡槽美版型号引发基带卡槽冲突。"
     static let ipadOS = "如果你当前设置了字母数字混合锁屏密码，请切勿开启此项！开启后也切勿关闭“在台前调度中显示程序坞”，否则会导致设备软砖（白苹果循环）。启用 iPadOS 界面后可能出现界面错位、部分应用不兼容等问题。"
     static let support = "请提前备份重要数据！如果某项修改未按预期生效，请勿向官方仓库提交支持请求。许多功能同时受限于设备硬件与 Apple 服务器策略，所有修改均需自行承担风险。"
     static let mgReset = "重置 MobileGestalt 将删除系统原始缓存文件并让系统在重启时重新生成。这有助于彻底清除无法还原的修改，但存在极低概率引发异常，请谨慎操作。"
@@ -249,16 +258,30 @@ final class GestaltStore: ObservableObject {
             self.cacheExtra.removeObject(forKey: key)
         }
     }
+
+    func disableBooleanExtraKey(_ key: String, enableValue: Int = 1) {
+        if let ogVal = originalCacheExtraValue(forKey: key) {
+            // If OriginalGestalt.plist was captured on an already-polluted system (e.g. another tool injected `1`),
+            // strip the polluted key instead of restoring `1` so the user can turn the switch off directly.
+            if let ogNum = ogVal as? NSNumber, ogNum.intValue == enableValue {
+                self.cacheExtra.removeObject(forKey: key)
+            } else {
+                self.cacheExtra[key] = ogVal
+            }
+        } else {
+            self.cacheExtra.removeObject(forKey: key)
+        }
+    }
     
     // MARK: actions
-    func mgPullKeys(_ keys: [String]) {
+    func mgPullKeys(_ keys: [String], enableValue: Int = 1) {
         for key in keys {
-            restoreOrRemoveKey(key)
+            disableBooleanExtraKey(key, enableValue: enableValue)
         }
     }
     
     func isKeyEnabled(_ key: String, enableValue: Int = 1) -> Bool {
-        if let value = self.cacheExtra[key] as? Int, value == enableValue {
+        if let num = self.cacheExtra[key] as? NSNumber, num.intValue == enableValue {
             return true
         }
         if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict),
@@ -297,7 +320,7 @@ final class GestaltStore: ObservableObject {
                 if enabled {
                     self.cacheExtra[key] = enableValue
                 } else {
-                    self.restoreOrRemoveKey(key)
+                    self.disableBooleanExtraKey(key, enableValue: enableValue)
                 }
             }
             // Dual-write CacheData slot if this key also has a valid boolean slot in CacheData
@@ -330,11 +353,10 @@ final class GestaltStore: ObservableObject {
     
     func mgTrollPadBinding() -> Binding<Bool> {
         return Binding(get: {
-            guard let firstKey = MGKey.ipadosCacheEx.first,
-                  let value = self.cacheExtra[firstKey] as? Int else {
+            guard let firstKey = MGKey.ipadosCacheEx.first else {
                 return false
             }
-            return value == 1
+            return (self.cacheExtra[firstKey] as? NSNumber)?.intValue == 1
         }, set: { enabled in
             if enabled {
                 Alertinator.shared.alert(
@@ -344,56 +366,155 @@ final class GestaltStore: ObservableObject {
             } else {
                 self.objectWillChange.send()
                 for key in MGKey.ipadosCacheEx {
-                    self.restoreOrRemoveKey(key)
+                    self.disableBooleanExtraKey(key, enableValue: 1)
                 }
             }
         })
     }
     
+    var preferredRegionUnlockMode: MGRegionUnlockMode {
+        get {
+            let raw = UserDefaults.standard.string(forKey: MGRegionUnlockMode.defaultsKey) ?? MGRegionUnlockMode.fullUS.rawValue
+            return MGRegionUnlockMode(rawValue: raw) ?? .fullUS
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: MGRegionUnlockMode.defaultsKey)
+        }
+    }
+
+    var currentRegionUnlockMode: MGRegionUnlockMode {
+        if (self.cacheExtra[MGKey.regionCode] as? String) == "LL" {
+            return ((self.cacheExtra[MGKey.regionSysconfig] as? String) == "LL/A") ? .fullUS : .regionCodeOnly
+        }
+        return preferredRegionUnlockMode
+    }
+
+    func isConfirmedChinaHardwareFromCacheData() -> Bool {
+        let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
+        if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict, checkWapiSlot: true) {
+            if let origFlags = MGCacheDataCoordinator.shared.originalFlags(for: layout, savedOriginalDict: savedOrig) {
+                if origFlags.greenTea || origFlags.wapi == true {
+                    return true
+                }
+            }
+            if let wOff = layout.wapiOffset, data[wOff] == 1 {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func restoreNonUSRegionSysconfig() {
+        if let ogSys = originalCacheExtraValue(forKey: MGKey.regionSysconfig) as? String, !ogSys.isEmpty {
+            if ogSys == "LL/A" && isConfirmedChinaHardwareFromCacheData() {
+                self.cacheExtra[MGKey.regionSysconfig] = "CH/A"
+            } else {
+                self.cacheExtra[MGKey.regionSysconfig] = ogSys
+            }
+        } else if isConfirmedChinaHardwareFromCacheData() {
+            self.cacheExtra[MGKey.regionSysconfig] = "CH/A"
+        } else {
+            self.cacheExtra.removeObject(forKey: MGKey.regionSysconfig)
+        }
+    }
+
+    private func restoreNonUSRegulatoryModel() {
+        let prodType = originalHardwareProductType()
+        if let ogReg = originalCacheExtraValue(forKey: MGKey.regModelNumber) as? String, !ogReg.isEmpty {
+            if let usModel = usRegulatoryModelNumber(productType: prodType, originalRegModel: ""),
+               ogReg == usModel,
+               isConfirmedChinaHardwareFromCacheData(),
+               let cnModel = chinaRegulatoryModelNumber(productType: prodType) {
+                self.cacheExtra[MGKey.regModelNumber] = cnModel
+            } else {
+                self.cacheExtra[MGKey.regModelNumber] = ogReg
+            }
+        } else if isConfirmedChinaHardwareFromCacheData(),
+                  let cnModel = chinaRegulatoryModelNumber(productType: prodType) {
+            self.cacheExtra[MGKey.regModelNumber] = cnModel
+        } else {
+            self.cacheExtra.removeObject(forKey: MGKey.regModelNumber)
+        }
+    }
+
     func mgRegionRestrictionsBinding() -> Binding<Bool> {
         return Binding<Bool>(
             get: {
-                return self.cacheExtra[MGKey.regionCode] as? String == "LL" &&
-                    self.cacheExtra[MGKey.regionSysconfig] as? String == "LL/A"
+                return self.cacheExtra[MGKey.regionCode] as? String == "LL"
             },
             set: { enabled in
                 self.objectWillChange.send()
                 if enabled {
                     Alertinator.shared.alert(title: "解除地区限制提示", body: MGMsg.region)
-                    self.applyUSRegionAndRegulatoryModel()
+                    self.applyRegionUnlock(mode: self.preferredRegionUnlockMode)
                 } else {
-                    self.restoreOrRemoveKey(MGKey.regionCode)
+                    if let ogCode = self.originalCacheExtraValue(forKey: MGKey.regionCode) as? String, !ogCode.isEmpty {
+                        if ogCode == "LL" && self.isConfirmedChinaHardwareFromCacheData() {
+                            self.cacheExtra[MGKey.regionCode] = "CH"
+                        } else {
+                            self.cacheExtra[MGKey.regionCode] = ogCode
+                        }
+                    } else if self.isConfirmedChinaHardwareFromCacheData() {
+                        self.cacheExtra[MGKey.regionCode] = "CH"
+                    } else {
+                        self.cacheExtra.removeObject(forKey: MGKey.regionCode)
+                    }
                     if raveSupported() {
                         self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
                     } else {
                         self.restoreOrRemoveKey(MGKey.regionInfo)
                     }
-                    self.restoreOrRemoveKey(MGKey.regionSysconfig)
-                    self.restoreOrRemoveKey(MGKey.regModelNumber)
+                    self.restoreNonUSRegionSysconfig()
+                    self.restoreNonUSRegulatoryModel()
                 }
             }
         )
     }
 
-    func applyUSRegionAndRegulatoryModel() {
+    func mgRegionUnlockModeBinding() -> Binding<MGRegionUnlockMode> {
+        return Binding<MGRegionUnlockMode>(
+            get: {
+                return self.currentRegionUnlockMode
+            },
+            set: { newMode in
+                self.objectWillChange.send()
+                self.preferredRegionUnlockMode = newMode
+                if (self.cacheExtra[MGKey.regionCode] as? String) == "LL" {
+                    self.applyRegionUnlock(mode: newMode)
+                }
+            }
+        )
+    }
+
+    func applyRegionUnlock(mode: MGRegionUnlockMode) {
         self.cacheExtra[MGKey.regionCode] = "LL"
-        self.cacheExtra[MGKey.regionSysconfig] = "LL/A"
-        // Only write MGKey.regionInfo (zHeENZu+wbg7PUprwNwBWg) on iOS < 27 if present in factory CacheExtra.
-        // On iOS 27 (raveSupported()), zHeENZu+wbg7PUprwNwBWg has slot == -1 (non-cached);
-        // even if a previous third-party tool polluted OriginalGestalt.plist with it, always strip it on iOS 27
-        // so boot-time mobilegestaltd validation never invalidates or resets the cache.
-        if !raveSupported(), self.originalCacheExtraValue(forKey: MGKey.regionInfo) != nil {
-            self.cacheExtra[MGKey.regionInfo] = "LL/A"
-        } else {
-            self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
+        switch mode {
+        case .fullUS:
+            self.cacheExtra[MGKey.regionSysconfig] = "LL/A"
+            if !raveSupported(), self.originalCacheExtraValue(forKey: MGKey.regionInfo) != nil {
+                self.cacheExtra[MGKey.regionInfo] = "LL/A"
+            } else {
+                self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
+            }
+            // Always prefer true factory hardware ProductType so model spoofing never mismatches US A-model number
+            let prodType = originalHardwareProductType()
+            let ogRegModel = (self.originalCacheExtraValue(forKey: MGKey.regModelNumber) as? String) ?? (self.cacheExtra[MGKey.regModelNumber] as? String) ?? ""
+            if let usModel = usRegulatoryModelNumber(productType: prodType, originalRegModel: ogRegModel) {
+                self.cacheExtra[MGKey.regModelNumber] = usModel
+            }
+        case .regionCodeOnly:
+            if raveSupported() {
+                self.cacheExtra.removeObject(forKey: MGKey.regionInfo)
+            } else {
+                self.restoreOrRemoveKey(MGKey.regionInfo)
+            }
+            self.restoreNonUSRegionSysconfig()
+            self.restoreNonUSRegulatoryModel()
         }
-        
-        // Always prefer true factory hardware ProductType so model spoofing never mismatches US A-model number
-        let prodType = originalHardwareProductType()
-        let ogRegModel = (self.originalCacheExtraValue(forKey: MGKey.regModelNumber) as? String) ?? (self.cacheExtra[MGKey.regModelNumber] as? String) ?? ""
-        if let usModel = usRegulatoryModelNumber(productType: prodType, originalRegModel: ogRegModel) {
-            self.cacheExtra[MGKey.regModelNumber] = usModel
-        }
+    }
+
+    func applyUSRegionAndRegulatoryModel() {
+        applyRegionUnlock(mode: .fullUS)
     }
     
     func mgRegModelBinding() -> Binding<String> {
@@ -624,8 +745,8 @@ final class GestaltStore: ObservableObject {
 
     func applyAppleIntelligenceOneClickFix() {
         self.objectWillChange.send()
-        // 1. Set US LL / LL/A region and matching US RegulatoryModelNumber (Axxxx)
-        self.applyUSRegionAndRegulatoryModel()
+        // 1. Apply user's selected region unlock mode (defaults to full US LL + LL/A + Axxxx; respects LL-only mode if selected)
+        self.applyRegionUnlock(mode: self.currentRegionUnlockMode)
         // 2. Clear conflicting InternalInstall / InternalBuild flags
         self.mgPullKeys([MGKey.intInstall, MGKey.intBuild])
         // 3. Unlock Mainland China green-tea / not-green-tea slots if originally restricted

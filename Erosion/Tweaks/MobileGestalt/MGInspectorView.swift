@@ -35,15 +35,18 @@ struct AppleIntelligenceCheckupCard: View {
         let stagedSysconfig = (store.cacheExtra[MGKey.regionSysconfig] as? String) ?? ""
         let ogRegCode = (store.originalCacheExtraValue(forKey: MGKey.regionCode) as? String) ?? stagedRegCode
         let isNativeNonRestrictedRegion = !ogRegCode.isEmpty && ogRegCode != "CH" && ogRegCode != "ZA"
-        let regionReady = (stagedRegCode == "LL" && stagedSysconfig == "LL/A") || (isNativeNonRestrictedRegion && stagedRegCode != "CH")
+        let isLLOnlyMode = (stagedRegCode == "LL" && stagedSysconfig != "LL/A")
+        let regionReady = (stagedRegCode == "LL") || (isNativeNonRestrictedRegion && stagedRegCode != "CH")
         let liveRegion = mgQueryLiveString(forKey: MGKey.regionCode) ?? ""
         let regionLiveOK = !liveRegion.isEmpty && liveRegion != "CH" && liveRegion != "ZA"
 
-        // 2. US RegulatoryModelNumber (97JDvERpVwO+GHtthIh7hA)
+        // 2. US RegulatoryModelNumber (97JDvERpVwO+GHtthIh7hA) or Kept Factory Model in LL-Only Mode
         let stagedRegModel = (store.cacheExtra[MGKey.regModelNumber] as? String) ?? ""
         let ogRegModel = (store.originalCacheExtraValue(forKey: MGKey.regModelNumber) as? String) ?? ""
         let usTarget = expectedUSModel
-        let regModelReady = (!stagedRegModel.isEmpty && (stagedRegModel == usTarget || (stagedRegModel.hasPrefix("A") && stagedRegModel != ogRegModel))) || (isNativeNonRestrictedRegion && !stagedRegModel.isEmpty)
+        let regModelReady = isLLOnlyMode
+            ? !stagedRegModel.isEmpty
+            : ((!stagedRegModel.isEmpty && (stagedRegModel == usTarget || (stagedRegModel.hasPrefix("A") && stagedRegModel != ogRegModel))) || (isNativeNonRestrictedRegion && !stagedRegModel.isEmpty))
         let liveRegModel = mgQueryLiveString(forKey: MGKey.regModelNumber) ?? ""
         let regModelLiveOK = !liveRegModel.isEmpty && (liveRegModel == stagedRegModel || isNativeNonRestrictedRegion)
 
@@ -96,14 +99,14 @@ struct AppleIntelligenceCheckupCard: View {
         return [
             FactorItem(
                 id: "region",
-                title: "1. 销售地区标识 (LL / LL/A)",
+                title: isLLOnlyMode ? "1. 区域代码标识 (仅 LL 兼容模式)" : "1. 销售地区标识 (LL / LL/A)",
                 detail: "配置：\(stagedRegCode.isEmpty ? "未设置" : stagedRegCode) / \(stagedSysconfig.isEmpty ? "未设置" : stagedSysconfig) · 真机实时：\(liveRegion.isEmpty ? "未知" : liveRegion)",
                 isReady: regionReady,
                 isLiveActive: regionLiveOK
             ),
             FactorItem(
                 id: "regmodel",
-                title: "2. 美版监管型号 (\(usTarget))",
+                title: isLLOnlyMode ? "2. 监管型号（保留原厂 \(stagedRegModel.isEmpty ? "默认" : stagedRegModel)）" : "2. 美版监管型号 (\(usTarget))",
                 detail: "配置：\(stagedRegModel.isEmpty ? "未设置" : stagedRegModel) · 真机实时：\(liveRegModel.isEmpty ? "未知" : liveRegModel)",
                 isReady: regModelReady,
                 isLiveActive: regModelLiveOK
