@@ -12,9 +12,9 @@ enum MGCustomValueType: String, Codable, CaseIterable {
     
     var label: String {
         switch self {
-        case .int: return "整数 (Int)"
-        case .string: return "字符串 (String)"
-        case .bool: return "布尔值 (Bool)"
+        case .int: return L("整数 (Int)")
+        case .string: return L("字符串 (String)")
+        case .bool: return L("布尔值 (Bool)")
         }
     }
 }
@@ -98,16 +98,16 @@ struct CustomKeyView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 case .bool:
-                    Toggle(cstkBoolValue ? "开启 (True)" : "关闭 (False)", isOn: $cstkBoolValue)
+                    Toggle(cstkBoolValue ? L("开启 (True)") : L("关闭 (False)"), isOn: $cstkBoolValue)
                 }
                 Button("添加自定义键值") {
                     let trimmedKey = cstkKey.trimmingCharacters(in: .whitespacesAndNewlines)
                     if trimmedKey.isEmpty || (cstkType == .int && cstkValue == nil) {
-                        Alertinator.shared.alert(title: "键名或键值无效！", body: "请完整填写键名与对应键值后再试。")
+                        Alertinator.shared.alert(title: L("键名或键值无效！"), body: L("请完整填写键名与对应键值后再试。"))
                     } else if let blockedReason = mgIsDangerousCacheExtraKey(trimmedKey) {
-                        Alertinator.shared.alert(title: "已拦截高危或非缓存键名！", body: "\(blockedReason)\n\n为防止触发系统启动校验失败或射频异常，安全护栏禁止在 CacheExtra 中手动注入此键。")
+                        Alertinator.shared.alert(title: L("已拦截高危或非缓存键名！"), body: L("\(blockedReason)\n\n为防止触发系统启动校验失败或射频异常，安全护栏禁止在 CacheExtra 中手动注入此键。"))
                     } else if customKeys.contains(where: { $0.key == trimmedKey }) {
-                        Alertinator.shared.alert(title: "该键名已存在！", body: "请在下方列表中点击对应键名进行修改。")
+                        Alertinator.shared.alert(title: L("该键名已存在！"), body: L("请在下方列表中点击对应键名进行修改。"))
                     } else {
                         customKeys.append(
                             MGCustomKey(
@@ -124,7 +124,7 @@ struct CustomKeyView: View {
                     }
                 }
             } header: {
-                HeaderLabel("新增自定义键", symbol: "plus")
+                HeaderLabel(L("新增自定义键"), symbol: "plus")
             }
             
             Section {
@@ -150,7 +150,7 @@ struct CustomKeyView: View {
                 }
             } header: {
                 if !customKeys.isEmpty {
-                    HeaderLabel("已添加列表（左滑删除，点击编辑）", symbol: "list.bullet")
+                    HeaderLabel(L("已添加列表（左滑删除，点击编辑）"), symbol: "list.bullet")
                 }
             }
         }
@@ -203,7 +203,7 @@ struct CustomKeyView: View {
                             .autocorrectionDisabled()
                             .modifier(TextFieldBackground())
                     case .bool:
-                        Toggle(item.boolValue ? "开启 (True)" : "关闭 (False)", isOn: $item.boolValue)
+                        Toggle(item.boolValue ? L("开启 (True)") : L("关闭 (False)"), isOn: $item.boolValue)
                             .modifier(TextFieldBackground())
                     }
                 }

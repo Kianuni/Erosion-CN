@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
+    @ObservedObject private var langMgr = LocalizationManager.shared
     @AppStorage("autoRespring") var autoRespring = false
     @AppStorage(CSStoreEngine.fastScanDefaultsKey) var useCSStoreFastScan = true
     
@@ -16,6 +17,11 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
+                    Picker("界面语言", selection: $langMgr.languageModeRaw) {
+                        Text("跟随系统").tag("system")
+                        Text("简体中文").tag("zh-Hans")
+                        Text("English").tag("en")
+                    }
                     Toggle("应用修改后自动注销", isOn: $autoRespring)
                     PlainToggle(
                         "[测试特性] CSStore2 极速容器映射引擎",
@@ -77,5 +83,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .id(langMgr.refreshID)
+        .environment(\.locale, langMgr.effectiveLocale)
     }
 }

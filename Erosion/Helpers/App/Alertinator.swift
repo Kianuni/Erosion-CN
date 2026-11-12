@@ -18,9 +18,9 @@ public class Alertinator {
     
     public func alert(title: String, body: String, showCancel: Bool = true) {
         Task { @MainActor in
-            let alert = UIAlertController(title: title, message: body, preferredStyle: .alert)
+            let alert = UIAlertController(title: title.loc, message: body.loc, preferredStyle: .alert)
             if showCancel {
-                alert.addAction(.init(title: "确定", style: .cancel) { _ in
+                alert.addAction(.init(title: L("确定"), style: .cancel) { _ in
                     self.scheduleNextDrain()
                 })
             }
@@ -31,13 +31,13 @@ public class Alertinator {
     
     public func alert(title: String, body: String, showCancel: Bool = true, actionLabel: String = "确定", action: @escaping () -> Void) {
         Task { @MainActor in
-            let alert = UIAlertController(title: title, message: body, preferredStyle: .alert)
-            alert.addAction(.init(title: actionLabel, style: .default) { _ in
+            let alert = UIAlertController(title: title.loc, message: body.loc, preferredStyle: .alert)
+            alert.addAction(.init(title: actionLabel.loc, style: .default) { _ in
                 action()
                 self.scheduleNextDrain()
             })
             if showCancel {
-                alert.addAction(.init(title: "取消", style: .cancel) { _ in
+                alert.addAction(.init(title: L("取消"), style: .cancel) { _ in
                     self.scheduleNextDrain()
                 })
             }
@@ -48,24 +48,24 @@ public class Alertinator {
     
     public func prompt(title: String, placeholder: String = "", text: String = "", showCancel: Bool = true, completion: @escaping (String?) async -> Void) {
         Task { @MainActor in
-            let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+            let alert = UIAlertController(title: title.loc, message: nil, preferredStyle: .alert)
             alert.addTextField { field in
                 if !placeholder.isEmpty {
-                    field.placeholder = placeholder
+                    field.placeholder = placeholder.loc
                 }
                 if !text.isEmpty {
                     field.text = text
                 }
             }
             if showCancel {
-                alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+                alert.addAction(UIAlertAction(title: L("取消"), style: .cancel) { _ in
                     self.scheduleNextDrain()
                     Task {
                         await completion(nil)
                     }
                 })
             }
-            alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak alert] _ in
+            alert.addAction(UIAlertAction(title: L("确定"), style: .default) { [weak alert] _ in
                 let value = alert?.textFields?.first?.text
                 self.scheduleNextDrain()
                 Task {

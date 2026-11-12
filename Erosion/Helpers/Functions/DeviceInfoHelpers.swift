@@ -56,7 +56,7 @@ func buildNumber() -> String {
     if res == 0, let buildNum = String(validatingUTF8: versString) {
         return buildNum
     }
-    return "未知"
+    return L("未知")
 }
 
 func isPad() -> Bool {

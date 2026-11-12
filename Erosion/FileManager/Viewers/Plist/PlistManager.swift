@@ -269,14 +269,14 @@ enum PlistItemType: String, CaseIterable {
     
     var label: String {
         switch self {
-        case .string: return "字符串 (String)"
-        case .int: return "整数 (Integer)"
-        case .double: return "浮点数 (Double)"
-        case .bool: return "布尔值 (Boolean)"
-        case .data: return "二进制数据 (Data)"
-        case .dict: return "字典 (Dictionary)"
-        case .array: return "数组 (Array)"
-        default: return "未知"
+        case .string: return L("字符串 (String)")
+        case .int: return L("整数 (Integer)")
+        case .double: return L("浮点数 (Double)")
+        case .bool: return L("布尔值 (Boolean)")
+        case .data: return L("二进制数据 (Data)")
+        case .dict: return L("字典 (Dictionary)")
+        case .array: return L("数组 (Array)")
+        default: return L("未知")
         }
     }
 }

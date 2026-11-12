@@ -100,9 +100,9 @@ struct CacheCleanerView: View {
                             let selectedCount = filteredEntries.filter(\.isSelected).count
                             guard selectedCount > 0 else { return }
                             Alertinator.shared.alert(
-                                title: "确认清理所选应用缓存吗？",
-                                body: "将清理 \(selectedCount) 个应用容器内的 Library/Caches 与 tmp 临时碎片（预计释放 \(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes))）。\n\n安全承诺：绝不触碰 Documents、聊天记录数据库或登录配置。",
-                                actionLabel: "立即清理",
+                                title: L("确认清理所选应用缓存吗？"),
+                                body: L("将清理 \(selectedCount) 个应用容器内的 Library/Caches 与 tmp 临时碎片（预计释放 \(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes))）。\n\n安全承诺：绝不触碰 Documents、聊天记录数据库或登录配置。"),
+                                actionLabel: L("立即清理"),
                                 action: {
                                     cleanSelectedEntries()
                                 }
@@ -117,12 +117,12 @@ struct CacheCleanerView: View {
                 .padding(.vertical, 4)
 
                 PlainToggle(
-                    "显示系统组件容器 (com.apple.*)",
-                    subtitle: "默认包含第三方应用及 Safari 浏览器缓存",
+                    L("显示系统组件容器 (com.apple.*)"),
+                    subtitle: L("默认包含第三方应用及 Safari 浏览器缓存"),
                     isOn: $includeSystemContainers
                 )
             } header: {
-                HeaderLabel("空间释放概览", symbol: "chart.pie.fill")
+                HeaderLabel(L("空间释放概览"), symbol: "chart.pie.fill")
             } footer: {
                 Text("本工具仅清理各容器下的 Library/Caches、tmp 与 WebKit 网页缓存，保留目录本身与权限，100% 不影响应用聊天记录、账号登录态与用户文档。")
             }
@@ -131,7 +131,7 @@ struct CacheCleanerView: View {
                 if isScanning || isCleaning {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text(isCleaning ? "正在安全清理所选容器缓存..." : "正在扫描各应用容器缓存体积...")
+                        Text(isCleaning ? L("正在安全清理所选容器缓存...") : L("正在扫描各应用容器缓存体积..."))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)
@@ -190,10 +190,10 @@ struct CacheCleanerView: View {
                 }
             } header: {
                 HStack {
-                    HeaderLabel("容器缓存体积排行 (\(filteredEntries.count))", symbol: "trash.slash.fill")
+                    HeaderLabel(L("容器缓存体积排行 (\(filteredEntries.count))"), symbol: "trash.slash.fill")
                     Spacer()
                     if !filteredEntries.isEmpty {
-                        Button(filteredEntries.allSatisfy(\.isSelected) ? "取消全选" : "全选") {
+                        Button(filteredEntries.allSatisfy(\.isSelected) ? L("取消全选") : L("全选")) {
                             let target = !filteredEntries.allSatisfy(\.isSelected)
                             let visibleIDs = Set(filteredEntries.map(\.id))
                             for idx in entries.indices where visibleIDs.contains(entries[idx].id) {
@@ -305,8 +305,8 @@ struct CacheCleanerView: View {
                 isCleaning = false
                 Haptic.shared.play(.soft)
                 Alertinator.shared.alert(
-                    title: "清理完成！",
-                    body: "已安全清理「\(entry.displayTitle)」缓存，释放空间 \(AppContainerDirectoryHelper.formatBytes(freed))。"
+                    title: L("清理完成！"),
+                    body: L("已安全清理「\(entry.displayTitle)」缓存，释放空间 \(AppContainerDirectoryHelper.formatBytes(freed))。")
                 )
             }
         }
@@ -330,8 +330,8 @@ struct CacheCleanerView: View {
                 isCleaning = false
                 Haptic.shared.play(.soft)
                 Alertinator.shared.alert(
-                    title: "批量清理完成！",
-                    body: "已成功清理 \(cleanedIDs.count) 个应用的冗余缓存与临时文件，共释放 \(AppContainerDirectoryHelper.formatBytes(totalFreed)) 存储空间！"
+                    title: L("批量清理完成！"),
+                    body: L("已成功清理 \(cleanedIDs.count) 个应用的冗余缓存与临时文件，共释放 \(AppContainerDirectoryHelper.formatBytes(totalFreed)) 存储空间！")
                 )
             }
         }

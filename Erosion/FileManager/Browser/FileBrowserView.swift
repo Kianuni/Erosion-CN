@@ -17,11 +17,11 @@ enum FileSortMode: String, CaseIterable, Codable, Hashable {
     
     var label: String {
         switch self {
-        case .system: return "默认"
-        case .name: return "名称"
-        case .date: return "日期"
-        case .type: return "类型"
-        case .size: return "大小"
+        case .system: return L("默认")
+        case .name: return L("名称")
+        case .date: return L("日期")
+        case .type: return L("类型")
+        case .size: return L("大小")
         }
     }
 }
@@ -124,7 +124,7 @@ struct FileBrowserView: View {
                     if !isContainer {
                         Menu {
                             Button {
-                                Alertinator.shared.prompt(title: "请输入新文件名称（请附带文件扩展名）：", placeholder: "new.txt", completion: { name in
+                                Alertinator.shared.prompt(title: L("请输入新文件名称（请附带文件扩展名）："), placeholder: "new.txt", completion: { name in
                                     let name = name ?? ""
                                     if !name.isEmpty {
                                         do {
@@ -133,7 +133,7 @@ struct FileBrowserView: View {
                                             mgr.refreshFiles.toggle()
                                         } catch {
                                             print("(fm) failed to create file: \(error.localizedDescription)")
-                                            Alertinator.shared.alert(title: "新建文件失败！", body: Errors.checkLogs)
+                                            Alertinator.shared.alert(title: L("新建文件失败！"), body: Errors.checkLogs)
                                         }
                                     }
                                 })
@@ -142,7 +142,7 @@ struct FileBrowserView: View {
                             }
                             
                             Button {
-                                Alertinator.shared.prompt(title: "请输入新建 Plist 属性列表名称：", placeholder: "配置名称", completion: { name in
+                                Alertinator.shared.prompt(title: L("请输入新建 Plist 属性列表名称："), placeholder: L("配置名称"), completion: { name in
                                     let name = name ?? ""
                                     if !name.isEmpty {
                                         do {
@@ -152,7 +152,7 @@ struct FileBrowserView: View {
                                             mgr.refreshFiles.toggle()
                                         } catch {
                                             print("(fm) failed to create plist: \(error.localizedDescription)")
-                                            Alertinator.shared.alert(title: "新建 Plist 失败！", body: Errors.checkLogs)
+                                            Alertinator.shared.alert(title: L("新建 Plist 失败！"), body: Errors.checkLogs)
                                         }
                                     }
                                 })
@@ -161,7 +161,7 @@ struct FileBrowserView: View {
                             }
                             
                             Button {
-                                Alertinator.shared.prompt(title: "请输入新建文件夹名称：", placeholder: "新建文件夹", completion: { name in
+                                Alertinator.shared.prompt(title: L("请输入新建文件夹名称："), placeholder: L("新建文件夹"), completion: { name in
                                     let name = name ?? ""
                                     if !name.isEmpty {
                                         do {
@@ -169,7 +169,7 @@ struct FileBrowserView: View {
                                             mgr.refreshFiles.toggle()
                                         } catch {
                                             print("(fm) failed to create folder: \(error.localizedDescription)")
-                                            Alertinator.shared.alert(title: "新建文件夹失败！", body: Errors.checkLogs)
+                                            Alertinator.shared.alert(title: L("新建文件夹失败！"), body: Errors.checkLogs)
                                         }
                                     }
                                 })
@@ -178,7 +178,7 @@ struct FileBrowserView: View {
                             }
                             
                             Button {
-                                Alertinator.shared.prompt(title: "请输入符号链接指向的目标路径：", placeholder: "/path/to/dir", completion: { symPath in
+                                Alertinator.shared.prompt(title: L("请输入符号链接指向的目标路径："), placeholder: "/path/to/dir", completion: { symPath in
                                     let symPath = symPath ?? ""
                                     if !symPath.isEmpty {
                                         do {
@@ -186,7 +186,7 @@ struct FileBrowserView: View {
                                             mgr.refreshFiles.toggle()
                                         } catch {
                                             print("(fm) failed to create symlink: \(error.localizedDescription)")
-                                            Alertinator.shared.alert(title: "创建符号链接失败！", body: "\(error.localizedDescription)")
+                                            Alertinator.shared.alert(title: L("创建符号链接失败！"), body: "\(error.localizedDescription)")
                                         }
                                     }
                                 })
@@ -278,7 +278,7 @@ struct FileBrowserView: View {
                         loadFilesFromPath()
                     } else {
                         showFailure = true
-                        failMsg = "无权访问该目录。"
+                        failMsg = L("无权访问该目录。")
                     }
                 } else {
                     loadFilesFromPath()
@@ -355,7 +355,7 @@ struct FileBrowserView: View {
                 print("(fm) failed to load files from \(currentPath): \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     showFailure = true
-                    failMsg = "你可能没有查看此目录的权限，请前往主页查看运行日志了解详情。"
+                    failMsg = L("你可能没有查看此目录的权限，请前往主页查看运行日志了解详情。")
                     isLoading = false
                 }
             }
@@ -400,7 +400,7 @@ struct FileBrowserView: View {
                 
                 let newURL = path.appendingPathComponent(fileURL.lastPathComponent)
                 if newURL.lastPathComponent.lowercased() == "com.apple.mobilegestalt.plist" {
-                    Alertinator.shared.alert(title: "已拦截高危系统文件覆盖！", body: "禁止在文件浏览器中直接导入覆盖 com.apple.MobileGestalt.plist，请使用 MobileGestalt 专用模块。")
+                    Alertinator.shared.alert(title: L("已拦截高危系统文件覆盖！"), body: L("禁止在文件浏览器中直接导入覆盖 com.apple.MobileGestalt.plist，请使用 MobileGestalt 专用模块。"))
                     return
                 }
                 if fm.fileExists(atPath: newURL.path) {
@@ -414,11 +414,11 @@ struct FileBrowserView: View {
                 mgr.refreshFiles.toggle()
             } catch {
                 print("(fm) failed to import file: \(error.localizedDescription)")
-                Alertinator.shared.alert(title: "导入文件失败！", body: "\(error.localizedDescription)")
+                Alertinator.shared.alert(title: L("导入文件失败！"), body: "\(error.localizedDescription)")
             }
         case .failure(let error):
             print("(fm) failed to import file: \(error.localizedDescription)")
-            Alertinator.shared.alert(title: "导入文件失败！", body: "\(error.localizedDescription)")
+            Alertinator.shared.alert(title: L("导入文件失败！"), body: "\(error.localizedDescription)")
         }
     }
 }

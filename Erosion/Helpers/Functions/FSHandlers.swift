@@ -49,7 +49,7 @@ class FSHandlers {
 
         // [测试特性] Try MCM / LaunchServices CSStore2 fast container graph (<50ms) first
         if let fastPaths = CSStoreEngine.shared.containerPaths(forRoot: normKey), fastPaths.count >= 2 {
-            print("(fs) 已通过 CSStore2 极速映射获取 \(normKey) 下 \(fastPaths.count) 个容器路径")
+            print(L("(fs) 已通过 CSStore2 极速映射获取 \(normKey) 下 \(fastPaths.count) 个容器路径"))
             cacheLock.lock()
             dirPathsCache[normKey] = fastPaths
             cacheLock.unlock()
@@ -64,11 +64,11 @@ class FSHandlers {
             var baselineInfo = stat()
             if stat(baselineURL.path, &baselineInfo) == 0 {
                 baselineInode = baselineInfo.st_ino
-                print("(fs) 动态探测本机当前最大 Inode 基线: \(baselineInode)")
+                print(L("(fs) 动态探测本机当前最大 Inode 基线: \(baselineInode)"))
             }
             try? fm.removeItem(at: baselineURL)
         } catch {
-            print("(fs) 获取动态 Inode 基线失败，回退至预设上限: \(error.localizedDescription)")
+            print(L("(fs) 获取动态 Inode 基线失败，回退至预设上限: \(error.localizedDescription)"))
         }
 
         let userMax = UInt64(max(maxInode, 1_000_000))
@@ -80,9 +80,9 @@ class FSHandlers {
         } else {
             targetMaxInode = userMax
         }
-        print("(fs) 正在通过多线程 pathleak 枚举目录: \(normKey) (扫描上限: \(targetMaxInode), 本机最大 Inode: \(baselineInode))")
+        print(L("(fs) 正在通过多线程 pathleak 枚举目录: \(normKey) (扫描上限: \(targetMaxInode), 本机最大 Inode: \(baselineInode))"))
         let leakedPaths = pathleak(normKey, targetMaxInode) ?? []
-        print("(fs) pathleak 枚举完成，共找到 \(leakedPaths.count) 个容器路径")
+        print(L("(fs) pathleak 枚举完成，共找到 \(leakedPaths.count) 个容器路径"))
         if !leakedPaths.isEmpty {
             cacheLock.lock()
             dirPathsCache[normKey] = leakedPaths

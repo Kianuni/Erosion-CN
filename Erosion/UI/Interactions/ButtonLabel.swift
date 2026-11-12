@@ -35,7 +35,7 @@ struct ButtonLabel: View {
                         .frame(width: 22, height: 22, alignment: .center)
                 }
             }
-            Text(text)
+            Text(text.loc)
         }
         .font(.body.weight(.medium))
     }

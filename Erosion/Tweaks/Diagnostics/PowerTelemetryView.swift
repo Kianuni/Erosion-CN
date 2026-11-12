@@ -43,7 +43,7 @@ struct ThermalTelemetryEvent: Identifiable, Codable {
 
 struct PowerTelemetryView: View {
     @State private var isLoading = false
-    @State private var statusBanner: String = "点击右上角刷新按钮读取底层 Powerlog 快照遥测"
+    @State private var statusBanner: String = L("点击右上角刷新按钮读取底层 Powerlog 快照遥测")
     @State private var powerlogAccessible = false
     @State private var latestBattery: BatteryTelemetrySample?
     @State private var recentBatterySamples: [BatteryTelemetrySample] = []
@@ -86,7 +86,7 @@ struct PowerTelemetryView: View {
                     if isLoading {
                         ProgressView()
                     } else {
-                        Text(powerlogAccessible ? "✅ 已挂载只读快照" : "未挂载 / 受限")
+                        Text(powerlogAccessible ? L("✅ 已挂载只读快照") : L("未挂载 / 受限"))
                             .font(.caption.weight(.medium))
                             .foregroundStyle(powerlogAccessible ? Color.green : Color.secondary)
                     }
@@ -95,54 +95,54 @@ struct PowerTelemetryView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } header: {
-                HeaderLabel("实时芯片温控与数据源状态", symbol: "thermometer.medium")
+                HeaderLabel(L("实时芯片温控与数据源状态"), symbol: "thermometer.medium")
             }
 
             if let latest = latestBattery {
                 Section {
                     if let health = latest.trueHealthPercent {
                         metricRow(
-                            title: "物理真实电池健康度",
+                            title: L("物理真实电池健康度"),
                             value: String(format: "%.2f%%", health),
                             accent: health >= 85 ? .green : (health >= 78 ? .orange : .red)
                         )
                     }
                     if let raw = latest.rawMaxCapacitymAh {
-                        metricRow(title: "真实物理最大容量 (RawMaxCapacity)", value: "\(raw) mAh")
+                        metricRow(title: L("真实物理最大容量 (RawMaxCapacity)"), value: "\(raw) mAh")
                     }
                     if let nom = latest.nominalCapacitymAh {
-                        metricRow(title: "系统标称满充容量 (NominalCapacity)", value: "\(nom) mAh")
+                        metricRow(title: L("系统标称满充容量 (NominalCapacity)"), value: "\(nom) mAh")
                     }
                     if let des = latest.designCapacitymAh {
-                        metricRow(title: "原厂设计容量 (DesignCapacity)", value: "\(des) mAh")
+                        metricRow(title: L("原厂设计容量 (DesignCapacity)"), value: "\(des) mAh")
                     }
                     if let cyc = latest.cycleCount {
-                        metricRow(title: "精确完整循环次数 (CycleCount)", value: "\(cyc) 次")
+                        metricRow(title: L("精确完整循环次数 (CycleCount)"), value: L("\(cyc) 次"))
                     }
                     if let temp = latest.temperatureCelsius {
                         metricRow(
-                            title: "电芯物理传感器温度",
+                            title: L("电芯物理传感器温度"),
                             value: String(format: "%.1f °C", temp),
                             accent: temp >= 40 ? .red : (temp >= 36 ? .orange : .primary)
                         )
                     }
                     if let v = latest.voltagemV {
-                        metricRow(title: "电芯实时电压 (Voltage)", value: "\(v) mV (\(String(format: "%.2f V", Double(v) / 1000.0)))")
+                        metricRow(title: L("电芯实时电压 (Voltage)"), value: "\(v) mV (\(String(format: "%.2f V", Double(v) / 1000.0)))")
                     }
                     if let a = latest.amperagemA {
-                        let signHint = a >= 0 ? "充电输入" : "放电消耗"
-                        metricRow(title: "瞬时充放电电流 (\(signHint))", value: "\(a) mA")
+                        let signHint = a >= 0 ? L("充电输入") : L("放电消耗")
+                        metricRow(title: L("瞬时充放电电流 (\(signHint))"), value: "\(a) mA")
                     }
                     if let watts = latest.computedPowerWatts {
                         metricRow(
-                            title: "整机实时充放电功率",
+                            title: L("整机实时充放电功率"),
                             value: String(format: "%.2f W", abs(watts)),
                             accent: watts >= 0 ? .green : .blue
                         )
                     }
-                    metricRow(title: "最近快照采样时间", value: formatDate(latest.timestamp))
+                    metricRow(title: L("最近快照采样时间"), value: formatDate(latest.timestamp))
                 } header: {
-                    HeaderLabel("物理电芯全维度指标 [测试]", symbol: "battery.100percent.bolt")
+                    HeaderLabel(L("物理电芯全维度指标 [测试]"), symbol: "battery.100percent.bolt")
                 } footer: {
                     Text("提示：系统“设置 -> 电池健康”显示的百分比经过平滑校准算法修饰，而 AppleRawMaxCapacity 反映 PMU 电量计芯片测得的真实物理满电容量。")
                 }
@@ -166,7 +166,7 @@ struct PowerTelemetryView: View {
                         }
                     }
                 } header: {
-                    HeaderLabel("近期芯片温控与降频记录 [测试]", symbol: "flame")
+                    HeaderLabel(L("近期芯片温控与降频记录 [测试]"), symbol: "flame")
                 }
             }
 
@@ -192,7 +192,7 @@ struct PowerTelemetryView: View {
                         }
                     }
                 } header: {
-                    HeaderLabel("近期电池采样流水（最近 15 条）", symbol: "chart.xyaxis.line")
+                    HeaderLabel(L("近期电池采样流水（最近 15 条）"), symbol: "chart.xyaxis.line")
                 }
             }
         }
@@ -228,7 +228,7 @@ struct PowerTelemetryView: View {
     @ViewBuilder
     private func metricRow(title: String, value: String, accent: Color = .primary) -> some View {
         HStack {
-            Text(title)
+            Text(title.loc)
                 .font(.subheadline)
             Spacer()
             Text(value)
@@ -239,11 +239,11 @@ struct PowerTelemetryView: View {
 
     private func thermalStateLabel(_ state: ProcessInfo.ThermalState) -> String {
         switch state {
-        case .nominal: return "正常 (Nominal · 无降频)"
-        case .fair: return "温热 (Fair · 轻度温控)"
-        case .serious: return "发热降频 (Serious · 已锁帧/降频)"
-        case .critical: return "严重过热 (Critical · 强制限频降亮度)"
-        @unknown default: return "未知状态"
+        case .nominal: return L("正常 (Nominal · 无降频)")
+        case .fair: return L("温热 (Fair · 轻度温控)")
+        case .serious: return L("发热降频 (Serious · 已锁帧/降频)")
+        case .critical: return L("严重过热 (Critical · 强制限频降亮度)")
+        @unknown default: return L("未知状态")
         }
     }
 
@@ -265,7 +265,7 @@ struct PowerTelemetryView: View {
 
     private func refreshTelemetry() {
         isLoading = true
-        statusBanner = "正在挂载 CurrentPowerlog.PLSQL 只读快照..."
+        statusBanner = L("正在挂载 CurrentPowerlog.PLSQL 只读快照...")
         liveThermalState = ProcessInfo.processInfo.thermalState
         Self.telemetryQueue.async {
             let wasActive = wq.hasActiveAccess(path: Self.powerlogDir)
@@ -280,7 +280,7 @@ struct PowerTelemetryView: View {
                 DispatchQueue.main.async {
                     self.isLoading = false
                     self.powerlogAccessible = false
-                    self.statusBanner = "当前固件未放行 systemgroup.com.apple.powerlog 只读扩展令牌（\(grant.2)）。上方芯片实时热状态仍可正常监测。"
+                    self.statusBanner = L("当前固件未放行 systemgroup.com.apple.powerlog 只读扩展令牌（\(grant.2)）。上方芯片实时热状态仍可正常监测。")
                 }
                 return
             }
@@ -298,16 +298,16 @@ struct PowerTelemetryView: View {
                     self.latestBattery = parsed.0.first
                     self.thermalEvents = parsed.1
                     if parsed.0.isEmpty {
-                        self.statusBanner = "已成功打开 Powerlog 快照，但未查询到近期电池采样表记录。"
+                        self.statusBanner = L("已成功打开 Powerlog 快照，但未查询到近期电池采样表记录。")
                     } else {
-                        self.statusBanner = "已通过 APFS clonefile 无锁快照解析 \(parsed.0.count) 条近期电池记录与 \(parsed.1.count) 条温控记录。"
+                        self.statusBanner = L("已通过 APFS clonefile 无锁快照解析 \(parsed.0.count) 条近期电池记录与 \(parsed.1.count) 条温控记录。")
                     }
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isLoading = false
                     self.powerlogAccessible = false
-                    self.statusBanner = "解析 Powerlog 快照异常：\(error.localizedDescription)"
+                    self.statusBanner = L("解析 Powerlog 快照异常：\(error.localizedDescription)")
                 }
             }
         }
@@ -411,11 +411,11 @@ struct PowerTelemetryView: View {
                   let lvl = SQLiteSnapshotHelper.intCol(validStmt, 1) else { continue }
             let desc: String
             switch lvl {
-            case ..<1: desc = "散热恢复正常 (Nominal)"
-            case 1...10: desc = "轻度温控介入 (Light / Fair)"
-            case 11...20: desc = "中度降频限帧 (Moderate / Serious)"
-            case 21...30: desc = "重度性能限制与降亮度 (Heavy)"
-            default: desc = "过热保护阈值触发 (Critical)"
+            case ..<1: desc = L("散热恢复正常 (Nominal)")
+            case 1...10: desc = L("轻度温控介入 (Light / Fair)")
+            case 11...20: desc = L("中度降频限帧 (Moderate / Serious)")
+            case 21...30: desc = L("重度性能限制与降亮度 (Heavy)")
+            default: desc = L("过热保护阈值触发 (Critical)")
             }
             out.append(ThermalTelemetryEvent(id: UUID(), timestamp: Date(timeIntervalSince1970: ts), levelCode: lvl, summary: desc))
         }

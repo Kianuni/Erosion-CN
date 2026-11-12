@@ -29,9 +29,9 @@ struct LinkCreditCell: View {
                     LinkCreditIcon(image: image)
                 }
                 VStack(alignment: .leading) {
-                    Text(name)
+                    Text(name.loc)
                         .fontWeight(.semibold)
-                    Text(description)
+                    Text(description.loc)
                         .multilineTextAlignment(.leading)
                         .font(.subheadline)
                 }

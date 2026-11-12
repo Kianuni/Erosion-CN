@@ -18,7 +18,9 @@ var sema = DispatchSemaphore(value: 0)
 @main
 struct ErosionApp: App {
     @StateObject private var mgr = ErosionManager.shared
+    @StateObject private var langMgr = LocalizationManager.shared
     @State private var currentTab = 0
+    @State private var didBootstrapLogs = false
     
     init() {
         UserDefaults.standard.register(defaults: [
@@ -47,25 +49,29 @@ struct ErosionApp: App {
     
     var body: some Scene {
         WindowGroup {
-            TabView {
+            TabView(selection: $currentTab) {
                 ContentView()
                     .tabItem {
                         Label("主页", systemImage: "house")
                     }
-                    .id(0)
+                    .tag(0)
                 TweaksView()
                     .tabItem {
                         Label("功能修改", systemImage: "wrench.and.screwdriver")
                     }
-                    .id(1)
+                    .tag(1)
                 FMRootView()
                     .tabItem {
                         Label("文件浏览", systemImage: "folder")
                     }
-                    .id(2)
+                    .tag(2)
             }
+            .id(langMgr.refreshID)
+            .environment(\.locale, langMgr.effectiveLocale)
             .environmentObject(mgr)
             .onAppear {
+                guard !didBootstrapLogs else { return }
+                didBootstrapLogs = true
                 pipe.fileHandleForReading.readabilityHandler = { fh in
                     let data = fh.availableData
                     
@@ -85,12 +91,12 @@ struct ErosionApp: App {
                 }
                 print("")
                 print("[*] Erosion v\(AppInfo.appVersion) (\(build))")
-                print("[*] 运行环境：\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)，设备标识符：\(machineName()) (\(buildNumber()))")
+                print(L("[*] 运行环境：\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)，设备标识符：\(machineName()) (\(buildNumber()))"))
                 if !isSupported() && !weOnADebugBuild {
-                    Alertinator.shared.alert(title: "当前 \(device.systemName) 版本暂不支持！", body: AppMsg.unsupported, showCancel: false, actionLabel: "退出", action: { exitinator() })
+                    Alertinator.shared.alert(title: L("当前 \(device.systemName) 版本暂不支持！"), body: AppMsg.unsupported, showCancel: false, actionLabel: "退出", action: { exitinator() })
                 }
                 group = wq.getAppGroup()
-                print("(wq) 当前使用 App Group：\(group)")
+                print(L("(wq) 当前使用 App Group：\(group)"))
             }
             .overlay {
                 if mgr.shouldRespring {

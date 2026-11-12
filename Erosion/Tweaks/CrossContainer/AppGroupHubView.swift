@@ -31,15 +31,15 @@ enum ProxyRuleFormat: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .surgeModule: return "Surge / Loon / 小火箭 (.sgmodule)"
-        case .stashOverride: return "Stash 覆写规则 (.stoverride / YAML)"
+        case .surgeModule: return L("Surge / Loon / 小火箭 (.sgmodule)")
+        case .stashOverride: return L("Stash 覆写规则 (.stoverride / YAML)")
         }
     }
 }
 
 struct AppGroupHubView: View {
     @State private var isScanning = false
-    @State private var scanSummary = "点击右上角刷新扫描本机共享应用组 (AppGroup)"
+    @State private var scanSummary = L("点击右上角刷新扫描本机共享应用组 (AppGroup)")
     @State private var proxyGroups: [DetectedAppGroupItem] = []
     @State private var safariBookmarksDBPath: String?
     @State private var bookmarks: [SafariBookmarkRecord] = []
@@ -96,7 +96,7 @@ struct AppGroupHubView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } header: {
-                HeaderLabel("共享组探测状态 [测试]", symbol: "square.stack.3d.up")
+                HeaderLabel(L("共享组探测状态 [测试]"), symbol: "square.stack.3d.up")
             }
 
             Section {
@@ -122,8 +122,8 @@ struct AppGroupHubView: View {
                 } label: {
                     Label(
                         ruleFormat == .stashOverride
-                            ? "导出 .stoverride 覆写文件 (导入 Stash)"
-                            : "导出 .sgmodule 分流模块文件 (通用分享)",
+                            ? L("导出 .stoverride 覆写文件 (导入 Stash)")
+                            : L("导出 .sgmodule 分流模块文件 (通用分享)"),
                         systemImage: "square.and.arrow.up"
                     )
                 }
@@ -132,14 +132,14 @@ struct AppGroupHubView: View {
                     UIPasteboard.general.string = currentRuleContent()
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
-                        title: "已拷贝分流规则！",
+                        title: L("已拷贝分流规则！"),
                         body: ruleFormat == .stashOverride
-                            ? "Stash 覆写规则 (YAML) 已复制到剪贴板，可在 Stash「覆写」中新建或粘贴使用（请确保所选美区节点已开启 udp: true）。"
-                            : "Surge 模块规则已复制到系统剪贴板，可直接粘贴至 Surge / Loon / Shadowrocket 模块配置中。"
+                            ? L("Stash 覆写规则 (YAML) 已复制到剪贴板，可在 Stash「覆写」中新建或粘贴使用（请确保所选美区节点已开启 udp: true）。")
+                            : L("Surge 模块规则已复制到系统剪贴板，可直接粘贴至 Surge / Loon / Shadowrocket 模块配置中。")
                     )
                 } label: {
                     Label(
-                        ruleFormat == .stashOverride ? "拷贝 Stash YAML 覆写源码至剪贴板" : "拷贝模块规则源码至剪贴板",
+                        ruleFormat == .stashOverride ? L("拷贝 Stash YAML 覆写源码至剪贴板") : L("拷贝模块规则源码至剪贴板"),
                         systemImage: "doc.on.doc"
                     )
                 }
@@ -147,9 +147,9 @@ struct AppGroupHubView: View {
                 if let surge = surgeGroup, ruleFormat == .surgeModule {
                     Button {
                         Alertinator.shared.alert(
-                            title: "写入 Surge 共享组目录？ [测试特性]",
-                            body: "请先在后台上滑关闭 Surge 主程序，再点击“确认写入”。写入完成后打开 Surge -> 模块 -> 启用「Erosion 国行 Apple 智能与来电询问分流」即可。",
-                            actionLabel: "确认写入",
+                            title: L("写入 Surge 共享组目录？ [测试特性]"),
+                            body: L("请先在后台上滑关闭 Surge 主程序，再点击“确认写入”。写入完成后打开 Surge -> 模块 -> 启用「Erosion 国行 Apple 智能与来电询问分流」即可。"),
+                            actionLabel: L("确认写入"),
                             action: { injectModuleIntoSurge(surge) }
                         )
                     } label: {
@@ -158,7 +158,7 @@ struct AppGroupHubView: View {
                 }
 
                 DisclosureGroup(
-                    ruleFormat == .stashOverride ? "预览生成的 Stash .stoverride (YAML) 内容" : "预览生成的 Surge .sgmodule 规则内容",
+                    ruleFormat == .stashOverride ? L("预览生成的 Stash .stoverride (YAML) 内容") : L("预览生成的 Surge .sgmodule 规则内容"),
                     isExpanded: $showRulePreview
                 ) {
                     Text(currentRuleContent())
@@ -168,7 +168,7 @@ struct AppGroupHubView: View {
                         .padding(.vertical, 4)
                 }
             } header: {
-                HeaderLabel("[测试特性] Apple 智能与普通话来电询问共存分流", symbol: "network.badge.shield.half.filled")
+                HeaderLabel(L("[测试特性] Apple 智能与普通话来电询问共存分流"), symbol: "network.badge.shield.half.filled")
             } footer: {
                 Text("核心原理：将 guzzoni.apple.com / siri.apple.com / smoot.apple.com 设为 DIRECT 并加入真实 IP 白名单（always-real-ip / fake-ip-filter），保障国行 Siri 与普通话来电筛选秒通；同时将 gspe1-ssl、apple-relay.*、OpenAI 与 Google 视觉智能置顶分流至美区策略组（注意：所选美区节点需支持 UDP/QUIC）。")
             }
@@ -189,7 +189,7 @@ struct AppGroupHubView: View {
                         }
                     }
                 } header: {
-                    HeaderLabel("本机已安装代理工具共享组 [测试]", symbol: "folder.badge.gearshape")
+                    HeaderLabel(L("本机已安装代理工具共享组 [测试]"), symbol: "folder.badge.gearshape")
                 }
             }
 
@@ -226,7 +226,7 @@ struct AppGroupHubView: View {
 
                     ForEach(bookmarks.prefix(8)) { bm in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(bm.title.isEmpty ? "(无标题书签)" : bm.title)
+                            Text(bm.title.isEmpty ? L("(无标题书签)") : bm.title)
                                 .font(.footnote.weight(.medium))
                                 .lineLimit(1)
                             Text(bm.url)
@@ -243,7 +243,7 @@ struct AppGroupHubView: View {
                     }
                 }
             } header: {
-                HeaderLabel("[测试特性] Safari 书签无损跨容器导出", symbol: "book.fill")
+                HeaderLabel(L("[测试特性] Safari 书签无损跨容器导出"), symbol: "book.fill")
             }
         }
         .navigationTitle("共享组分流与书签")
@@ -281,9 +281,14 @@ struct AppGroupHubView: View {
 
     private func buildSGModuleContent() -> String {
         let policy = sanitizedPolicy
+        let modName = L("Erosion 国行 Apple 智能与来电询问分流 [测试特性]")
+        let modDesc = L("由 Erosion 生成：保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、区域定位校验与视觉智能置顶分流至 \(policy)。")
+        let c1 = L("# 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）")
+        let c2 = L("# 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（请使用支持 UDP/QUIC 的低并发干净美区节点）")
+        let c3 = L("# 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）")
         return """
-        #!name=Erosion 国行 Apple 智能与来电询问分流 [测试特性]
-        #!desc=由 Erosion 生成：保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、区域定位校验与视觉智能置顶分流至 \(policy)。
+        #!name=\(modName)
+        #!desc=\(modDesc)
         #!category=Erosion
 
         [General]
@@ -291,14 +296,14 @@ struct AppGroupHubView: View {
         always-real-ip = %APPEND% guzzoni.apple.com, *.guzzoni.apple.com, *.siri.apple.com
 
         [Rule]
-        # 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）
+        \(c1)
         DOMAIN-SUFFIX,guzzoni.apple.com,DIRECT
         DOMAIN-SUFFIX,siri.apple.com,DIRECT
         DOMAIN,dejavu.apple.com,DIRECT
         DOMAIN,sequoia.apple.com,DIRECT
         DOMAIN-SUFFIX,smoot.apple.com,DIRECT
 
-        # 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（请使用支持 UDP/QUIC 的低并发干净美区节点）
+        \(c2)
         DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
         DOMAIN,mask-api.icloud.com,\(policy)
         DOMAIN,mask.icloud.com,\(policy)
@@ -310,7 +315,7 @@ struct AppGroupHubView: View {
         DOMAIN-SUFFIX,apple-relay.akamaized.net,\(policy)
         DOMAIN-SUFFIX,cp4.cloudflare.com,\(policy)
 
-        # 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）
+        \(c3)
         DOMAIN-SUFFIX,openai.com,\(policy)
         DOMAIN-SUFFIX,chatgpt.com,\(policy)
         DOMAIN-SUFFIX,oaistatic.com,\(policy)
@@ -323,9 +328,14 @@ struct AppGroupHubView: View {
 
     private func buildStashOverrideContent() -> String {
         let policy = sanitizedPolicy
+        let ovrName = L("Erosion 国行 Apple 智能与来电询问分流")
+        let ovrDesc = L("保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、定位准入与视觉智能置顶分流至 \(policy)（请确保所选美区节点已开启 udp: true）。")
+        let sc1 = L("# 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）")
+        let sc2 = L("# 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（置顶防 GEOSITE,apple,DIRECT 抢行）")
+        let sc3 = L("# 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）")
         return """
-        name: "Erosion 国行 Apple 智能与来电询问分流"
-        desc: "保持国行 Siri 与普通话询问来电原因 (guzzoni) 真实 IP 直连，同时将 Apple Intelligence 隐私云计算、定位准入与视觉智能置顶分流至 \(policy)（请确保所选美区节点已开启 udp: true）。"
+        name: "\(ovrName)"
+        desc: "\(ovrDesc)"
 
         dns:
           fake-ip-filter:
@@ -347,14 +357,14 @@ struct AppGroupHubView: View {
             - "+.apple-relay.akamaized.net"
 
         rules:
-          # 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）
+          \(sc1)
           - DOMAIN-SUFFIX,guzzoni.apple.com,DIRECT
           - DOMAIN-SUFFIX,siri.apple.com,DIRECT
           - DOMAIN,dejavu.apple.com,DIRECT
           - DOMAIN,sequoia.apple.com,DIRECT
           - DOMAIN-SUFFIX,smoot.apple.com,DIRECT
 
-          # 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（置顶防 GEOSITE,apple,DIRECT 抢行）
+          \(sc2)
           - DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
           - DOMAIN,mask-api.icloud.com,\(policy)
           - DOMAIN,mask.icloud.com,\(policy)
@@ -366,7 +376,7 @@ struct AppGroupHubView: View {
           - DOMAIN-SUFFIX,apple-relay.akamaized.net,\(policy)
           - DOMAIN-SUFFIX,cp4.cloudflare.com,\(policy)
 
-          # 3. Siri ChatGPT 扩展与视觉智能（提问 + Google 识图）
+          \(sc3)
           - DOMAIN-SUFFIX,openai.com,\(policy)
           - DOMAIN-SUFFIX,chatgpt.com,\(policy)
           - DOMAIN-SUFFIX,oaistatic.com,\(policy)
@@ -388,7 +398,7 @@ struct AppGroupHubView: View {
             Haptic.shared.play(.soft)
             presentShareSheet(with: outURL)
         } catch {
-            Alertinator.shared.alert(title: "导出分流文件失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("导出分流文件失败！"), body: error.localizedDescription)
         }
     }
 
@@ -398,7 +408,7 @@ struct AppGroupHubView: View {
 
         let rootGrant = wq.grantAccess(path: surge.containerURL.path, requireWrite: true)
         guard rootGrant.0 else {
-            Alertinator.shared.alert(title: "获取 Surge 共享组写入权限失败！", body: rootGrant.2)
+            Alertinator.shared.alert(title: L("获取 Surge 共享组写入权限失败！"), body: rootGrant.2)
             return
         }
 
@@ -433,17 +443,17 @@ struct AppGroupHubView: View {
             }
             Haptic.shared.play(.soft)
             Alertinator.shared.alert(
-                title: "已注入 Surge 分流模块！",
-                body: "模块文件已写入：\n\(targetFile.lastPathComponent)\n请打开 Surge 并在「模块」列表中勾选启用。"
+                title: L("已注入 Surge 分流模块！"),
+                body: L("模块文件已写入：\n\(targetFile.lastPathComponent)\n请打开 Surge 并在「模块」列表中勾选启用。")
             )
         } catch {
-            Alertinator.shared.alert(title: "写入 Surge 模块失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("写入 Surge 模块失败！"), body: error.localizedDescription)
         }
     }
 
     private func scanAppGroups() {
         isScanning = true
-        scanSummary = "正在定位 Safari 书签与共享应用组..."
+        scanSummary = L("正在定位 Safari 书签与共享应用组...")
         DispatchQueue.global(qos: .utility).async {
             // 1. Fast-path: check com.apple.mobilesafari data container first (<20ms via CSStore2)
             var foundSafariDB: String?
@@ -462,7 +472,7 @@ struct AppGroupHubView: View {
                 DispatchQueue.main.async {
                     self.safariBookmarksDBPath = earlyDB
                     self.bookmarks = earlyBookmarks
-                    self.scanSummary = "已加载 \(earlyBookmarks.count) 条 Safari 书签 · 正在枚举共享组..."
+                    self.scanSummary = L("已加载 \(earlyBookmarks.count) 条 Safari 书签 · 正在枚举共享组...")
                 }
             }
 
@@ -473,13 +483,13 @@ struct AppGroupHubView: View {
             for (idx, path) in groupPaths.enumerated() {
                 if idx % 25 == 0 {
                     DispatchQueue.main.async {
-                        self.scanSummary = "正在识别共享应用组 (\(idx) / \(groupPaths.count))..."
+                        self.scanSummary = L("正在识别共享应用组 (\(idx) / \(groupPaths.count))...")
                     }
                 }
                 let url = URL(fileURLWithPath: path)
                 guard let gid = getBIDFromXattr(url), !gid.isEmpty else { continue }
 
-                if let client = Self.knownProxyGroupMap[gid] {
+                if let client = Self.knownProxyGroupMap[gid]?.loc {
                     foundProxies.append(DetectedAppGroupItem(
                         id: url.lastPathComponent,
                         groupID: gid,
@@ -515,7 +525,7 @@ struct AppGroupHubView: View {
                 }
                 self.safariBookmarksDBPath = foundSafariDB
                 self.bookmarks = extractedBookmarks
-                self.scanSummary = "共扫描 \(groupPaths.count) 个共享组容器 · 识别 \(foundProxies.count) 个代理工具与 \(extractedBookmarks.count) 条 Safari 书签"
+                self.scanSummary = L("共扫描 \(groupPaths.count) 个共享组容器 · 识别 \(foundProxies.count) 个代理工具与 \(extractedBookmarks.count) 条 Safari 书签")
                 self.isScanning = false
             }
         }
@@ -582,7 +592,7 @@ struct AppGroupHubView: View {
             Haptic.shared.play(.soft)
             presentShareSheet(with: outURL)
         } catch {
-            Alertinator.shared.alert(title: "导出 HTML 书签失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("导出 HTML 书签失败！"), body: error.localizedDescription)
         }
     }
 
@@ -597,7 +607,7 @@ struct AppGroupHubView: View {
             Haptic.shared.play(.soft)
             presentShareSheet(with: outURL)
         } catch {
-            Alertinator.shared.alert(title: "导出 JSON 书签失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("导出 JSON 书签失败！"), body: error.localizedDescription)
         }
     }
 }

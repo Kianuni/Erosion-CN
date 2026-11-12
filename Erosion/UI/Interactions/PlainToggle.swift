@@ -43,9 +43,9 @@ struct PlainToggle: View {
                             .frame(width: 22, height: 22, alignment: .center)
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(text)
+                        Text(text.loc)
                         if !subtitle.isEmpty {
-                            Text(subtitle)
+                            Text(subtitle.loc)
                                 .font(.caption)
                                 .foregroundStyle(infoType == .warning ? Color.orange : Color.secondary)
                         }

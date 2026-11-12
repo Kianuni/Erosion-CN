@@ -51,7 +51,7 @@ struct TextViewer: View {
                     HStack {
                         Spacer()
                         Button {
-                            Alertinator.shared.alert(title: "只读文件", body: "当前没有写入权限，仅支持读取此文件。")
+                            Alertinator.shared.alert(title: L("只读文件"), body: L("当前没有写入权限，仅支持读取此文件。"))
                         } label: {
                             Image(systemName: "lock")
                                 .padding(10)
@@ -135,19 +135,19 @@ struct TextViewer: View {
     
     private func writeTextIntoFile(_ url: URL, string: String) -> Bool {
         if url.lastPathComponent == "com.apple.MobileGestalt.plist" {
-            Alertinator.shared.alert(title: "已拦截高危编辑！", body: "禁止使用纯文本编辑器直接覆盖二进制 MobileGestalt 系统缓存文件！")
+            Alertinator.shared.alert(title: L("已拦截高危编辑！"), body: L("禁止使用纯文本编辑器直接覆盖二进制 MobileGestalt 系统缓存文件！"))
             return false
         }
         let data = Data(string.utf8)
         let ext = url.pathExtension.lowercased()
         if ext == "plist" {
             guard (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) != nil else {
-                Alertinator.shared.alert(title: "Plist 语法校验未通过！", body: "当前编辑的 XML Plist 存在语法错误，安全护栏已拒绝写入以免损坏配置。")
+                Alertinator.shared.alert(title: L("Plist 语法校验未通过！"), body: L("当前编辑的 XML Plist 存在语法错误，安全护栏已拒绝写入以免损坏配置。"))
                 return false
             }
         } else if ext == "json" {
             guard (try? JSONSerialization.jsonObject(with: data)) != nil else {
-                Alertinator.shared.alert(title: "JSON 语法校验未通过！", body: "当前编辑的 JSON 存在语法错误，安全护栏已拒绝写入。")
+                Alertinator.shared.alert(title: L("JSON 语法校验未通过！"), body: L("当前编辑的 JSON 存在语法错误，安全护栏已拒绝写入。"))
                 return false
             }
         }
@@ -156,7 +156,7 @@ struct TextViewer: View {
             // Never fall through to bare non-atomic write on existing files (SEC-M4-03)
             let atomicRes = writeFileAtomically(data, to: url, allowEmpty: string.isEmpty)
             if !atomicRes.0 {
-                Alertinator.shared.alert(title: "原位安全保存失败！", body: atomicRes.1)
+                Alertinator.shared.alert(title: L("原位安全保存失败！"), body: atomicRes.1)
             }
             return atomicRes.0
         }

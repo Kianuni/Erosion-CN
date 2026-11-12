@@ -3,8 +3,9 @@
   <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img src="./PreviewIcon.png" alt="App Icon" width="150"></a>
   <br>
   <h1>Erosion-CN</h1>
-  <p>基于 <a href="https://github.com/forcequitOS/worse_query">worse_query</a> 的 iOS / iPadOS 系统配置与 MobileGestalt 研究工具箱（简体中文防白苹果安全加固版）</p>
+  <p>基于 <a href="https://github.com/forcequitOS/worse_query">worse_query</a> 的 iOS / iPadOS 系统配置与 MobileGestalt 研究工具箱（中英双语 · 防白苹果安全加固版）</p>
   <p>支持 iOS / iPadOS 27.0 – 27.2 / 27.3 beta 1（完整支持）以及 iOS / iPadOS 26.x（部分支持）。</p>
+  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a></p>
   <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC"></a>
   <a href="https://github.com/jailbreakdotparty/Erosion"><img alt="Upstream Repo" src="https://img.shields.io/badge/%E4%B8%8A%E6%B8%B8%E4%BB%93%E5%BA%93-jailbreakdotparty%2FErosion-3868DB?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
@@ -64,6 +65,9 @@
     - **污染基线布尔开关直关加固与多重硬件冲突防呆护栏（`v0.8.2 – v0.8.6`）**：若安装本应用前设备已被其他工具开启 `InternalInstall` / `InternalBuild` 等互斥项（导致 `OriginalGestalt.plist` 记录了脏值 `1`），直接关闭对应开关即可一键从 `CacheExtra` 彻底剥离残留键；针对在 iPhone / iPad 上开启会导致 Siri 无限卡死的 `DeviceSupportsSiriHub` 以及强开会导致**照片「高质量」消除报错**的非原生 `Audio Intelligence` 实验槽位，均已加入自动防呆锁定与一键自愈修复（同时精确保留原生 AI 机型的 `Personal Translator = true` 基线）；同时将 **「FaceTime 空间音频」** 与 **「空间音频录制」** 解耦独立，对非四麦克风旧机型（如 `iPhone 15 Pro` 及更早机型）自动防呆锁定空间音频录制，避免语音备忘录出现无效「录音室」档位；
     - **修复高 Inode 主力机容器扫描卡死与 `iOS 26.3.x` `CSStore2` 秒开适配（`v0.8.6`）**：修复长期使用设备（累计 APFS Inode 破 2 亿）回退 `pathleak` 时扫描上限保护失效导致耗时 5–6 分钟的问题，并新增不依赖结构体偏移的 `CSStore2` 书签 TLV 极速兜底提取，使 `iOS 26.3.x` 与 `iOS 27.x` 均可秒级加载容器列表；
     - **`Surge (.sgmodule)` + `Stash (.stoverride / YAML)` 双格式完整分流导出**：共享组中心支持切换导出 Surge 模块与 Stash 覆写文件（内置 `always-real-ip` / `fake-ip-filter`、Siri 主网关直连、PCC 隐私计算中继、`mask-api.icloud.com` 匿名令牌签发、`app.apple.com` 相册消除网关、OpenAI 及 Google 视觉智能全套置顶规则）。
+13. **单包完整中英双语支持与实时热切换（`v0.9.0`）**
+    - 单一 IPA 同时内置完整 **简体中文 (`zh-Hans`)** 与 **英文 (`en`)** 语言包：中文系统默认显示简体中文，非中文系统自动切换为英文界面；
+    - 「设置 → 界面语言」内置 **跟随系统 / 简体中文 / English** 三档实时切换器，无需重启应用即可全局即时切换界面、弹窗、检视器与日志语言。
 
 ---
 
@@ -82,7 +86,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.8.6_zh-Hans.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.9.0_Bilingual.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)

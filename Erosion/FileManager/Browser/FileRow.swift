@@ -183,13 +183,13 @@ struct FileRow: View {
             
             if file.type == .file {
                 Button {
-                    Alertinator.shared.prompt(title: "请输入新的文件名：", placeholder: file.name, completion: { result in
+                    Alertinator.shared.prompt(title: L("请输入新的文件名："), placeholder: file.name, completion: { result in
                         if let name = result {
                             let res = renameFile(file.fileURL, to: name)
                             if res {
                                 mgr.refreshFiles.toggle()
                             } else {
-                                Alertinator.shared.alert(title: "重命名文件失败！", body: Errors.checkLogs)
+                                Alertinator.shared.alert(title: L("重命名文件失败！"), body: Errors.checkLogs)
                             }
                         }
                     })
@@ -205,7 +205,7 @@ struct FileRow: View {
                         if res {
                             mgr.refreshFiles.toggle()
                         } else {
-                            Alertinator.shared.alert(title: "解压缩文件失败！", body: Errors.checkLogs)
+                            Alertinator.shared.alert(title: L("解压缩文件失败！"), body: Errors.checkLogs)
                         }
                     } label: {
                         Label("解压缩", systemImage: "archivebox")
@@ -216,7 +216,7 @@ struct FileRow: View {
                         if res {
                             mgr.refreshFiles.toggle()
                         } else {
-                            Alertinator.shared.alert(title: "压缩文件失败！", body: Errors.checkLogs)
+                            Alertinator.shared.alert(title: L("压缩文件失败！"), body: Errors.checkLogs)
                         }
                     } label: {
                         Label("压缩为 ZIP", systemImage: "archivebox")
@@ -230,7 +230,7 @@ struct FileRow: View {
                     if res {
                         mgr.refreshFiles.toggle()
                     } else {
-                        Alertinator.shared.alert(title: "创建文件副本失败！", body: Errors.checkLogs)
+                        Alertinator.shared.alert(title: L("创建文件副本失败！"), body: Errors.checkLogs)
                     }
                 } label: {
                     Label("创建副本", systemImage: "plus.square.on.square")
@@ -242,7 +242,7 @@ struct FileRow: View {
             Button {
                 let res = copyFileToClipboard(file.fileURL)
                 if !res {
-                    Alertinator.shared.alert(title: "复制文件失败！", body: Errors.checkLogs)
+                    Alertinator.shared.alert(title: L("复制文件失败！"), body: Errors.checkLogs)
                 }
             } label: {
                 Label("复制", systemImage: "doc.on.doc")
@@ -264,7 +264,7 @@ struct FileRow: View {
                     mgr.refreshFiles.toggle()
                 } catch {
                     print("(fm) failed to delete file: \(error.localizedDescription)")
-                    Alertinator.shared.alert(title: "删除文件失败！", body: Errors.checkLogs)
+                    Alertinator.shared.alert(title: L("删除文件失败！"), body: Errors.checkLogs)
                 }
             } label: {
                 Label("删除", systemImage: "trash")

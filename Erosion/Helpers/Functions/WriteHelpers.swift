@@ -17,7 +17,7 @@ private func fullFsyncSafe(_ fd: Int32) -> Bool {
 
 func writeFileTemp(_ data: Data, to url: URL) -> (Bool, String) {
     guard !data.isEmpty else {
-        return (false, "拒绝写入 0 字节空数据！")
+        return (false, L("拒绝写入 0 字节空数据！"))
     }
     do {
         var statBuf = stat()
@@ -49,11 +49,11 @@ func writeFileTemp(_ data: Data, to url: URL) -> (Bool, String) {
 /// flushes physical NAND via `F_FULLFSYNC`, verifies full readback, and rolls back `og` on any failure.
 func writeFileAtomically(_ data: Data, to url: URL, allowEmpty: Bool = false) -> (Bool, String) {
     if !allowEmpty && data.isEmpty {
-        return (false, "安全拦截：禁止向目标文件原位写入 0 字节空数据！")
+        return (false, L("安全拦截：禁止向目标文件原位写入 0 字节空数据！"))
     }
 
     guard let og = try? Data(contentsOf: url) else {
-        return (false, "无法读取原文件备份数据，已中止原位写入！")
+        return (false, L("无法读取原文件备份数据，已中止原位写入！"))
     }
 
     let fd = url.path.withCString {
@@ -96,7 +96,7 @@ func writeFileAtomically(_ data: Data, to url: URL, allowEmpty: Bool = false) ->
             _ = ftruncate(fd, off_t(og.count))
             _ = fullFsyncSafe(fd)
         }
-        return (false, "原位写入或物理落盘校验失败，已执行原位回滚：\(error.localizedDescription)")
+        return (false, L("原位写入或物理落盘校验失败，已执行原位回滚：\(error.localizedDescription)"))
     }
     return (true, "succeeded")
 }
@@ -111,12 +111,12 @@ private enum fileWriteErr: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .open(let e): return "打开文件描述符失败 (errno=\(e))"
-        case .truncate(let e): return "裁剪文件尾部失败 (errno=\(e))"
-        case .write(let e): return "写入文件块失败 (errno=\(e))"
-        case .sync(let e): return "物理闪存同步 F_FULLFSYNC 失败 (errno=\(e))"
-        case .rollback(let e): return "回滚文件失败 (errno=\(e))"
-        case .verificationFailed: return "写后描述符字节比对不一致"
+        case .open(let e): return L("打开文件描述符失败 (errno=\(e))")
+        case .truncate(let e): return L("裁剪文件尾部失败 (errno=\(e))")
+        case .write(let e): return L("写入文件块失败 (errno=\(e))")
+        case .sync(let e): return L("物理闪存同步 F_FULLFSYNC 失败 (errno=\(e))")
+        case .rollback(let e): return L("回滚文件失败 (errno=\(e))")
+        case .verificationFailed: return L("写后描述符字节比对不一致")
         }
     }
 }

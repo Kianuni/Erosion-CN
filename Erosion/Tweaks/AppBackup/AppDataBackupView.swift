@@ -54,7 +54,7 @@ enum AppContainerDirectoryHelper {
     ]
 
     static func displayName(for bundleID: String) -> String {
-        if let known = knownAppNames[bundleID] {
+        if let known = knownAppNames[bundleID]?.loc {
             return "\(known) (\(bundleID))"
         }
         if let csName = CSStoreEngine.shared.localizedName(forBundleID: bundleID),
@@ -109,7 +109,7 @@ struct LocalSaveBackupItem: Identifiable {
 
 struct AppDataBackupView: View {
     @State private var isScanning = false
-    @State private var scanProgressText = "正在扫描本机应用数据容器..."
+    @State private var scanProgressText = L("正在扫描本机应用数据容器...")
     @State private var containers: [AppSaveContainerItem] = []
     @State private var backups: [LocalSaveBackupItem] = []
     @State private var searchText = ""
@@ -148,12 +148,12 @@ struct AppDataBackupView: View {
                     .disabled(isScanning)
                 }
                 PlainToggle(
-                    "显示系统内置应用容器 (com.apple.*)",
-                    subtitle: "默认仅展示第三方应用与游戏容器",
+                    L("显示系统内置应用容器 (com.apple.*)"),
+                    subtitle: L("默认仅展示第三方应用与游戏容器"),
                     isOn: $includeSystemApps
                 )
             } header: {
-                HeaderLabel("备份与筛选控制", symbol: "slider.horizontal.3")
+                HeaderLabel(L("备份与筛选控制"), symbol: "slider.horizontal.3")
             }
 
             if !backups.isEmpty {
@@ -177,9 +177,9 @@ struct AppDataBackupView: View {
                             HStack(spacing: 14) {
                                 Button {
                                     Alertinator.shared.alert(
-                                        title: "确定还原此存档备份吗？",
-                                        body: "将把 \(backup.fileURL.lastPathComponent) 中的 Documents 与 Preferences 存档还原至「\(backup.bundleID)」当前容器（自动匹配重装后的最新容器 UUID）。还原前请先在后台关闭目标应用！",
-                                        actionLabel: "确认还原",
+                                        title: L("确定还原此存档备份吗？"),
+                                        body: L("将把 \(backup.fileURL.lastPathComponent) 中的 Documents 与 Preferences 存档还原至「\(backup.bundleID)」当前容器（自动匹配重装后的最新容器 UUID）。还原前请先在后台关闭目标应用！"),
+                                        actionLabel: L("确认还原"),
                                         action: {
                                             restoreBackup(backup)
                                         }
@@ -213,7 +213,7 @@ struct AppDataBackupView: View {
                         .padding(.vertical, 3)
                     }
                 } header: {
-                    HeaderLabel("本地已保存的存档备份 (\(backups.count))", symbol: "archivebox.fill")
+                    HeaderLabel(L("本地已保存的存档备份 (\(backups.count))"), symbol: "archivebox.fill")
                 } footer: {
                     Text("即使卸载重装了游戏或应用导致容器 UUID 改变，点击“一键还原”也会按 Bundle ID 自动定位当前最新容器并原位写回存档。")
                 }
@@ -285,7 +285,7 @@ struct AppDataBackupView: View {
                     }
                 }
             } header: {
-                HeaderLabel("应用与游戏存档列表 (\(filteredContainers.count))", symbol: "gamecontroller.fill")
+                HeaderLabel(L("应用与游戏存档列表 (\(filteredContainers.count))"), symbol: "gamecontroller.fill")
             } footer: {
                 Text("点击“备份存档”会将该应用的 Documents 与 Library/Preferences 打包为 ZIP；点击“修改 Documents”或“修改配置 Plist”可直接调用内置无损 Plist/文本编辑器修改游戏数值或配置。")
             }
@@ -356,7 +356,7 @@ struct AppDataBackupView: View {
     private func scanAllContainers() {
         let wantSystem = includeSystemApps
         isScanning = true
-        scanProgressText = "正在扫描本机应用数据容器..."
+        scanProgressText = L("正在扫描本机应用数据容器...")
         DispatchQueue.global(qos: .utility).async {
             let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
             var discovered: [AppSaveContainerItem] = []
@@ -419,7 +419,7 @@ struct AppDataBackupView: View {
                 try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
                 let wasActive = wq.hasActiveAccess(path: item.containerURL.path)
                 guard wq.grantAccess(path: item.containerURL.path, requireWrite: false).0 else {
-                    throw "无法获取该应用容器的读取权限"
+                    throw L("无法获取该应用容器的读取权限")
                 }
                 defer {
                     if !wasActive {
@@ -445,7 +445,7 @@ struct AppDataBackupView: View {
                 }
 
                 guard copiedAny else {
-                    throw "未在该应用容器中找到可备份的 Documents 或 Preferences 目录数据。"
+                    throw L("未在该应用容器中找到可备份的 Documents 或 Preferences 目录数据。")
                 }
 
                 let meta: [String: String] = [
@@ -470,13 +470,13 @@ struct AppDataBackupView: View {
                     loadLocalBackups()
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
-                        title: "存档备份成功！",
-                        body: "已生成备份文件：\(zipName)\n你可在上方“本地已保存的存档备份”中随时一键还原或导出分享。"
+                        title: L("存档备份成功！"),
+                        body: L("已生成备份文件：\(zipName)\n你可在上方“本地已保存的存档备份”中随时一键还原或导出分享。")
                     )
                 }
             } catch {
                 DispatchQueue.main.async {
-                    Alertinator.shared.alert(title: "备份存档失败！", body: error.localizedDescription)
+                    Alertinator.shared.alert(title: L("备份存档失败！"), body: error.localizedDescription)
                 }
             }
         }
@@ -489,18 +489,18 @@ struct AppDataBackupView: View {
 
             do {
                 guard let archive = try? Archive(url: backup.fileURL, accessMode: .read) else {
-                    throw "无法读取备份压缩包，文件可能已损坏！"
+                    throw L("无法读取备份压缩包，文件可能已损坏！")
                 }
                 let destStd = extractDir.standardizedFileURL
                 let destPrefix = destStd.path.hasSuffix("/") ? destStd.path : destStd.path + "/"
                 for entry in archive {
                     let entryPath = entry.path
                     if entryPath.hasPrefix("/") || entryPath.split(separator: "/").contains("..") || entryPath.split(separator: "\\").contains("..") {
-                        throw "检测到备份包包含非法路径穿越条目 (\(entryPath))，已拒绝还原！"
+                        throw L("检测到备份包包含非法路径穿越条目 (\(entryPath))，已拒绝还原！")
                     }
                     let resolvedPath = destStd.appendingPathComponent(entryPath).standardizedFileURL.path
                     if resolvedPath != destStd.path && !resolvedPath.hasPrefix(destPrefix) {
-                        throw "检测到备份包条目越界 (\(entryPath))，已拒绝还原！"
+                        throw L("检测到备份包条目越界 (\(entryPath))，已拒绝还原！")
                     }
                 }
 
@@ -517,7 +517,7 @@ struct AppDataBackupView: View {
 
                 guard !Self.protectedSystemBundleIDs.contains(resolvedBundleID) else {
                     DispatchQueue.main.async {
-                        Alertinator.shared.alert(title: "安全护栏拦截！", body: "禁止向受保护的核心系统容器还原外部备份包。")
+                        Alertinator.shared.alert(title: L("安全护栏拦截！"), body: L("禁止向受保护的核心系统容器还原外部备份包。"))
                     }
                     return
                 }
@@ -541,8 +541,8 @@ struct AppDataBackupView: View {
                 guard !targetContainerPath.isEmpty else {
                     DispatchQueue.main.async {
                         Alertinator.shared.alert(
-                            title: "未找到目标应用容器！",
-                            body: "本机当前未检测到「\(resolvedBundleID)」的数据容器，请先安装并至少打开一次该应用后再试。"
+                            title: L("未找到目标应用容器！"),
+                            body: L("本机当前未检测到「\(resolvedBundleID)」的数据容器，请先安装并至少打开一次该应用后再试。")
                         )
                     }
                     return
@@ -551,7 +551,7 @@ struct AppDataBackupView: View {
                 let containerURL = URL(fileURLWithPath: targetContainerPath)
                 let wasActive = preGrantedCached ? false : wq.hasActiveAccess(path: containerURL.path)
                 guard wq.grantAccess(path: containerURL.path).0 else {
-                    throw "无法获取目标容器的写入权限"
+                    throw L("无法获取目标容器的写入权限")
                 }
                 defer {
                     if !wasActive {
@@ -581,17 +581,17 @@ struct AppDataBackupView: View {
                     restoredFiles += pCount
                 }
 
-                let cfprefsHint = restoredPrefs ? "\n\n提示：本次还原包含 Preferences 偏好设置，建议在后台多任务中彻底关闭目标应用或注销设备（Respring），以便系统 cfprefsd 重新加载配置。" : ""
+                let cfprefsHint = restoredPrefs ? L("\n\n提示：本次还原包含 Preferences 偏好设置，建议在后台多任务中彻底关闭目标应用或注销设备（Respring），以便系统 cfprefsd 重新加载配置。") : ""
                 DispatchQueue.main.async {
                     Haptic.shared.play(.soft)
                     Alertinator.shared.alert(
-                        title: "存档还原完成！",
-                        body: "已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(resolvedBundleID)」容器。" + cfprefsHint
+                        title: L("存档还原完成！"),
+                        body: L("已成功将 \(restoredFiles) 个存档/配置文件原位还原至「\(resolvedBundleID)」容器。") + cfprefsHint
                     )
                 }
             } catch {
                 DispatchQueue.main.async {
-                    Alertinator.shared.alert(title: "还原存档失败！", body: error.localizedDescription)
+                    Alertinator.shared.alert(title: L("还原存档失败！"), body: error.localizedDescription)
                 }
             }
         }
@@ -655,10 +655,10 @@ struct AppDataBackupView: View {
                 loadLocalBackups()
                 Haptic.shared.play(.soft)
             } catch {
-                Alertinator.shared.alert(title: "导入备份包失败！", body: error.localizedDescription)
+                Alertinator.shared.alert(title: L("导入备份包失败！"), body: error.localizedDescription)
             }
         case .failure(let error):
-            Alertinator.shared.alert(title: "导入备份包失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("导入备份包失败！"), body: error.localizedDescription)
         }
     }
 }
@@ -675,7 +675,7 @@ struct ContainerSubdirBrowserView: View {
                 FileBrowserView(path: targetURL, shouldGrant: true)
             } else if let errorMsg {
                 List {
-                    CompactAlert(title: "无法打开容器目录！", symbol: "folder.badge.questionmark", text: errorMsg)
+                    CompactAlert(title: L("无法打开容器目录！"), symbol: "folder.badge.questionmark", text: errorMsg)
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
@@ -691,7 +691,7 @@ struct ContainerSubdirBrowserView: View {
             guard targetURL == nil && errorMsg == nil else { return }
             let rootGrant = wq.grantAccess(path: containerURL.path)
             guard rootGrant.0 else {
-                errorMsg = "无法获取应用容器根目录权限：\(rootGrant.2)"
+                errorMsg = L("无法获取应用容器根目录权限：\(rootGrant.2)")
                 return
             }
             if let relativeSubpath, !relativeSubpath.isEmpty {

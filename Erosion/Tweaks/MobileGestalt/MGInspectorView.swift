@@ -67,15 +67,15 @@ struct AppleIntelligenceCheckupCard: View {
 
         var gateDetail: String
         if intInstallConflict {
-            gateDetail = "⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）"
+            gateDetail = L("⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）")
         } else if siriHubConflict {
-            gateDetail = "⚠️ 检测到已开启 SiriHub 路由（会卡死“正在添加 Siri 支持内容”，可一键修复）"
+            gateDetail = L("⚠️ 检测到已开启 SiriHub 路由（会卡死“正在添加 Siri 支持内容”，可一键修复）")
         } else if advAIConflict {
-            gateDetail = "⚠️ 检测到已开启进阶 AI 实验槽位（会导致照片“高质量”消除报错，可一键修复）"
+            gateDetail = L("⚠️ 检测到已开启进阶 AI 实验槽位（会导致照片“高质量”消除报错，可一键修复）")
         } else if !greenTeaCleared {
-            gateDetail = "国行 green-tea 限制槽位未解除（建议开启下方底层解除）"
+            gateDetail = L("国行 green-tea 限制槽位未解除（建议开启下方底层解除）")
         } else {
-            gateDetail = "green-tea=false · 无内部调试、SiriHub 与消除冲突"
+            gateDetail = L("green-tea=false · 无内部调试、SiriHub 与消除冲突")
         }
 
         // 4. Hardware AI Eligibility & Sub-capabilities
@@ -85,42 +85,50 @@ struct AppleIntelligenceCheckupCard: View {
         let aiReady = stagedAI
         let liveAI = mgQueryLiveBool(forKey: MGKey.appIntell) ?? nativeAI
 
+        let hwProd = originalHardwareProductType()
         let aiDetail: String
         if nativeAdvAI {
-            aiDetail = "本机 (\(originalHardwareProductType())) 原生支持全部 AI 与 iOS 27 进阶能力"
+            aiDetail = L("本机 (\(hwProd)) 原生支持全部 AI 与 iOS 27 进阶能力")
         } else if nativeAI {
-            aiDetail = "本机 (\(originalHardwareProductType())) 硬件原生支持 Apple 智能（含照片消除、通话录音与转写）"
+            aiDetail = L("本机 (\(hwProd)) 硬件原生支持 Apple 智能（含照片消除、通话录音与转写）")
         } else {
             aiDetail = stagedAI
-                ? "已开启旧机型 AI 总开关与消除/手写子能力（需配合机型伪装）"
-                : "旧机型未开启 AI 开关（需开启并配合机型伪装）"
+                ? L("已开启旧机型 AI 总开关与消除/手写子能力（需配合机型伪装）")
+                : L("旧机型未开启 AI 开关（需开启并配合机型伪装）")
         }
+
+        let regCodeDisplay = stagedRegCode.isEmpty ? L("未设置") : stagedRegCode
+        let sysconfigDisplay = stagedSysconfig.isEmpty ? L("未设置") : stagedSysconfig
+        let liveRegionDisplay = liveRegion.isEmpty ? L("未知") : liveRegion
+        let keptRegModelDisplay = stagedRegModel.isEmpty ? L("默认") : stagedRegModel
+        let stagedRegModelDisplay = stagedRegModel.isEmpty ? L("未设置") : stagedRegModel
+        let liveRegModelDisplay = liveRegModel.isEmpty ? L("未知") : liveRegModel
 
         return [
             FactorItem(
                 id: "region",
-                title: isLLOnlyMode ? "1. 区域代码标识 (仅 LL 兼容模式)" : "1. 销售地区标识 (LL / LL/A)",
-                detail: "配置：\(stagedRegCode.isEmpty ? "未设置" : stagedRegCode) / \(stagedSysconfig.isEmpty ? "未设置" : stagedSysconfig) · 真机实时：\(liveRegion.isEmpty ? "未知" : liveRegion)",
+                title: isLLOnlyMode ? L("1. 区域代码标识 (仅 LL 兼容模式)") : L("1. 销售地区标识 (LL / LL/A)"),
+                detail: L("配置：\(regCodeDisplay) / \(sysconfigDisplay) · 真机实时：\(liveRegionDisplay)"),
                 isReady: regionReady,
                 isLiveActive: regionLiveOK
             ),
             FactorItem(
                 id: "regmodel",
-                title: isLLOnlyMode ? "2. 监管型号（保留原厂 \(stagedRegModel.isEmpty ? "默认" : stagedRegModel)）" : "2. 美版监管型号 (\(usTarget))",
-                detail: "配置：\(stagedRegModel.isEmpty ? "未设置" : stagedRegModel) · 真机实时：\(liveRegModel.isEmpty ? "未知" : liveRegModel)",
+                title: isLLOnlyMode ? L("2. 监管型号（保留原厂 \(keptRegModelDisplay)）") : L("2. 美版监管型号 (\(usTarget))"),
+                detail: L("配置：\(stagedRegModelDisplay) · 真机实时：\(liveRegModelDisplay)"),
                 isReady: regModelReady,
                 isLiveActive: regModelLiveOK
             ),
             FactorItem(
                 id: "gate",
-                title: "3. 国行门控与互斥锁检查",
+                title: L("3. 国行门控与互斥锁检查"),
                 detail: gateDetail,
                 isReady: gateReady,
                 isLiveActive: gateLiveOK
             ),
             FactorItem(
                 id: "ai",
-                title: "4. 端侧 AI 准入与子能力",
+                title: L("4. 端侧 AI 准入与子能力"),
                 detail: aiDetail,
                 isReady: aiReady,
                 isLiveActive: liveAI
@@ -142,7 +150,7 @@ struct AppleIntelligenceCheckupCard: View {
                 Text("Apple 智能激活四要素体检")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(allLive ? "真机已生效" : (allReady ? "已配齐 · 待应用重启" : "已配齐 \(readyCount)/\(items.count)"))
+                Text(allLive ? L("真机已生效") : (allReady ? L("已配齐 · 待应用重启") : L("已配齐 \(readyCount)/\(items.count)")))
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -209,7 +217,7 @@ struct AppleIntelligenceCheckupCard: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    Alertinator.shared.alert(title: "普通话来电询问共存指南（测试特性）", body: MGMsg.callScreeningGuide)
+                    Alertinator.shared.alert(title: L("普通话来电询问共存指南（测试特性）"), body: MGMsg.callScreeningGuide)
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "phone.badge.waveform.fill")
@@ -248,51 +256,53 @@ struct MGInspectorView: View {
         let category: String
     }
 
-    private let curatedItems: [CuratedProbeItem] = [
-        // Region & Regulatory
-        CuratedProbeItem(title: "销售地区代码 (RegionCode)", key: MGKey.regionCode, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "系统销售地区 (RegionInfoFromSysconfig)", key: MGKey.regionSysconfig, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "监管型号 (RegulatoryModelNumber)", key: MGKey.regModelNumber, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "机型硬件标识 (ProductType)", key: MGKey.prodType, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "国行限制标记 (green-tea)", key: MGCacheDataLayout.greenTeaKey, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "非国行设备标记 (not-green-tea)", key: MGCacheDataLayout.notGreenTeaKey, category: "国行解锁与地区准入"),
-        CuratedProbeItem(title: "无线局域网显示标记 (wapi)", key: MGCacheDataLayout.wapiKey, category: "国行解锁与地区准入"),
-        // Apple Intelligence & iOS 27 AI
-        CuratedProbeItem(title: "Apple 智能总开关 (GenerativeModelSystems)", key: MGKey.appIntell, category: "Apple 智能与 iOS 27 AI"),
-        CuratedProbeItem(title: "相册“消除”功能 (Photos Clean Up)", key: MGKey.photosCleanUp, category: "Apple 智能与 iOS 27 AI"),
-        CuratedProbeItem(title: "备忘录手写体合成 (Handwriting Synthesis)", key: MGKey.handwritingSynth, category: "Apple 智能与 iOS 27 AI"),
-        CuratedProbeItem(title: "个人实时翻译 (Personal Translator)", key: MGKey.personalTranslator, category: "Apple 智能与 iOS 27 AI"),
-        CuratedProbeItem(title: "iOS 27 音频智能 (Audio Intelligence)", key: MGKey.audioIntell, category: "Apple 智能与 iOS 27 AI"),
-        // Media, Camera & Health
-        CuratedProbeItem(title: "相册与相机混音 (Audio Mix)", key: MGKey.audioMix, category: "影像与健康进阶能力"),
-        CuratedProbeItem(title: "空间音频录制 (spatial-audio-recording)", key: MGKey.spatialAudioRec, category: "影像与健康进阶能力"),
-        CuratedProbeItem(title: "FaceTime 空间音频 (spatial-facetime-audio)", key: MGKey.spatialFaceTimeAudio, category: "影像与健康进阶能力"),
-        CuratedProbeItem(title: "按下快门瞬间抓拍 (ResponsiveShutter)", key: MGKey.responsiveShutter, category: "影像与健康进阶能力"),
-        CuratedProbeItem(title: "健康高血压趋势评估 (HypertensionNotifications)", key: MGKey.hypertensionNotif, category: "影像与健康进阶能力"),
-        // Display & System
-        CuratedProbeItem(title: "液态玻璃低功耗渲染", key: MGKey.liquidGlassLowPower, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "灵动岛特性 (DynamicIsland)", key: MGKey.island, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "全天候显示 (AOD)", key: MGKey.AOD, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "80% 充电上限 (80ChargeLimit)", key: MGKey.chargeLim, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "开关机提示音 (BootChime)", key: MGKey.bootChime, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "操作按钮 (ActionButton)", key: MGKey.actButton, category: "显示与硬件特征"),
-        CuratedProbeItem(title: "Apple 内部安装模式 (InternalInstall)", key: MGKey.intInstall, category: "显示与硬件特征"),
-        // [测试特性] Experimental Slots
-        CuratedProbeItem(title: "[测试] 地区相机快门音豁免", key: MGKey.shutterRelaxation, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 高低功耗双麦并发拾音", key: MGKey.concurrentHPLPMics, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 相册局部光影重绘", key: MGKey.photosLocalLight, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 超取景框空间捕获", key: MGKey.spatialOverCapture, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 立体声视频拾音", key: MGKey.stereoAudioRec, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 旧机型显示电池循环与日期", key: MGKey.legacyBatteryInfo, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 户外高亮全天候显示", key: MGKey.highLuminanceAOD, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] CarPlay Ultra 多屏车载", key: MGKey.carPlay2, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 120Hz 触控采样投递", key: MGKey.touchDelivery120Hz, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 临床助听器音频均衡", key: MGKey.hearingAidEQ, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 睡眠呼吸暂停风险检测", key: MGKey.breathingDisturbances, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 美版血氧软件限制开关", key: MGKey.usBloodOxygen, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 户外极限运动模式", key: MGKey.workoutUltra, category: "测试特性 (CacheData 实验项)"),
-        CuratedProbeItem(title: "[测试] 端侧 Siri Hub 意图路由", key: MGKey.siriHub, category: "测试特性 (CacheData 实验项)")
-    ]
+    private var curatedItems: [CuratedProbeItem] {
+        [
+            // Region & Regulatory
+            CuratedProbeItem(title: L("销售地区代码 (RegionCode)"), key: MGKey.regionCode, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("系统销售地区 (RegionInfoFromSysconfig)"), key: MGKey.regionSysconfig, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("监管型号 (RegulatoryModelNumber)"), key: MGKey.regModelNumber, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("机型硬件标识 (ProductType)"), key: MGKey.prodType, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("国行限制标记 (green-tea)"), key: MGCacheDataLayout.greenTeaKey, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("非国行设备标记 (not-green-tea)"), key: MGCacheDataLayout.notGreenTeaKey, category: L("国行解锁与地区准入")),
+            CuratedProbeItem(title: L("无线局域网显示标记 (wapi)"), key: MGCacheDataLayout.wapiKey, category: L("国行解锁与地区准入")),
+            // Apple Intelligence & iOS 27 AI
+            CuratedProbeItem(title: L("Apple 智能总开关 (GenerativeModelSystems)"), key: MGKey.appIntell, category: L("Apple 智能与 iOS 27 AI")),
+            CuratedProbeItem(title: L("相册“消除”功能 (Photos Clean Up)"), key: MGKey.photosCleanUp, category: L("Apple 智能与 iOS 27 AI")),
+            CuratedProbeItem(title: L("备忘录手写体合成 (Handwriting Synthesis)"), key: MGKey.handwritingSynth, category: L("Apple 智能与 iOS 27 AI")),
+            CuratedProbeItem(title: L("个人实时翻译 (Personal Translator)"), key: MGKey.personalTranslator, category: L("Apple 智能与 iOS 27 AI")),
+            CuratedProbeItem(title: L("iOS 27 音频智能 (Audio Intelligence)"), key: MGKey.audioIntell, category: L("Apple 智能与 iOS 27 AI")),
+            // Media, Camera & Health
+            CuratedProbeItem(title: L("相册与相机混音 (Audio Mix)"), key: MGKey.audioMix, category: L("影像与健康进阶能力")),
+            CuratedProbeItem(title: L("空间音频录制 (spatial-audio-recording)"), key: MGKey.spatialAudioRec, category: L("影像与健康进阶能力")),
+            CuratedProbeItem(title: L("FaceTime 空间音频 (spatial-facetime-audio)"), key: MGKey.spatialFaceTimeAudio, category: L("影像与健康进阶能力")),
+            CuratedProbeItem(title: L("按下快门瞬间抓拍 (ResponsiveShutter)"), key: MGKey.responsiveShutter, category: L("影像与健康进阶能力")),
+            CuratedProbeItem(title: L("健康高血压趋势评估 (HypertensionNotifications)"), key: MGKey.hypertensionNotif, category: L("影像与健康进阶能力")),
+            // Display & System
+            CuratedProbeItem(title: L("液态玻璃低功耗渲染"), key: MGKey.liquidGlassLowPower, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("灵动岛特性 (DynamicIsland)"), key: MGKey.island, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("全天候显示 (AOD)"), key: MGKey.AOD, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("80% 充电上限 (80ChargeLimit)"), key: MGKey.chargeLim, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("开关机提示音 (BootChime)"), key: MGKey.bootChime, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("操作按钮 (ActionButton)"), key: MGKey.actButton, category: L("显示与硬件特征")),
+            CuratedProbeItem(title: L("Apple 内部安装模式 (InternalInstall)"), key: MGKey.intInstall, category: L("显示与硬件特征")),
+            // [测试特性] Experimental Slots
+            CuratedProbeItem(title: L("[测试] 地区相机快门音豁免"), key: MGKey.shutterRelaxation, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 高低功耗双麦并发拾音"), key: MGKey.concurrentHPLPMics, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 相册局部光影重绘"), key: MGKey.photosLocalLight, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 超取景框空间捕获"), key: MGKey.spatialOverCapture, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 立体声视频拾音"), key: MGKey.stereoAudioRec, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 旧机型显示电池循环与日期"), key: MGKey.legacyBatteryInfo, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 户外高亮全天候显示"), key: MGKey.highLuminanceAOD, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] CarPlay Ultra 多屏车载"), key: MGKey.carPlay2, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 120Hz 触控采样投递"), key: MGKey.touchDelivery120Hz, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 临床助听器音频均衡"), key: MGKey.hearingAidEQ, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 睡眠呼吸暂停风险检测"), key: MGKey.breathingDisturbances, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 美版血氧软件限制开关"), key: MGKey.usBloodOxygen, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 户外极限运动模式"), key: MGKey.workoutUltra, category: L("测试特性 (CacheData 实验项)")),
+            CuratedProbeItem(title: L("[测试] 端侧 Siri Hub 意图路由"), key: MGKey.siriHub, category: L("测试特性 (CacheData 实验项)"))
+        ]
+    }
 
     var body: some View {
         List {
@@ -358,7 +368,7 @@ struct MGInspectorView: View {
             }
         }
 
-        let categories = ["国行解锁与地区准入", "Apple 智能与 iOS 27 AI", "影像与健康进阶能力", "显示与硬件特征"]
+        let categories = [L("国行解锁与地区准入"), L("Apple 智能与 iOS 27 AI"), L("影像与健康进阶能力"), L("显示与硬件特征")]
         ForEach(categories, id: \.self) { cat in
             let filtered = curatedItems.filter { item in
                 guard item.category == cat else { return false }
@@ -465,16 +475,18 @@ struct MGInspectorView: View {
         let ogData = ogDict?["CacheData"] as? Data
 
         var slotLoc: String? = nil
-        var origValText = "未设置"
-        var stagedValText = "未设置"
+        var origValText = L("未设置")
+        var stagedValText = L("未设置")
+        var hasStagedValue = false
 
         if case .success((let layout, let curData)) = layoutResult,
            let slotIdx = layout.slotIndex(forKey: key),
            layout.validateSingleBooleanSlot(slotIdx, in: curData) {
             let off = slotIdx * 8
-            slotLoc = String(format: "CacheData 槽位 #%d (0x%X)", slotIdx, off)
+            slotLoc = String(format: "CacheData 槽位 #%d (0x%X)".loc, slotIdx, off)
             let curBit = curData[off] == 1
             stagedValText = curBit ? "true (0x01)" : "false (0x00)"
+            hasStagedValue = true
 
             if let ogData, ogData.count == layout.byteCount, layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
                 let ogBit = ogData[off] == 1
@@ -483,12 +495,13 @@ struct MGInspectorView: View {
                 origValText = recorded ? "true (0x01)" : "false (0x00)"
             }
         } else {
-            slotLoc = "CacheExtra 字典键"
+            slotLoc = L("CacheExtra 字典键")
             if let ogVal = ogExtra?[key] {
                 origValText = mgFormatValue(ogVal)
             }
             if let curVal = store.cacheExtra[key] {
                 stagedValText = mgFormatValue(curVal)
+                hasStagedValue = true
             }
         }
 
@@ -498,19 +511,19 @@ struct MGInspectorView: View {
 
         let badgeText: String
         let badgeColor: Color
-        if stagedNorm != origNorm && stagedValText != "未设置" {
+        if stagedNorm != origNorm && hasStagedValue {
             if liveNorm == stagedNorm {
-                badgeText = "✅ 已修改并真机生效"
+                badgeText = L("✅ 已修改并真机生效")
                 badgeColor = .green
             } else {
-                badgeText = "⏳ 待应用并重启生效"
+                badgeText = L("⏳ 待应用并重启生效")
                 badgeColor = .orange
             }
         } else if liveNorm == "true" {
-            badgeText = "本机原生开启"
+            badgeText = L("本机原生开启")
             badgeColor = .blue
         } else {
-            badgeText = "原厂默认"
+            badgeText = L("原厂默认")
             badgeColor = .secondary
         }
 
@@ -609,8 +622,8 @@ struct MGInspectorView: View {
             return curData[valOff..<(valOff + 8)] != ogData[valOff..<(valOff + 8)] || curData[validOff] != ogData[validOff]
         }()
         let primaryDesc = descriptors.first
-        let keyStr = primaryDesc?.obfuscatedKey ?? "（保留空洞槽位 / 未绑定描述符）"
-        let displayTitle = primaryDesc.map { mgKeyDisplayName($0.obfuscatedKey) } ?? "保留槽位 #\(slotIdx)"
+        let keyStr = primaryDesc?.obfuscatedKey ?? L("（保留空洞槽位 / 未绑定描述符）")
+        let displayTitle = primaryDesc.map { mgKeyDisplayName($0.obfuscatedKey) } ?? L("保留槽位 #\(slotIdx)")
 
         Button {
             if let key = primaryDesc?.obfuscatedKey {
@@ -620,7 +633,7 @@ struct MGInspectorView: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(String(format: "槽位 #%d (0x%04X)", slotIdx, valOff))
+                    Text(String(format: "槽位 #%d (0x%04X)".loc, slotIdx, valOff))
                         .font(.system(.caption, design: .monospaced).weight(.bold))
                         .foregroundStyle(isChanged ? Color.orange : Color.accentColor)
                     if let qType = primaryDesc?.queryType {
@@ -676,26 +689,26 @@ struct MGInspectorView: View {
                 guard !trimmed.isEmpty else { return }
                 let live = mgQueryLiveFormatted(forKey: trimmed)
                 var lines: [String] = [
-                    "查询键名：\(trimmed)",
-                    "MGCopyAnswer 实时返回值：\(live)"
+                    L("查询键名：\(trimmed)"),
+                    L("MGCopyAnswer 实时返回值：\(live)")
                 ]
                 if let extraVal = store.cacheExtra[trimmed] {
-                    lines.append("当前 CacheExtra 值：\(mgFormatValue(extraVal))")
+                    lines.append(L("当前 CacheExtra 值：\(mgFormatValue(extraVal))"))
                 } else {
-                    lines.append("当前 CacheExtra 值：（不存在）")
+                    lines.append(L("当前 CacheExtra 值：（不存在）"))
                 }
                 if let ogVal = store.originalCacheExtraValue(forKey: trimmed) {
-                    lines.append("原厂 CacheExtra 备份：\(mgFormatValue(ogVal))")
+                    lines.append(L("原厂 CacheExtra 备份：\(mgFormatValue(ogVal))"))
                 }
                 let allDescs = MGCacheDataCoordinator.shared.allDescriptors()
                 if let desc = allDescs.first(where: { $0.obfuscatedKey == trimmed }) {
-                    lines.append("系统库描述符：slot = \(desc.slotIndex)，queryType = \(desc.queryType)")
+                    lines.append(L("系统库描述符：slot = \(desc.slotIndex)，queryType = \(desc.queryType)"))
                     if desc.slotIndex >= 0,
                        case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: store.mgCurrentDict),
                        desc.slotIndex < layout.slotCount {
                         let vOff = desc.slotIndex * 8
                         let valOff = layout.validityOffset(for: desc.slotIndex)
-                        lines.append(String(format: "CacheData 偏移：0x%X (值=0x%02X)，有效位偏移：0x%X (validity=%d)",
+                        lines.append(String(format: "CacheData 偏移：0x%X (值=0x%02X)，有效位偏移：0x%X (validity=%d)".loc,
                                             vOff, data[vOff], valOff, data[valOff]))
                     }
                 }

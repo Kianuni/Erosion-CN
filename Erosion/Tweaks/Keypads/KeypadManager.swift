@@ -65,11 +65,11 @@ enum KPSize: Int, CaseIterable {
     
     var label: String {
         switch self {
-        case .defSize: return "默认"
-        case .small: return "小"
-        case .medium: return "中"
-        case .large: return "大"
-        case .custom: return "自定义"
+        case .defSize: return L("默认")
+        case .small: return L("小")
+        case .medium: return L("中")
+        case .large: return L("大")
+        case .custom: return L("自定义")
         }
     }
 }
@@ -91,8 +91,8 @@ let emptyKeypadArray = [
 ]
 
 enum KPMsg {
-    static let resetWarn = "重置后将丢失当前正在编辑的按键图案以及“电话”应用中已生效的拨号主题。"
-    static let applyComp = "若要使拨号按键生效，请打开“电话”应用并切换深浅色外观直至自定义按键显示，或直接重启设备。切勿在后台强行上滑关闭“电话”应用！"
+    static var resetWarn: String { L("重置后将丢失当前正在编辑的按键图案以及“电话”应用中已生效的拨号主题。") }
+    static var applyComp: String { L("若要使拨号按键生效，请打开“电话”应用并切换深浅色外观直至自定义按键显示，或直接重启设备。切勿在后台强行上滑关闭“电话”应用！") }
 }
 
 let kp = KeypadManager()
@@ -306,18 +306,18 @@ final class KeypadManager: ObservableObject {
         defer { try? fm.removeItem(at: tempURL) }
         do {
             guard let archive = try? Archive(url: fileURL, accessMode: .read) else {
-                throw "无法读取拨号主题压缩包！"
+                throw L("无法读取拨号主题压缩包！")
             }
             let destStd = tempURL.standardizedFileURL
             let destPrefix = destStd.path.hasSuffix("/") ? destStd.path : destStd.path + "/"
             for entry in archive {
                 let entryPath = entry.path
                 if entryPath.hasPrefix("/") || entryPath.split(separator: "/").contains("..") || entryPath.split(separator: "\\").contains("..") {
-                    throw "检测到主题包包含非法路径穿越条目 (\(entryPath))，已拒绝导入！"
+                    throw L("检测到主题包包含非法路径穿越条目 (\(entryPath))，已拒绝导入！")
                 }
                 let resolvedPath = destStd.appendingPathComponent(entryPath).standardizedFileURL.path
                 if resolvedPath != destStd.path && !resolvedPath.hasPrefix(destPrefix) {
-                    throw "检测到主题包条目越界 (\(entryPath))，已拒绝导入！"
+                    throw L("检测到主题包条目越界 (\(entryPath))，已拒绝导入！")
                 }
             }
             var filesURL = tempURL

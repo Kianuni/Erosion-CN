@@ -117,18 +117,18 @@ func zipFile(_ url: URL) -> Bool {
 func unzipFile(_ url: URL) -> Bool {
     do {
         guard let archive = try? Archive(url: url, accessMode: .read) else {
-            throw "无法读取 ZIP 压缩包！"
+            throw L("无法读取 ZIP 压缩包！")
         }
         let unzipDest = url.deletingLastPathComponent().standardizedFileURL
         let destPrefix = unzipDest.path.hasSuffix("/") ? unzipDest.path : unzipDest.path + "/"
         for entry in archive {
             let entryPath = entry.path
             if entryPath.hasPrefix("/") || entryPath.split(separator: "/").contains("..") || entryPath.split(separator: "\\").contains("..") {
-                throw "检测到压缩包包含非法路径穿越条目 (\(entryPath))，已拒绝解压！"
+                throw L("检测到压缩包包含非法路径穿越条目 (\(entryPath))，已拒绝解压！")
             }
             let resolvedPath = unzipDest.appendingPathComponent(entryPath).standardizedFileURL.path
             if resolvedPath != unzipDest.path && !resolvedPath.hasPrefix(destPrefix) {
-                throw "检测到压缩包条目越界 (\(entryPath))，已拒绝解压！"
+                throw L("检测到压缩包条目越界 (\(entryPath))，已拒绝解压！")
             }
         }
         try fm.createDirectory(at: unzipDest, withIntermediateDirectories: true)

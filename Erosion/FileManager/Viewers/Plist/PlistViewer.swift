@@ -39,7 +39,7 @@ struct PlistViewer: View {
                     HStack {
                         Spacer()
                         Button {
-                            Alertinator.shared.alert(title: "只读文件", body: "当前没有写入权限，仅支持读取此文件。")
+                            Alertinator.shared.alert(title: L("只读文件"), body: L("当前没有写入权限，仅支持读取此文件。"))
                         } label: {
                             Image(systemName: "lock")
                                 .padding(10)

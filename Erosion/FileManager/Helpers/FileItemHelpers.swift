@@ -104,9 +104,9 @@ enum FileType: String {
     
     var label: String {
         switch self {
-        case .file: return "文件"
-        case .folder: return "文件夹"
-        case .symlink: return "符号链接"
+        case .file: return L("文件")
+        case .folder: return L("文件夹")
+        case .symlink: return L("符号链接")
         }
     }
     

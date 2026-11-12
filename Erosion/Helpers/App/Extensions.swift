@@ -39,6 +39,11 @@ extension Array: @retroactive RawRepresentable where Element: Codable {
 
 // String+Error
 extension String: @retroactive Error {}
+extension String: @retroactive LocalizedError {
+    nonisolated public var errorDescription: String? {
+        self.loc
+    }
+}
 
 // ButtonRole++
 extension ButtonRole {

@@ -15,9 +15,9 @@ enum CNURL {
 }
 
 enum CNMsg {
-    static var supWarning = "在个人零售版 iOS 设备上强行写入 IsSupervised=true 极易触发 Setup.app 远程管理向导无限循环锁死（Setup Assistant Loop / 403 死锁）甚至无法进入桌面！防白苹果护栏已永久禁用开启监管模式；如曾通过旧版或其他工具误开启过，可在下方“伪监管残留死锁体检”中一键单独清理。"
-    static var resetInfo = "点击“确认”后，将安全清除锁屏底部文字与设备资产铭牌，并恢复或清理残留的监管配置文件。"
-    static var assetTagInfo = "[测试特性] AssetTagInformation 是系统配置描述文件中的原生资产铭牌字段，可在锁屏界面底部或关于本机中展示防丢联系方式或设备编号，不修改任何系统二进制或监管标记。"
+    static var supWarning: String { L("在个人零售版 iOS 设备上强行写入 IsSupervised=true 极易触发 Setup.app 远程管理向导无限循环锁死（Setup Assistant Loop / 403 死锁）甚至无法进入桌面！防白苹果护栏已永久禁用开启监管模式；如曾通过旧版或其他工具误开启过，可在下方“伪监管残留死锁体检”中一键单独清理。") }
+    static var resetInfo: String { L("点击“确认”后，将安全清除锁屏底部文字与设备资产铭牌，并恢复或清理残留的监管配置文件。") }
+    static var assetTagInfo: String { L("[测试特性] AssetTagInformation 是系统配置描述文件中的原生资产铭牌字段，可在锁屏界面底部或关于本机中展示防丢联系方式或设备编号，不修改任何系统二进制或监管标记。") }
 }
 
 private enum CloudConfigAuditState {
@@ -95,7 +95,7 @@ struct ConfigView: View {
                                 .font(.subheadline.weight(.medium))
                             Spacer()
                             Button {
-                                Alertinator.shared.alert(title: "锁屏设备资产铭牌 [测试特性]", body: CNMsg.assetTagInfo)
+                                Alertinator.shared.alert(title: L("锁屏设备资产铭牌 [测试特性]"), body: CNMsg.assetTagInfo)
                             } label: {
                                 Image(systemName: "info.circle")
                                     .foregroundStyle(.secondary)
@@ -106,7 +106,7 @@ struct ConfigView: View {
                             .font(.subheadline)
                         HStack(spacing: 8) {
                             Button("填入防丢模板") {
-                                assetTagText = "拾获请致电机主 · 感谢归还"
+                                assetTagText = L("拾获请致电机主 · 感谢归还")
                             }
                             .font(.caption)
                             .buttonStyle(.bordered)
@@ -128,13 +128,13 @@ struct ConfigView: View {
                     }
                     .padding(.vertical, 2)
                 } header: {
-                    HeaderLabel("防丢铭牌扩展（测试特性）", symbol: "tag")
+                    HeaderLabel(L("防丢铭牌扩展（测试特性）"), symbol: "tag")
                 } footer: {
                     Text("写入 SharedDeviceConfiguration.plist 的 AssetTagInformation 字段，留空并点击右上角“应用”即可移除。")
                 }
                 
                 Section {
-                    PlainToggle("开启监管模式（防设置向导死循环护栏已锁定）", infoType: .warning, infoTitle: "监管模式保护说明", infoMessage: CNMsg.supWarning, isOn: $supervised)
+                    PlainToggle(L("开启监管模式（防设置向导死循环护栏已锁定）"), infoType: .warning, infoTitle: L("监管模式保护说明"), infoMessage: CNMsg.supWarning, isOn: $supervised)
                         .disabled(true)
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -169,14 +169,14 @@ struct ConfigView: View {
                     }
                     .padding(.vertical, 3)
                 } header: {
-                    HeaderLabel("监管设置与安全体检（测试特性）", symbol: "eye")
+                    HeaderLabel(L("监管设置与安全体检（测试特性）"), symbol: "eye")
                 }
             }
             .navigationTitle("系统配置与监管")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        Alertinator.shared.alert(title: "确定要重置配置修改吗？", body: CNMsg.resetInfo, actionLabel: "确认", action: {
+                        Alertinator.shared.alert(title: L("确定要重置配置修改吗？"), body: CNMsg.resetInfo, actionLabel: L("确认"), action: {
                             reset()
                         })
                     } label: {
@@ -222,7 +222,7 @@ struct ConfigView: View {
             let res = wq.grantAccess(path: FSURL.configProfiles.path)
             hasAccess = res.0
             if !res.0 {
-                Alertinator.shared.alert(title: "获取写入权限失败！", body: AppMsg.opFailed)
+                Alertinator.shared.alert(title: L("获取写入权限失败！"), body: AppMsg.opFailed)
                 return
             }
         }
@@ -260,22 +260,22 @@ struct ConfigView: View {
 
     private var auditBadgeText: String {
         switch auditState {
-        case .clean: return "安全无残留"
-        case .genuineMDM: return "合法企业 MDM"
-        case .fakeSupervisionResidue: return "高危伪监管残留"
+        case .clean: return L("安全无残留")
+        case .genuineMDM: return L("合法企业 MDM")
+        case .fakeSupervisionResidue: return L("高危伪监管残留")
         }
     }
 
     private var auditDetailText: String {
         switch auditState {
         case .clean:
-            return "未检测到伪造的 CloudConfigurationDetails.plist 文件，系统升级或重启后不会触发 Setup Assistant 403 远程管理向导死循环。"
+            return L("未检测到伪造的 CloudConfigurationDetails.plist 文件，系统升级或重启后不会触发 Setup Assistant 403 远程管理向导死循环。")
         case .genuineMDM(let org):
-            let displayOrg = org.isEmpty ? "企业/教育机构" : org
-            return "检测到包含完整证书锚点的合法 MDM 配置（\(displayOrg)），防白苹果护栏已自动保护该原始文件不被误删。"
+            let displayOrg = org.isEmpty ? L("企业/教育机构") : org
+            return L("检测到包含完整证书锚点的合法 MDM 配置（\(displayOrg)），防白苹果护栏已自动保护该原始文件不被误删。")
         case .fakeSupervisionResidue(let org):
-            let suffix = org.isEmpty ? "" : "（残留组织名：\(org)）"
-            return "检测到仅含 IsSupervised/OrganizationName 而缺失 MDM 证书链的第三方伪监管文件\(suffix)！在 OTA 升级后极易触发激活向导 403 死锁，建议立即点击下方按钮清除。"
+            let suffix = org.isEmpty ? "" : L("（残留组织名：\(org)）")
+            return L("检测到仅含 IsSupervised/OrganizationName 而缺失 MDM 证书链的第三方伪监管文件\(suffix)！在 OTA 升级后极易触发激活向导 403 死锁，建议立即点击下方按钮清除。")
         }
     }
 
@@ -322,13 +322,13 @@ struct ConfigView: View {
             Haptic.shared.play(.soft)
             loadData()
             Alertinator.shared.alert(
-                title: "已清除伪监管残留！",
-                body: "已安全移除伪造的 CloudConfigurationDetails.plist 并保留你的锁屏底部文字与资产铭牌配置。\n\(AppMsg.applied)",
-                actionLabel: "立即注销",
+                title: L("已清除伪监管残留！"),
+                body: L("已安全移除伪造的 CloudConfigurationDetails.plist 并保留你的锁屏底部文字与资产铭牌配置。\n\(AppMsg.applied)"),
+                actionLabel: L("立即注销"),
                 action: { mgr.shouldRespring = true }
             )
         } catch {
-            Alertinator.shared.alert(title: "清理伪监管残留失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("清理伪监管残留失败！"), body: error.localizedDescription)
         }
     }
     
@@ -372,11 +372,11 @@ struct ConfigView: View {
             if autoRespring {
                 mgr.shouldRespring = true
             } else {
-                Alertinator.shared.alert(title: "系统配置修改已成功应用！", body: AppMsg.applied, actionLabel: "立即注销", action: { mgr.shouldRespring = true })
+                Alertinator.shared.alert(title: L("系统配置修改已成功应用！"), body: AppMsg.applied, actionLabel: L("立即注销"), action: { mgr.shouldRespring = true })
             }
         } catch {
             print("(cn) failed to write config files: \(error.localizedDescription)")
-            Alertinator.shared.alert(title: "应用修改失败！", body: "\(error.localizedDescription)")
+            Alertinator.shared.alert(title: L("应用修改失败！"), body: "\(error.localizedDescription)")
         }
     }
     
@@ -420,10 +420,10 @@ struct ConfigView: View {
             loadData()
             footnoteText = ""
             assetTagText = ""
-            Alertinator.shared.alert(title: "系统配置修改已成功重置！", body: AppMsg.applied, actionLabel: "立即注销", action: { mgr.shouldRespring = true })
+            Alertinator.shared.alert(title: L("系统配置修改已成功重置！"), body: AppMsg.applied, actionLabel: L("立即注销"), action: { mgr.shouldRespring = true })
         } catch {
             print("(cn) failed to reset config files: \(error.localizedDescription)")
-            Alertinator.shared.alert(title: "重置修改失败！", body: "\(error.localizedDescription)")
+            Alertinator.shared.alert(title: L("重置修改失败！"), body: "\(error.localizedDescription)")
         }
     }
 }

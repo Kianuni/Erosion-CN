@@ -12,13 +12,13 @@ import UniformTypeIdentifiers
 let pbHandler = PBHandler()
 
 enum PBMsg {
-    static var noTendies = "点击此处或底部按钮导入 .tendies 壁纸包，即可开始应用自定义锁屏壁纸。"
-    static var tooManyTendies = "单次最多只能同时启用 15 张壁纸，请先取消勾选其他壁纸包后再试！"
-    static var limitWarning = "你当前勾选了超过 5 张壁纸，可能导致部分壁纸无法正常显示。确定仍要继续应用吗？"
-    static var corruption = "请确认所选壁纸包未损坏后重试。"
-    static var finishApply = "点击继续后将自动打开 PosterBoard，请在后台多任务切换器中将其上滑关闭以完成加载。如果壁纸未显示，请在右上角“壁纸设置”中尝试重置“壁纸合集”、“水星壁纸”或“视频壁纸”。"
-    static var applyInfo = "如果打开锁屏编辑后未看到导入的壁纸，请前往右上角菜单的“壁纸设置”中点击“重置壁纸合集 (Collections)”后再试。"
-    static var imprtFailed = "请确认所选文件为有效的 .tendies 壁纸包后重试。"
+    static var noTendies: String { L("点击此处或底部按钮导入 .tendies 壁纸包，即可开始应用自定义锁屏壁纸。") }
+    static var tooManyTendies: String { L("单次最多只能同时启用 15 张壁纸，请先取消勾选其他壁纸包后再试！") }
+    static var limitWarning: String { L("你当前勾选了超过 5 张壁纸，可能导致部分壁纸无法正常显示。确定仍要继续应用吗？") }
+    static var corruption: String { L("请确认所选壁纸包未损坏后重试。") }
+    static var finishApply: String { L("点击继续后将自动打开 PosterBoard，请在后台多任务切换器中将其上滑关闭以完成加载。如果壁纸未显示，请在右上角“壁纸设置”中尝试重置“壁纸合集”、“水星壁纸”或“视频壁纸”。") }
+    static var applyInfo: String { L("如果打开锁屏编辑后未看到导入的壁纸，请前往右上角菜单的“壁纸设置”中点击“重置壁纸合集 (Collections)”后再试。") }
+    static var imprtFailed: String { L("请确认所选文件为有效的 .tendies 壁纸包后重试。") }
 }
 
 struct PosterBoardView: View {
@@ -47,7 +47,7 @@ struct PosterBoardView: View {
                             showImporter = true
                         } label: {
                             VStack(alignment: .leading) {
-                                CompactAlert(title: "尚未导入壁纸包", symbol: "exclamationmark.triangle.fill", text: PBMsg.noTendies)
+                                CompactAlert(title: L("尚未导入壁纸包"), symbol: "exclamationmark.triangle.fill", text: PBMsg.noTendies)
                                     .padding(.horizontal, 15)
                             }
                             .frame(alignment: .leading)
@@ -58,7 +58,7 @@ struct PosterBoardView: View {
                         ForEach($tendiesArray) { $tendies in
                             Button {
                                 if !tendies.isOn && tendiesArray.filter({ $0.isOn }).flatMap({ $0.descrNames }).count > 15 {
-                                    Alertinator.shared.alert(title: "已达壁纸数量上限！", body: PBMsg.tooManyTendies)
+                                    Alertinator.shared.alert(title: L("已达壁纸数量上限！"), body: PBMsg.tooManyTendies)
                                 } else {
                                     tendies.isOn.toggle()
                                 }
@@ -145,7 +145,7 @@ struct PosterBoardView: View {
                     Button {
                         showImporter = true
                     } label: {
-                        ButtonLabel("导入 .tendies 壁纸包", symbol: "arrow.down.doc")
+                        ButtonLabel(L("导入 .tendies 壁纸包"), symbol: "arrow.down.doc")
                     }
                 }
                 .buttonStyle(ActionButtonStyle())
@@ -223,7 +223,7 @@ struct PosterBoardView: View {
                                 }
                                 .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
                             } header: {
-                                HeaderLabel("数据管理", symbol: "loupe")
+                                HeaderLabel(L("数据管理"), symbol: "loupe")
                             } footer: {
                                 Text("如果应用自定义壁纸后无法正常显示，可尝试重置上方任意对应类型的壁纸扩展缓存。")
                             }
@@ -240,12 +240,12 @@ struct PosterBoardView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("应用", role: .adaptiveConfirm) {
                     if !hasShownFirstRunMsg {
-                        Alertinator.shared.alert(title: "操作提示", body: PBMsg.applyInfo, actionLabel: "继续", action: {
+                        Alertinator.shared.alert(title: L("操作提示"), body: PBMsg.applyInfo, actionLabel: L("继续"), action: {
                             hasShownFirstRunMsg = true
                             proceed()
                         })
                     } else if tendiesArray.filter({ $0.isOn }).flatMap({ $0.descrNames }).count > 5 {
-                        Alertinator.shared.alert(title: "操作提示", body: PBMsg.limitWarning, actionLabel: "确认", action: {
+                        Alertinator.shared.alert(title: L("操作提示"), body: PBMsg.limitWarning, actionLabel: L("确认"), action: {
                             proceed()
                         })
                     } else {
@@ -257,13 +257,13 @@ struct PosterBoardView: View {
                         let res = applyObjects(tendiesArray.filter { $0.isOn })
                         if !res.0 {
                             if res.1.contains("an item with the same name already exists") || res.1.contains("已经存在") {
-                                Alertinator.shared.alert(title: "应用壁纸失败！", body: "所选的部分壁纸此前已添加过，请勿重复添加。")
+                                Alertinator.shared.alert(title: L("应用壁纸失败！"), body: L("所选的部分壁纸此前已添加过，请勿重复添加。"))
                             } else {
-                                Alertinator.shared.alert(title: "应用壁纸失败！", body: res.1.isEmpty ? PBMsg.corruption : res.1)
+                                Alertinator.shared.alert(title: L("应用壁纸失败！"), body: res.1.isEmpty ? PBMsg.corruption : res.1)
                             }
                         } else {
                             Haptic.shared.play(.soft)
-                            Alertinator.shared.alert(title: "请重启 PosterBoard 以完成应用！", body: PBMsg.finishApply, showCancel: false, actionLabel: "继续", action: { openApp(withBID: SysBID.poster) })
+                            Alertinator.shared.alert(title: L("请重启 PosterBoard 以完成应用！"), body: PBMsg.finishApply, showCancel: false, actionLabel: L("继续"), action: { openApp(withBID: SysBID.poster) })
                         }
                     }
                 }
@@ -274,7 +274,7 @@ struct PosterBoardView: View {
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item]) { result in
             let res = handleImport(result)
             if !res {
-                Alertinator.shared.alert(title: "导入 .tendies 壁纸包失败！", body: PBMsg.imprtFailed)
+                Alertinator.shared.alert(title: L("导入 .tendies 壁纸包失败！"), body: PBMsg.imprtFailed)
             }
         }
     }
@@ -304,14 +304,14 @@ struct PosterBoardView: View {
             }
             hasContainerAccess = accessOK
             if !accessOK {
-                Alertinator.shared.alert(title: "无法访问 PosterBoard 容器！", body: "未能定位或授权 com.apple.PosterBoard 容器，请检查权限或在右上角“壁纸设置”中重新获取路径。")
+                Alertinator.shared.alert(title: L("无法访问 PosterBoard 容器！"), body: L("未能定位或授权 com.apple.PosterBoard 容器，请检查权限或在右上角“壁纸设置”中重新获取路径。"))
             }
             if !fm.fileExists(atPath: AppURL.pb.path) || !fm.fileExists(atPath: AppURL.pbFolders.path) {
                 do {
                     try fm.createDirIfNeeded(at: AppURL.pb)
                     try fm.createDirIfNeeded(at: AppURL.pbFolders)
                 } catch {
-                    Alertinator.shared.alert(title: "初始化壁纸目录失败！", body: AppMsg.opFailed)
+                    Alertinator.shared.alert(title: L("初始化壁纸目录失败！"), body: AppMsg.opFailed)
                 }
             }
             isReady = true
@@ -320,7 +320,7 @@ struct PosterBoardView: View {
     
     private func applyObjects(_ objects: [TendiesObject]) -> (Bool, String) {
         guard !pbContainerPath.isEmpty else {
-            return (false, "未找到 PosterBoard 容器路径。")
+            return (false, L("未找到 PosterBoard 容器路径。"))
         }
         let rootGrant = wq.grantAccess(path: pbContainerPath)
         if !rootGrant.0 {
@@ -367,12 +367,12 @@ struct PosterBoardView: View {
     
     private func resetWallpapers(for item: PBPath) -> Bool {
         guard !pbContainerPath.isEmpty else {
-            Alertinator.shared.alert(title: "重置壁纸失败！", body: "未找到 PosterBoard 容器路径。")
+            Alertinator.shared.alert(title: L("重置壁纸失败！"), body: L("未找到 PosterBoard 容器路径。"))
             return false
         }
         let rootGrant = wq.grantAccess(path: pbContainerPath)
         if !rootGrant.0 {
-            Alertinator.shared.alert(title: "重置壁纸失败！", body: "无法获取 PosterBoard 容器权限：\(rootGrant.2)")
+            Alertinator.shared.alert(title: L("重置壁纸失败！"), body: L("无法获取 PosterBoard 容器权限：\(rootGrant.2)"))
             return false
         }
         let relPath = item.resolvedPath(in: pbContainerPath)
@@ -382,7 +382,7 @@ struct PosterBoardView: View {
         }
         let targetGrant = wq.grantAccess(path: target.path)
         if !targetGrant.0 {
-            Alertinator.shared.alert(title: "重置壁纸失败！", body: "无法获取目标壁纸目录权限：\(targetGrant.2)")
+            Alertinator.shared.alert(title: L("重置壁纸失败！"), body: L("无法获取目标壁纸目录权限：\(targetGrant.2)"))
             return false
         }
         do {
@@ -394,7 +394,7 @@ struct PosterBoardView: View {
             return true
         } catch {
             print("(pb) failed to reset \(item.rawValue): \(error.localizedDescription)")
-            Alertinator.shared.alert(title: "重置壁纸失败！", body: error.localizedDescription)
+            Alertinator.shared.alert(title: L("重置壁纸失败！"), body: error.localizedDescription)
             return false
         }
     }

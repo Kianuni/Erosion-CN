@@ -74,7 +74,7 @@ struct FolderRow: View {
                     if res {
                         mgr.refreshFiles.toggle()
                     } else {
-                        Alertinator.shared.alert(title: "压缩文件夹失败！", body: Errors.checkLogs)
+                        Alertinator.shared.alert(title: L("压缩文件夹失败！"), body: Errors.checkLogs)
                     }
                 } label: {
                     Label("压缩为 ZIP", systemImage: "archivebox")

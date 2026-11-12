@@ -74,7 +74,7 @@ struct ModifyItemPage: View {
                 case .data:
                     Text(activeBinding.wrappedValue.stringVal)
                 case .bool:
-                    Toggle(activeBinding.wrappedValue.boolVal ? "开启 (True)" : "关闭 (False)", isOn: activeBinding.boolVal)
+                    Toggle(activeBinding.wrappedValue.boolVal ? L("开启 (True)") : L("关闭 (False)"), isOn: activeBinding.boolVal)
                         .disabled(!isEditing)
                         .onChange(of: draftItem.boolVal) { newVal in
                             draftItem.stringVal = newVal ? "true" : "false"
@@ -85,7 +85,7 @@ struct ModifyItemPage: View {
                 }
             } header: {
                 if activeBinding.wrappedValue.type == .dict || activeBinding.wrappedValue.type == .array {
-                    HeaderLabel("键值 (\(activeBinding.wrappedValue.dictVal.count) 项)", symbol: "character.cursor.ibeam")
+                    HeaderLabel(L("键值 (\(activeBinding.wrappedValue.dictVal.count) 项)"), symbol: "character.cursor.ibeam")
                 } else {
                     HeaderLabel("键值", symbol: "character.cursor.ibeam")
                 }
@@ -95,7 +95,7 @@ struct ModifyItemPage: View {
                 Button("删除此项", role: .destructive) {
                     let res = pmgr.writePlistItems(delItem: item)
                     if !res {
-                        Alertinator.shared.alert(title: "删除 Plist 项目失败！", body: Errors.checkLogs)
+                        Alertinator.shared.alert(title: L("删除 Plist 项目失败！"), body: Errors.checkLogs)
                     } else {
                         dismiss()
                     }
@@ -138,7 +138,7 @@ struct ModifyItemPage: View {
                             ogItem = draftItem
                             Haptic.shared.play(.soft)
                         } else {
-                            Alertinator.shared.alert(title: "写入 Plist 失败！", body: Errors.checkLogs)
+                            Alertinator.shared.alert(title: L("写入 Plist 失败！"), body: Errors.checkLogs)
                             draftItem = ogItem
                             item = ogItem
                         }

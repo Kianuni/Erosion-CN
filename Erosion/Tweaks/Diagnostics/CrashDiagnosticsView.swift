@@ -13,6 +13,15 @@ enum DiagnosticEventKind: String, CaseIterable {
     case jetsam = "Jetsam 杀后台"
     case crash = "进程崩溃"
     case system = "系统/看门狗"
+
+    var label: String {
+        switch self {
+        case .all: return L("全部")
+        case .jetsam: return L("Jetsam 杀后台")
+        case .crash: return L("进程崩溃")
+        case .system: return L("系统/看门狗")
+        }
+    }
 }
 
 struct DiagnosticReportItem: Identifiable {
@@ -31,7 +40,7 @@ struct CrashDiagnosticsView: View {
     @State private var isScanning = false
     @State private var canRead = false
     @State private var canWrite = false
-    @State private var statusMessage = "正在扫描系统诊断报告容器..."
+    @State private var statusMessage = L("正在扫描系统诊断报告容器...")
     @State private var reports: [DiagnosticReportItem] = []
     @State private var filterKind: DiagnosticEventKind = .all
     @State private var searchText = ""
@@ -76,7 +85,7 @@ struct CrashDiagnosticsView: View {
             Section {
                 Picker("类型筛选", selection: $filterKind) {
                     ForEach(DiagnosticEventKind.allCases, id: \.self) { k in
-                        Text(k.rawValue).tag(k)
+                        Text(k.label).tag(k)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -98,9 +107,9 @@ struct CrashDiagnosticsView: View {
                 if canWrite && !reports.isEmpty {
                     Button(role: .destructive) {
                         Alertinator.shared.alert(
-                            title: "清理历史诊断报告？",
-                            body: "将安全删除 DiagnosticReports 下已归档的 \(reports.count) 份崩溃与 Jetsam 日志文件（约 \(AppContainerDirectoryHelper.formatBytes(totalSizeBytes))），完整保留系统目录结构。",
-                            actionLabel: "确认清理",
+                            title: L("清理历史诊断报告？"),
+                            body: L("将安全删除 DiagnosticReports 下已归档的 \(reports.count) 份崩溃与 Jetsam 日志文件（约 \(AppContainerDirectoryHelper.formatBytes(totalSizeBytes))），完整保留系统目录结构。"),
+                            actionLabel: L("确认清理"),
                             action: { cleanAllReports() }
                         )
                     } label: {
@@ -108,12 +117,12 @@ struct CrashDiagnosticsView: View {
                     }
                 }
             } header: {
-                HeaderLabel("概览与空间清理 [测试]", symbol: "stethoscope")
+                HeaderLabel(L("概览与空间清理 [测试]"), symbol: "stethoscope")
             }
 
             Section {
                 if filteredReports.isEmpty && !isScanning {
-                    Text(canRead ? "暂无符合筛选条件的崩溃或 Jetsam 报告" : "当前系统版本未授权访问 osanalytics 容器")
+                    Text(canRead ? L("暂无符合筛选条件的崩溃或 Jetsam 报告") : L("当前系统版本未授权访问 osanalytics 容器"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
@@ -131,7 +140,7 @@ struct CrashDiagnosticsView: View {
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundStyle(.primary)
                                         Spacer()
-                                        Text(item.kind.rawValue)
+                                        Text(item.kind.label)
                                             .font(.caption2.weight(.medium))
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
@@ -153,7 +162,7 @@ struct CrashDiagnosticsView: View {
                     }
                 }
             } header: {
-                HeaderLabel("诊断事件列表 (\(filteredReports.count))", symbol: "list.bullet.rectangle")
+                HeaderLabel(L("诊断事件列表 (\(filteredReports.count))"), symbol: "list.bullet.rectangle")
             }
         }
         .searchable(text: $searchText, prompt: "搜索进程名、异常信号或文件名")
@@ -217,7 +226,7 @@ struct CrashDiagnosticsView: View {
                     self.isScanning = false
                     self.canRead = false
                     self.canWrite = false
-                    self.statusMessage = "访问受限（\(granted.2)）"
+                    self.statusMessage = L("访问受限（\(granted.2)）")
                 }
                 return
             }
@@ -254,7 +263,7 @@ struct CrashDiagnosticsView: View {
                 self.canRead = true
                 self.canWrite = writable
                 self.reports = parsedItems
-                self.statusMessage = writable ? "支持读取与清理" : "纯只读模式"
+                self.statusMessage = writable ? L("支持读取与清理") : L("纯只读模式")
             }
         }
     }
@@ -279,8 +288,8 @@ struct CrashDiagnosticsView: View {
                 self.isScanning = false
                 Haptic.shared.play(.soft)
                 Alertinator.shared.alert(
-                    title: "清理完成！",
-                    body: "已安全清除 \(deletedCount) 份历史崩溃与 Jetsam 报告，释放 \(AppContainerDirectoryHelper.formatBytes(freedBytes)) 存储空间。"
+                    title: L("清理完成！"),
+                    body: L("已安全清除 \(deletedCount) 份历史崩溃与 Jetsam 报告，释放 \(AppContainerDirectoryHelper.formatBytes(freedBytes)) 存储空间。")
                 )
                 self.scanReports()
             }
@@ -300,7 +309,7 @@ struct CrashDiagnosticsView: View {
         let headData = (try? fh.read(upToCount: 262_144)) ?? Data()
         let text = String(decoding: headData, as: UTF8.self)
 
-        var bugType = "未知"
+        var bugType = L("未知")
         var appName = fileName
         var summary = fileName
         var kind: DiagnosticEventKind = .system
@@ -321,10 +330,10 @@ struct CrashDiagnosticsView: View {
 
             if bugType == "298" || fileName.localizedCaseInsensitiveContains("JetsamEvent") {
                 kind = .jetsam
-                appName = "Jetsam 内存保护事件"
+                appName = L("Jetsam 内存保护事件")
                 if let bodyData = bodyPart.data(using: .utf8),
                    let bodyJSON = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
-                    let largest = (bodyJSON["largestProcess"] as? String) ?? "未知进程"
+                    let largest = (bodyJSON["largestProcess"] as? String) ?? L("未知进程")
                     var killedNames: [String] = []
                     if let procs = bodyJSON["processes"] as? [[String: Any]] {
                         for p in procs {
@@ -335,12 +344,12 @@ struct CrashDiagnosticsView: View {
                         }
                     }
                     if killedNames.isEmpty {
-                        summary = "最高内存占用进程：\(largest)"
+                        summary = L("最高内存占用进程：\(largest)")
                     } else {
-                        summary = "最高占用：\(largest) · 被强杀：\(killedNames.prefix(3).joined(separator: ", "))"
+                        summary = L("最高占用：\(largest) · 被强杀：\(killedNames.prefix(3).joined(separator: ", "))")
                     }
                 } else {
-                    summary = "系统物理内存耗尽触发内核 Jetsam 后台清理"
+                    summary = L("系统物理内存耗尽触发内核 Jetsam 后台清理")
                 }
             } else if bugType == "309" || bugType == "109" {
                 kind = .crash
@@ -350,22 +359,22 @@ struct CrashDiagnosticsView: View {
                         appName = proc
                     }
                     let exc = bodyJSON["exception"] as? [String: Any]
-                    let excType = (exc?["type"] as? String) ?? "异常退出"
+                    let excType = (exc?["type"] as? String) ?? L("异常退出")
                     let excSig = (exc?["signal"] as? String) ?? ""
                     let term = bodyJSON["termination"] as? [String: Any]
                     let indicator = (term?["indicator"] as? String) ?? ""
                     let parts = [excType, excSig, indicator].filter { !$0.isEmpty }
-                    summary = parts.isEmpty ? "应用或守护进程异常崩溃" : parts.joined(separator: " · ")
+                    summary = parts.isEmpty ? L("应用或守护进程异常崩溃") : parts.joined(separator: " · ")
                 } else {
-                    summary = "进程崩溃报告 (\(fileName))"
+                    summary = L("进程崩溃报告 (\(fileName))")
                 }
             } else if bugType == "210" || fileName.localizedCaseInsensitiveContains("panic") {
                 kind = .system
-                appName = "内核 Panic / 看门狗重启"
-                summary = "检测到系统级重启记录 (\(fileName))"
+                appName = L("内核 Panic / 看门狗重启")
+                summary = L("检测到系统级重启记录 (\(fileName))")
             } else {
                 kind = .system
-                summary = "系统诊断事件 (\(fileName))"
+                summary = L("系统诊断事件 (\(fileName))")
             }
         }
 
@@ -390,7 +399,7 @@ struct CrashDiagnosticsView: View {
 private struct DiagnosticDetailSheet: View {
     let item: DiagnosticReportItem
     @Environment(\.dismiss) private var dismiss
-    @State private var rawPreview: String = "正在读取报告内容..."
+    @State private var rawPreview: String = L("正在读取报告内容...")
 
     var body: some View {
         NavigationStack {
@@ -437,13 +446,13 @@ private struct DiagnosticDetailSheet: View {
             }
             .onAppear {
                 DispatchQueue.global(qos: .userInitiated).async {
-                    var content = "无法读取原文件"
+                    var content = L("无法读取原文件")
                     if let fh = try? FileHandle(forReadingFrom: item.fileURL) {
                         let d = (try? fh.read(upToCount: 128 * 1024)) ?? Data()
                         try? fh.close()
                         content = String(decoding: d, as: UTF8.self)
                         if Int64(d.count) < item.fileSize {
-                            content += "\n\n... [预览已截断前 128 KB，点击右上角可导出完整原文件]"
+                            content += L("\n\n... [预览已截断前 128 KB，点击右上角可导出完整原文件]")
                         }
                     }
                     DispatchQueue.main.async {

@@ -78,7 +78,7 @@ struct InfoViewer: View {
         
         var body: some View {
             HStack {
-                Text(label)
+                Text(label.loc)
                 Spacer()
                 Text(string)
                     .foregroundStyle(.secondary)
@@ -104,7 +104,7 @@ struct InfoViewer: View {
         
         var body: some View {
             HStack {
-                Text(label)
+                Text(label.loc)
                 Spacer()
                 Image(systemName: bool ? "checkmark" : "xmark")
                     .foregroundStyle(.secondary)
