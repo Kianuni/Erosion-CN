@@ -72,6 +72,29 @@
 
 ---
 
+## Troubleshooting & FAQ
+
+### 1. Apply fails with `worse_query` error (`result: -1`)
+- Your sideloading tool stripped the `App Group` entitlement (`(wq) Active App Group:` on the Home log is empty). Re-sign and install using **SideStore, AltStore, Feather, Sideloadly, Impactor, or iLoader** with App Group entitlements enabled.
+
+### 2. Fast Clean Up works, why do High-Quality Clean Up, Extend, Reframe, or Camera `SIRI` fail?
+- **If it fails instantly in 0ms (no loading spinner)**:
+  - On all native Apple Intelligence iPhones (`iPhone 15 Pro` and newer), factory `CacheData` requires **`Personal Translator` (slot `#266`) = `true`** and **`Audio Intelligence` (slot `#178`) = `false`**. Earlier versions (`v0.8.3 – v0.8.5`) could flip `#266` to `false`, causing `GenerativeModels / ModelCatalog` to abort locally in 0ms.
+  - **Fix**: Update to **`v0.9.1+`** → open **Tweaks → MobileGestalt** → tap **One-Click Setup / Repair** → **Apply** → **power off and cold-reboot**.
+- **If it spins for a few seconds and then fails**:
+  - Cloud photo tools and Camera `SIRI` require Apple **Private Cloud Compute (PCC)** anonymous tokens (`mask-api.icloud.com`, `mask.icloud.com`, `mask-h2.icloud.com`) and OHTTP QUIC relays (`*.app.apple.com`, `apple-relay.*`). Shared VPN exit IPs frequently trigger `Code=1009` (`429`) rate limits, or third-party VPN tunnels suspend system iCloud Private Relay. Use iCloud **Private Relay** or route those domains through a clean, low-concurrency US proxy with UDP/QUIC enabled.
+
+### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
+1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.
+2. **System Region & Geo-Eligibility**: Change **Settings → General → Language & Region → Region** away from `China mainland` (e.g. `Taiwan` or `United States`) and route `gspe1-ssl.ls.apple.com` through a US proxy so `eligibilityd` refreshes.
+3. **`Add eSIM` on Mainland `iPhone 18 Pro / Pro Max` (`A3715` / `A3718`)**: Eject the dual physical SIM tray first and cold-reboot with an **empty SIM tray** so baseband exposes `Add eSIM`; once your overseas eSIM is provisioned, re-insert your physical SIM.
+
+### 4. Important Safety Reminder Before iOS Updates / Downgrades
+- `worse_query` currently supports **iOS 27.0 – 27.2.1** and **27.3 beta 1** only — disable automatic iOS updates.
+- Always run **One-Tap Factory Restore** (or **Clean Cache Rebuild**) inside Erosion **before** flashing, restoring, or downgrading iOS.
+
+---
+
 ## Credits & License
 
 - Upstream project: **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** (`lunginspector`, `forcequit`, `0xjohnny`, `Skadz`, `rooootdev`, `neonmodder123`)
