@@ -65,9 +65,9 @@
     - **污染基线布尔开关直关加固与多重硬件冲突防呆护栏（`v0.8.2 – v0.8.6`）**：若安装本应用前设备已被其他工具开启 `InternalInstall` / `InternalBuild` 等互斥项（导致 `OriginalGestalt.plist` 记录了脏值 `1`），直接关闭对应开关即可一键从 `CacheExtra` 彻底剥离残留键；针对在 iPhone / iPad 上开启会导致 Siri 无限卡死的 `DeviceSupportsSiriHub` 以及强开会导致**照片「高质量」消除报错**的非原生 `Audio Intelligence` 实验槽位，均已加入自动防呆锁定与一键自愈修复（同时精确保留原生 AI 机型的 `Personal Translator = true` 基线）；同时将 **「FaceTime 空间音频」** 与 **「空间音频录制」** 解耦独立，对非四麦克风旧机型（如 `iPhone 15 Pro` 及更早机型）自动防呆锁定空间音频录制，避免语音备忘录出现无效「录音室」档位；
     - **修复高 Inode 主力机容器扫描卡死与 `iOS 26.3.x` `CSStore2` 秒开适配（`v0.8.6`）**：修复长期使用设备（累计 APFS Inode 破 2 亿）回退 `pathleak` 时扫描上限保护失效导致耗时 5–6 分钟的问题，并新增不依赖结构体偏移的 `CSStore2` 书签 TLV 极速兜底提取，使 `iOS 26.3.x` 与 `iOS 27.x` 均可秒级加载容器列表；
     - **`Surge (.sgmodule)` + `Stash (.stoverride / YAML)` 双格式完整分流导出**：共享组中心支持切换导出 Surge 模块与 Stash 覆写文件（内置 `always-real-ip` / `fake-ip-filter`、Siri 主网关直连、PCC 隐私计算中继、`mask-api.icloud.com` 匿名令牌签发、`app.apple.com` 相册消除网关、OpenAI 及 Google 视觉智能全套置顶规则）。
-13. **单包完整中英双语支持与实时热切换（`v0.9.0`）**
-    - 单一 IPA 同时内置完整 **简体中文 (`zh-Hans`)** 与 **英文 (`en`)** 语言包：中文系统默认显示简体中文，非中文系统自动切换为英文界面；
-    - 「设置 → 界面语言」内置 **跟随系统 / 简体中文 / English** 三档实时切换器，无需重启应用即可全局即时切换界面、弹窗、检视器与日志语言。
+13. **单包完整中英双语支持与 `Personal Translator (#266)` 基线双向自愈（`v0.9.0 – v0.9.1`）**
+    - 单一 IPA 同时内置完整 **简体中文 (`zh-Hans`)** 与 **英文 (`en`)** 语言包：中文系统默认显示简体中文，非中文系统自动切换为英文界面，「设置 → 界面语言」支持 **跟随系统 / 简体中文 / English** 三档实时热切换；
+    - **`v0.9.1` 修复原生 AI 机型 `Personal Translator` 槽位 `#266` 误关导致相册云端工具与相机 Siri 0 秒瞬间报错的问题**：锁定 `iPhone 15 Pro` 至 `iPhone 18 Pro Max` 全系原生 AI iPhone 的 `#266 = true`、`#178 = false` 原厂基线（免疫跨版本 OTA 与污染缓存），并新增双向异常检测与「一键配齐 / 修复」自愈还原。
 
 ---
 
@@ -86,7 +86,7 @@
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.9.0_Bilingual.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.9.1_Bilingual.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 APPLICATION_NAME=Erosion
 APP_VERSION=$(grep -m1 'MARKETING_VERSION =' "$APPLICATION_NAME.xcodeproj/project.pbxproj" | sed -E 's/.*= *([^;]+);/\1/' | tr -d '[:space:]')
-IPA_NAME="${APPLICATION_NAME}_v${APP_VERSION}_zh-Hans.ipa"
+IPA_NAME="${APPLICATION_NAME}_v${APP_VERSION}_Bilingual.ipa"
 
 echo "[*] $APPLICATION_NAME v$APP_VERSION Build Script"
 
@@ -77,7 +77,7 @@ rm -rf Payload
 
 cd ..
 if [[ $* == *--debug* ]]; then
-mv "$WORKING_LOCATION/build/$APPLICATION_NAME.ipa" "./${APPLICATION_NAME}_v${APP_VERSION}_zh-Hans.debug.ipa"
+mv "$WORKING_LOCATION/build/$APPLICATION_NAME.ipa" "./${APPLICATION_NAME}_v${APP_VERSION}_Bilingual.debug.ipa"
 else
 mv "$WORKING_LOCATION/build/$APPLICATION_NAME.ipa" "./$IPA_NAME"
 fi

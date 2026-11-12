@@ -4268,6 +4268,40 @@
         }
       }
     },
+    "⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错），请关闭此项或点顶部一键修复": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ Personal Translator slot (#266) was turned off by an older version (causes instant Photos / Camera Siri errors) — turn this off or tap One-Click Repair above"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错），请关闭此项或点顶部一键修复"
+          }
+        }
+      }
+    },
+    "⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错，可一键修复）": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ Personal Translator slot (#266) was turned off by an older version (causes instant Photos Clean Up / Extend & Camera Siri errors — tap One-Click Repair)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错，可一键修复）"
+          }
+        }
+      }
+    },
     "⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）": {
       "extractionState": "manual",
       "localizations": {
@@ -4812,19 +4846,19 @@
         }
       }
     },
-    "【防呆护栏警告】真机（iPhone 18 Pro Max · iPhone19,7）底层探针核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在支持的原生硬件（如 iPhone 18 Pro 系列）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence 实验槽位会导致系统生成式模型管线校验断路——直接造成照片【“高质量”消除 (ServerDiffusionInpainting)】报错失效（提示“消除此照片时出错。请稍后再试。”）！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持，本机原生自带的 Personal Translator 也会被自动识别保留。安全护栏已默认锁定防误开；若此前在旧版本中曾开启，直接关闭此开关（或点击顶部体检卡片一键修复）并应用即可恢复原厂基线与高质量消除。": {
+    "【防呆护栏警告】真机（iPhone 15 Pro Max · iPhone16,2 与 iPhone 18 Pro Max · iPhone19,7）底层探针交叉核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在所有原生支持 Apple 智能的 iPhone（iPhone 15 Pro 及以上机型）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence (#178)，或误将原生 AI 机型的 Personal Translator (#266) 设为 false，均会导致系统 GenerativeModels / ModelCatalog 管线校验瞬间断路——直接造成照片【高质量消除、扩图、重构】与【相机 Siri】0 秒瞬间报错！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持。安全护栏已自动校准本机原厂基线（原生 AI 机型锁定 #266=true、#178=false）；若此前受旧版本影响出现槽位偏差，点击顶部体检卡片「一键配齐 / 修复」（或关闭此开关）并应用冷重启即可彻底恢复。": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "[Safety Guardrail] Hardware probe verification on physical devices (iPhone 18 Pro Max · iPhone19,7) confirms that iOS 27 Audio Intelligence (rb2tKZxlj0Gm2tBmUQSLqQ, Slot #178) defaults to false (0x00) in factory iPhone / iPad device trees, whereas Personal Translator (M1n2sAqf33NAOgZRGxQYBA, Slot #266) is natively enabled as true (0x01) on supported hardware (such as the iPhone 18 Pro lineup).\n\n⚠️ Forcing the non-native experimental Audio Intelligence slot on iPhone or iPad breaks generative model pipeline validation — causing high-quality Photos Clean Up (ServerDiffusionInpainting) to fail with \"There was an error cleaning up this photo. Please try again later.\"!\n\nStandard call recording, Voice Memos transcription, and system translation are already fully covered by the master AI toggle, and native Personal Translator support is automatically preserved. Safety Guardrail locks this slot off by default; if enabled in an earlier version, turn it off (or tap the one-tap fix on the top readiness card) and apply to restore your factory baseline and high-quality Clean Up."
+            "value": "[Safety Guardrail Warning] Cross-verified via live MGCopyAnswer probes on iPhone 15 Pro Max (iPhone16,2) and iPhone 18 Pro Max (iPhone19,7): iOS 27 Audio Intelligence (rb2tKZxlj0Gm2tBmUQSLqQ, slot #178) is natively false (0x00) on all factory iPhones and iPads, whereas Personal Translator (M1n2sAqf33NAOgZRGxQYBA, slot #266) is natively true (0x01) on all Apple Intelligence iPhones (iPhone 15 Pro and newer).\n\n⚠️ Forcing non-native Audio Intelligence (#178) ON, or accidentally setting Personal Translator (#266) to false on a native AI iPhone, immediately trips GenerativeModels / ModelCatalog pipeline validation — causing Photos High-Quality Clean Up, Extend, Reframe, and Camera Siri to fail instantly in 0ms!\n\nCall recording, Voice Memos transcription, and system translation are already supported by the main AI switch. This guardrail locks your device's factory baseline (#266=true, #178=false on native AI iPhones); if an earlier version altered these slots, tap \"One-Click Setup / Repair\" at the top (or turn this toggle off), apply, and cold-reboot to fully restore them."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "【防呆护栏警告】真机（iPhone 18 Pro Max · iPhone19,7）底层探针核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在支持的原生硬件（如 iPhone 18 Pro 系列）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence 实验槽位会导致系统生成式模型管线校验断路——直接造成照片【“高质量”消除 (ServerDiffusionInpainting)】报错失效（提示“消除此照片时出错。请稍后再试。”）！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持，本机原生自带的 Personal Translator 也会被自动识别保留。安全护栏已默认锁定防误开；若此前在旧版本中曾开启，直接关闭此开关（或点击顶部体检卡片一键修复）并应用即可恢复原厂基线与高质量消除。"
+            "value": "【防呆护栏警告】真机（iPhone 15 Pro Max · iPhone16,2 与 iPhone 18 Pro Max · iPhone19,7）底层探针交叉核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在所有原生支持 Apple 智能的 iPhone（iPhone 15 Pro 及以上机型）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence (#178)，或误将原生 AI 机型的 Personal Translator (#266) 设为 false，均会导致系统 GenerativeModels / ModelCatalog 管线校验瞬间断路——直接造成照片【高质量消除、扩图、重构】与【相机 Siri】0 秒瞬间报错！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持。安全护栏已自动校准本机原厂基线（原生 AI 机型锁定 #266=true、#178=false）；若此前受旧版本影响出现槽位偏差，点击顶部体检卡片「一键配齐 / 修复」（或关闭此开关）并应用冷重启即可彻底恢复。"
           }
         }
       }

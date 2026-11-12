@@ -70,6 +70,8 @@ struct AppleIntelligenceCheckupCard: View {
             gateDetail = L("⚠️ 检测到已开启 InternalInstall 内部模式（与 AI 互斥）")
         } else if siriHubConflict {
             gateDetail = L("⚠️ 检测到已开启 SiriHub 路由（会卡死“正在添加 Siri 支持内容”，可一键修复）")
+        } else if store.isPersonalTranslatorAccidentallyDisabled() {
+            gateDetail = L("⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错，可一键修复）")
         } else if advAIConflict {
             gateDetail = L("⚠️ 检测到已开启进阶 AI 实验槽位（会导致照片“高质量”消除报错，可一键修复）")
         } else if !greenTeaCleared {

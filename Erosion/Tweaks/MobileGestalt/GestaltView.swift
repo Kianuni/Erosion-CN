@@ -263,11 +263,13 @@ struct GestaltView: View {
                         } else {
                             PlainToggle(
                                 L("解锁 iOS 27 进阶 AI 能力 [测试特性]"),
-                                subtitle: advConflictOn
-                                    ? L("⚠️ 检测到已开启非原生实验槽位（会导致照片“高质量”消除报错），请直接关闭并应用恢复")
-                                    : (isNativePersonalTranslatorHD()
-                                        ? L("✅ 本机已原生开启个人实时翻译；实验性音频智能槽位已锁定关闭（强开会导致照片高质量消除报错）")
-                                        : L("已由防呆护栏自动锁定：iPhone/iPad 强开会导致照片“高质量”消除报错")),
+                                subtitle: store.isPersonalTranslatorAccidentallyDisabled()
+                                    ? L("⚠️ 检测到个人实时翻译槽位 (#266) 被旧版误关（会导致相册消除/扩图与相机 Siri 瞬间报错），请关闭此项或点顶部一键修复")
+                                    : (advConflictOn
+                                        ? L("⚠️ 检测到已开启非原生实验槽位（会导致照片“高质量”消除报错），请直接关闭并应用恢复")
+                                        : (isNativePersonalTranslatorHD()
+                                            ? L("✅ 本机已原生开启个人实时翻译；实验性音频智能槽位已锁定关闭（强开会导致照片高质量消除报错）")
+                                            : L("已由防呆护栏自动锁定：iPhone/iPad 强开会导致照片“高质量”消除报错"))),
                                 infoType: .warning,
                                 infoTitle: L("iOS 27 进阶 AI 防呆锁定说明"),
                                 infoMessage: MGMsg.advAppleIntell,
@@ -694,6 +696,7 @@ struct GestaltView: View {
                                             try? fm.removeItem(at: MGURL.savedGestaltSHA256URL)
                                             try? fm.removeItem(at: MGURL.systemVaultGestaltURL)
                                             try? fm.removeItem(at: MGURL.systemVaultSHA256URL)
+                                            MGCacheDataCoordinator.shared.clearRecordedBaselines()
                                             store.mgCurrentDict = mgLoadData()
                                         })
                                     }

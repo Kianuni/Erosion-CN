@@ -471,6 +471,7 @@ func mgImportExternalOriginalBackup(from externalURL: URL) -> Result<String, Err
         }
 
         try mgSaveOriginalBackupWithDigest(data)
+        MGCacheDataCoordinator.shared.clearRecordedBaselines()
         let buildStr = (importedDict["CacheVersion"] as? String) ?? L("当前版本")
         let shaPrefix = String(mgComputeSHA256Hex(data).prefix(12))
         return .success(L("已成功校验并导入原厂备份（版本：\(buildStr)，机型：\(impProd)，SHA-256：\(shaPrefix)...），同时已同步锁定至系统安全金库。"))
@@ -491,6 +492,7 @@ func mgResetLocalTweakPreferences() {
     ud.set("", forKey: "mgDeviceName")
     ud.set(false, forKey: "mgOverrideGates")
     ud.removeObject(forKey: MGRegionUnlockMode.defaultsKey)
+    MGCacheDataCoordinator.shared.clearRecordedBaselines()
 }
 
 func mgExecuteCleanCacheRebuild(alsoResetConfigAndKeypad: Bool = false) -> Result<Void, Error> {
@@ -996,23 +998,25 @@ func isNativeAudioIntellHD() -> Bool {
 
 func isNativePersonalTranslatorHD() -> Bool {
     guard isAppleIntellHD() else { return false }
-    if case .success(let layout) = MGCacheDataCoordinator.shared.libraryLayout(),
-       let slotIdx = layout.slotIndex(forKey: MGKey.personalTranslator) {
-        if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL) {
-            if let val = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.personalTranslator, layout: layout, savedOriginalDict: ogDict) {
-                return val
-            }
-            if let ogData = ogDict["CacheData"] as? Data,
-               ogData.count == layout.byteCount,
-               layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
-                return ogData[slotIdx * 8] == 1
-            }
+    let m = currentOriginalMachineName()
+    if case .success(let layout) = MGCacheDataCoordinator.shared.libraryLayout() {
+        guard let slotIdx = layout.slotIndex(forKey: MGKey.personalTranslator) else {
+            return false
         }
-        if let recorded = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.personalTranslator, layout: layout, savedOriginalDict: nil) {
-            return recorded
+        // All native Apple Intelligence iPhones (iPhone 15 Pro through iPhone 18 Pro Max) have
+        // Personal Translator (slot #266) enabled in factory CacheData; never let a polluted
+        // backup or UserDefaults baseline downgrade it to false.
+        if m.hasPrefix("iPhone") {
+            return true
         }
+        if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL),
+           case .success(let savedData) = layout.validatePlist(ogDict),
+           layout.validateSingleBooleanSlot(slotIdx, in: savedData) {
+            return savedData[slotIdx * 8] == 1
+        }
+        return true
     }
-    return isAppleIntellHD()
+    return m.hasPrefix("iPhone") || isAppleIntellHD()
 }
 
 func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: NSDictionary?) -> Bool {
@@ -1020,23 +1024,22 @@ func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: 
     // Ground-truth verified via MGInspector on live iPhone 18 Pro Max (iPhone19,7) & iPhone 15 Pro Max (iPhone16,2) running iOS 27:
     // - rb2tKZxlj0Gm2tBmUQSLqQ (Audio Intelligence, slot #178) is natively FALSE (0x00) on iPhone/iPad,
     //   and forcing it to 1 breaks Photos High-Quality Clean Up ("消除此照片时出错。请稍后再试。").
-    // - M1n2sAqf33NAOgZRGxQYBA (Personal Translator, slot #266) IS natively TRUE (0x01) on native Apple Intelligence devices
-    //   in factory OriginalGestalt.plist, and works natively with Photos High-Quality Clean Up.
+    // - M1n2sAqf33NAOgZRGxQYBA (Personal Translator, slot #266) IS natively TRUE (0x01) on all native Apple Intelligence iPhones
+    //   in factory OriginalGestalt.plist; forcing it to 0 breaks GenerativeModels / Photos Cloud Tools & Camera Siri in 0ms.
     if key == MGKey.audioIntell && (m.hasPrefix("iPhone") || m.hasPrefix("iPad")) {
         return false
     }
     if key == MGKey.personalTranslator {
-        guard isAppleIntellHD() else { return false }
-        if let val = MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) {
-            return val
+        guard isAppleIntellHD(), let slotIdx = layout.slotIndex(forKey: key) else { return false }
+        if m.hasPrefix("iPhone") {
+            return true
         }
-        if let ogData = savedOrig?["CacheData"] as? Data,
-           ogData.count == layout.byteCount,
-           let slotIdx = layout.slotIndex(forKey: key),
-           layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
-            return ogData[slotIdx * 8] == 1
+        if let savedOrig,
+           case .success(let savedData) = layout.validatePlist(savedOrig),
+           layout.validateSingleBooleanSlot(slotIdx, in: savedData) {
+            return savedData[slotIdx * 8] == 1
         }
-        return isAppleIntellHD()
+        return true
     }
     return MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) ?? false
 }
@@ -1072,10 +1075,28 @@ func isLiveAdvAIConflictActive() -> Bool {
     if isAdvAppleIntellHD() {
         return false
     }
+    if case .success(let layout) = MGCacheDataCoordinator.shared.libraryLayout() {
+        if layout.slotIndex(forKey: MGKey.personalTranslator) != nil,
+           let livePT = mgQueryLiveBool(forKey: MGKey.personalTranslator),
+           livePT != isNativePersonalTranslatorHD() {
+            return true
+        }
+        if layout.slotIndex(forKey: MGKey.audioIntell) != nil,
+           let liveAI = mgQueryLiveBool(forKey: MGKey.audioIntell),
+           liveAI != isNativeAudioIntellHD() {
+            return true
+        }
+        return false
+    }
     let nativePersonalTranslator = isNativePersonalTranslatorHD()
     let nativeAudioIntell = isNativeAudioIntellHD()
-    return (!nativePersonalTranslator && (mgQueryLiveBool(forKey: MGKey.personalTranslator) ?? false))
-        || (!nativeAudioIntell && (mgQueryLiveBool(forKey: MGKey.audioIntell) ?? false))
+    if let livePT = mgQueryLiveBool(forKey: MGKey.personalTranslator), livePT != nativePersonalTranslator {
+        return true
+    }
+    if let liveAI = mgQueryLiveBool(forKey: MGKey.audioIntell), liveAI != nativeAudioIntell {
+        return true
+    }
+    return false
 }
 
 func isAdvAppleIntellHD() -> Bool {

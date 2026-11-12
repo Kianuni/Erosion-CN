@@ -66,7 +66,7 @@
 > [!WARNING]
 > Erosion requires at least one valid `App Group` entitlement injected by your signing tool. Sign and install using **SideStore, AltStore, Feather, Sideloadly, Impactor, iLoader**, or a paid Apple Developer certificate with an App Group enabled.
 
-1. Download the latest `Erosion_v0.9.0_Bilingual.ipa` from [Releases](https://github.com/Kianuni/Erosion-CN/releases/latest).
+1. Download the latest `Erosion_v0.9.1_Bilingual.ipa` from [Releases](https://github.com/Kianuni/Erosion-CN/releases/latest).
 2. Sideload with any signing tool that preserves/injects an `App Group` entitlement (check the Home log on first launch to confirm `(wq) Active App Group:` is non-empty).
 3. If your device is not already in English, Erosion will automatically switch to English; you can also toggle languages manually at any time under **Settings (gear icon) → App Language**.
 

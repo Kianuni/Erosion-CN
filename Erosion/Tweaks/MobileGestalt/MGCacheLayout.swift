@@ -676,8 +676,15 @@ final class MGCacheDataCoordinator {
         let key = layout.uuid.uppercased()
 
         var extraMap: [String: Bool] = [:]
+        let hwModel = currentOriginalMachineName()
         for (fKey, fSlot) in layout.featureSlotIndices where layout.validateSingleBooleanSlot(fSlot, in: data) {
-            extraMap[fKey] = (data[fSlot * 8] == 1)
+            if fKey == MGCacheDataLayout.audioIntellKey && (hwModel.hasPrefix("iPhone") || hwModel.hasPrefix("iPad")) {
+                extraMap[fKey] = false
+            } else if fKey == MGCacheDataLayout.personalTranslatorKey && hwModel.hasPrefix("iPhone") {
+                extraMap[fKey] = isAppleIntellHD()
+            } else {
+                extraMap[fKey] = (data[fSlot * 8] == 1)
+            }
         }
 
         if var existing = map[key] {
@@ -740,13 +747,29 @@ final class MGCacheDataCoordinator {
     }
 
     func originalSlotValue(forKey key: String, layout: MGCacheDataLayout, savedOriginalDict: NSDictionary?) -> Bool? {
+        let hwModel = currentOriginalMachineName()
+        if key == MGCacheDataLayout.audioIntellKey && (hwModel.hasPrefix("iPhone") || hwModel.hasPrefix("iPad")) {
+            return false
+        }
+        if key == MGCacheDataLayout.personalTranslatorKey && hwModel.hasPrefix("iPhone") {
+            return isAppleIntellHD()
+        }
         if let saved = savedOriginalDict,
            case .success(let savedData) = layout.validatePlist(saved),
            let slotIdx = layout.slotIndex(forKey: key),
            layout.validateSingleBooleanSlot(slotIdx, in: savedData) {
             return savedData[slotIdx * 8] == 1
         }
+        if key == MGCacheDataLayout.personalTranslatorKey {
+            return isAppleIntellHD()
+        }
         return loadRecordedMap()[layout.uuid.uppercased()]?.extraSlots?[key]
+    }
+
+    func clearRecordedBaselines() {
+        lock.lock()
+        defer { lock.unlock() }
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
     }
 
     private func loadRecordedMap() -> [String: MGCacheRecordedFlags] {

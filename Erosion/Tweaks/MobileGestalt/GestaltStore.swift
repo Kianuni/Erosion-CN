@@ -42,7 +42,7 @@ enum MGMsg {
     static var intInstall: String { L("此选项将启用部分遗留在正式版 iOS 中的 Apple 内部调试特性。注意：开启后可能会影响部分正常功能（如无法从 App Store 重新安装自带系统应用），且与 Apple 智能互斥。") }
     static var intBuild: String { L("此开关主要用于在“设置”应用中显示内部存储调试信息。在部分设备（尤其是 iPadOS）上可能引发兼容性问题。") }
     static var appleIntellInfo: String { L("为不支持 Apple 智能的旧机型开启端侧生成式 AI 总开关 (DeviceSupportsGenerativeModelSystems)，并自动同步解锁以下 2 项在旧芯片上默认关闭的子能力标记：\n\n• 相册“消除”功能 (Photos Clean Up)\n• 备忘录“手写体合成” (Handwriting Synthesis)\n\n注：旧机型若需实际下载端侧 AI 模型，通常还需配合下方的“机型伪装”与上方的“解除地区限制”使用（修改后请手动重启手机生效）。") }
-    static var advAppleIntell: String { L("【防呆护栏警告】真机（iPhone 18 Pro Max · iPhone19,7）底层探针核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在支持的原生硬件（如 iPhone 18 Pro 系列）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence 实验槽位会导致系统生成式模型管线校验断路——直接造成照片【“高质量”消除 (ServerDiffusionInpainting)】报错失效（提示“消除此照片时出错。请稍后再试。”）！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持，本机原生自带的 Personal Translator 也会被自动识别保留。安全护栏已默认锁定防误开；若此前在旧版本中曾开启，直接关闭此开关（或点击顶部体检卡片一键修复）并应用即可恢复原厂基线与高质量消除。") }
+    static var advAppleIntell: String { L("【防呆护栏警告】真机（iPhone 15 Pro Max · iPhone16,2 与 iPhone 18 Pro Max · iPhone19,7）底层探针交叉核验确认：iOS 27 音频智能 (rb2tKZxlj0Gm2tBmUQSLqQ，槽位 #178) 在 iPhone / iPad 原厂设备树中默认均为 false（0x00），而个人实时翻译 (M1n2sAqf33NAOgZRGxQYBA，槽位 #266) 在所有原生支持 Apple 智能的 iPhone（iPhone 15 Pro 及以上机型）上原厂已自动开启为 true（0x01）。\n\n⚠️ 在 iPhone / iPad 上强行开启非原生的 Audio Intelligence (#178)，或误将原生 AI 机型的 Personal Translator (#266) 设为 false，均会导致系统 GenerativeModels / ModelCatalog 管线校验瞬间断路——直接造成照片【高质量消除、扩图、重构】与【相机 Siri】0 秒瞬间报错！\n\n常规通话录音、语音备忘录转写与系统翻译均由主 AI 开关完整支持。安全护栏已自动校准本机原厂基线（原生 AI 机型锁定 #266=true、#178=false）；若此前受旧版本影响出现槽位偏差，点击顶部体检卡片「一键配齐 / 修复」（或关闭此开关）并应用冷重启即可彻底恢复。") }
     static var audioMixInfo: String { L("通过本机系统库实时动态解析 CameracinematicAudioTrackRendering (aVL5GE3tx0LSCI/ErfrJGA) 二进制 CacheData 布尔槽位并设为 true，解锁相册与相机视频编辑中的“混音 (Audio Mix)”功能，支持“标准 / 语音突显 / 录音棚 / 电影效果”四档人声与环境音分离混音（应用后请手动重启手机生效）。") }
     static var spatialAudioInfo: String { L("通过本机系统库实时动态解析 spatial-audio-recording 与 spatial-facetime-audio 二进制 CacheData 布尔槽位并同步设为 true，解锁相机视频录制时的 3D 空间音频拾音及 FaceTime 通话空间声场渲染能力（应用后请手动重启手机生效）。") }
     static var spatialFaceTimeInfo: String { L("通过本机系统库实时动态解析 spatial-facetime-audio (/EVOCjM/Nmb2roP5ebtEFA) 二进制 CacheData 布尔槽位并设为 true，解锁 FaceTime 通话期间的 3D 空间声场渲染能力（纯软件声学渲染，支持 iPhone 15 Pro 及更早机型，不影响语音备忘录录音，应用后请手动重启手机生效）。") }
@@ -814,12 +814,26 @@ final class GestaltStore: ObservableObject {
         )
     }
 
+    func isPersonalTranslatorAccidentallyDisabled() -> Bool {
+        guard isNativePersonalTranslatorHD() else { return false }
+        if let num = self.cacheExtra[MGKey.personalTranslator] as? NSNumber, num.intValue == 0 {
+            return true
+        }
+        if case .success((let layout, let data)) = MGCacheDataCoordinator.shared.resolveValidated(for: self.mgCurrentDict),
+           let slotIdx = layout.featureSlotIndices[MGKey.personalTranslator],
+           layout.validateSingleBooleanSlot(slotIdx, in: data),
+           data[slotIdx * 8] == 0 {
+            return true
+        }
+        return false
+    }
+
     func isAdvAppleIntellConflictActive() -> Bool {
         if isAdvAppleIntellHD() {
             return false
         }
         for key in MGKey.advAppIntellKeys {
-            if (self.cacheExtra[key] as? NSNumber)?.intValue == 1 {
+            if self.cacheExtra[key] != nil {
                 return true
             }
         }
@@ -827,9 +841,10 @@ final class GestaltStore: ObservableObject {
             let savedOrig = NSDictionary(contentsOf: MGURL.savedGestaltURL)
             for key in MGKey.advAppIntellKeys {
                 if let slotIdx = layout.featureSlotIndices[key],
-                   layout.validateSingleBooleanSlot(slotIdx, in: data),
-                   data[slotIdx * 8] == 1 {
-                    if !isAdvAISlotNativeTrue(key, layout: layout, savedOrig: savedOrig) {
+                   layout.validateSingleBooleanSlot(slotIdx, in: data) {
+                    let curVal = (data[slotIdx * 8] == 1)
+                    let nativeVal = isAdvAISlotNativeTrue(key, layout: layout, savedOrig: savedOrig)
+                    if curVal != nativeVal {
                         return true
                     }
                 }
