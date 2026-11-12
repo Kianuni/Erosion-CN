@@ -100,24 +100,32 @@ struct GestaltView: View {
                         HStack {
                             Picker("屏幕子类型", selection: $mgSubtype) {
                                 Text("原始默认 (\(mgOgSubtype))").tag(mgOgSubtype)
-                                if isDynamIslandHD() && doubleSysVrs() < 19.0 {
-                                    Text("禁用灵动岛").tag(2436)
+                                if mgOgSubtype != 2436 {
+                                    if isDynamIslandHD() && doubleSysVrs() < 19.0 {
+                                        Text("禁用灵动岛 (2436)").tag(2436)
+                                    } else if isHomeButtonHD() {
+                                        Text("iPhone X 全面屏手势 (2436)").tag(2436)
+                                    }
                                 }
-                                Text("iPhone 14 Pro").tag(2436)
-                                Text("iPhone 14 Pro Max").tag(2796)
-                                Text("iPhone 15 Pro Max").tag(2976)
+                                if mgOgSubtype != 2556 {
+                                    Text("iPhone 14 Pro / 15 Pro (2556)").tag(2556)
+                                }
+                                if mgOgSubtype != 2796 {
+                                    Text("iPhone 14 Pro Max / 15 Pro Max (2796)").tag(2796)
+                                }
                                 if doubleSysVrs() >= 18.0 {
-                                    Text("iPhone 16 Pro").tag(2622)
-                                    Text("iPhone 16 Pro Max").tag(2868)
+                                    if mgOgSubtype != 2622 {
+                                        Text("iPhone 16 Pro / 17 Pro (2622)").tag(2622)
+                                    }
+                                    if mgOgSubtype != 2868 {
+                                        Text("iPhone 16 Pro Max / 17 Pro Max (2868)").tag(2868)
+                                    }
                                 }
-                                if doubleSysVrs() >= 26.0 {
-                                    Text("iPhone Air").tag(2736)
+                                if doubleSysVrs() >= 26.0 && mgOgSubtype != 2736 {
+                                    Text("iPhone Air (2736)").tag(2736)
                                 }
-                                if doubleSysVrs() >= 27.0 {
-                                    Text("iPhone 18 Pro Max").tag(2670)
-                                }
-                                if isHomeButtonHD() {
-                                    Text("iPhone X 全面屏手势").tag(2436)
+                                if doubleSysVrs() >= 27.0 && mgOgSubtype != 2670 {
+                                    Text("iPhone 18 Pro Max (2670)").tag(2670)
                                 }
                             }
                             Spacer()
@@ -348,6 +356,7 @@ struct GestaltView: View {
 
                     PlainToggle(
                         "解除国行底层限制（eSIM / FaceTime 音频）",
+                        subtitle: "注：iOS 26/27 下解除 green-tea 同样会隐藏国行单应用“不允许联网”菜单",
                         infoType: .info,
                         infoTitle: "解除国行底层限制说明",
                         infoMessage: MGMsg.chinaCacheUnlock,
@@ -357,7 +366,7 @@ struct GestaltView: View {
 
                     PlainToggle(
                         "将“无线局域网”显示为“Wi-Fi”",
-                        subtitle: "⚠️ 开启后会丢失国行特有的单应用“不允许联网”功能",
+                        subtitle: "⚠️ 开启后会隐藏 WAPI 开关与国行单应用“不允许联网”功能",
                         infoType: .warning,
                         infoTitle: "无线局域网改 Wi-Fi 重要提示",
                         infoMessage: MGMsg.wapiToWifi,
@@ -367,7 +376,7 @@ struct GestaltView: View {
                 } header: {
                     HeaderLabel("国行底层缓存限制 (CacheData 动态解析)", symbol: "antenna.radiowaves.left.and.right")
                 } footer: {
-                    Text("运行时从本机内存中的 libMobileGestalt.dylib 实时解析偏移并严格核对 CacheUUID、长度与有效位；解析失败时严禁修改任何字节。注意：将“无线局域网”改为“Wi-Fi”会丢失国行的“不允许联网”功能（仅保留蜂窝数据开关）。应用本组开关后请手动重启手机生效。")
+                    Text("运行时从本机内存中的 libMobileGestalt.dylib 实时解析偏移并严格核对 CacheUUID、长度与有效位；解析失败时严禁修改任何字节。注意：在 iOS 26/27 中，解除 green-tea 或将“无线局域网”改为“Wi-Fi”均会切换为国际版“蜂窝数据”开关逻辑（隐藏单应用“不允许联网”）。应用本组开关后请手动重启手机生效。")
                 }
 
                 Section {
@@ -379,12 +388,13 @@ struct GestaltView: View {
                         keys: [MGKey.audioMix]
                     )
                     featureSlotRow(
-                        title: "空间音频录制与 FaceTime 空间音频",
-                        subtitle: "解锁相机视频 3D 空间音频拾音及 FaceTime 空间声场渲染",
-                        infoTitle: "空间音频录制说明",
-                        infoMessage: MGMsg.spatialAudioInfo,
-                        keys: MGKey.spatialAudioAllKeys
+                        title: "FaceTime 空间音频",
+                        subtitle: "解锁 FaceTime 通话 3D 空间声场渲染（纯软件渲染，兼容旧机型且不影响语音备忘录）",
+                        infoTitle: "FaceTime 空间音频说明",
+                        infoMessage: MGMsg.spatialFaceTimeInfo,
+                        keys: [MGKey.spatialFaceTimeAudio]
                     )
+                    spatialAudioRecSlotRow()
                     featureSlotRow(
                         title: "按下快门瞬间抓拍 (Responsive Shutter)",
                         subtitle: "降低相机按下快门至成像管线的触发延迟，实现零延迟抓拍",
@@ -873,7 +883,14 @@ struct GestaltView: View {
                     let res = wq.grantAccess(path: MGURL.fsGestaltURL.deletingLastPathComponent().path)
                     hasWriteAccess = res.0 || fm.isWritableFile(atPath: MGURL.fsGestaltURL.path)
                     if !hasWriteAccess {
-                        Alertinator.shared.alert(title: "获取 MobileGestalt 写入权限失败！", body: "修改将无法保存生效，请尝试重启本应用后再试。")
+                        if res.1 == -1 {
+                            Alertinator.shared.alert(
+                                title: "缺少 App Group 签名权限（result: -1）",
+                                body: "当前侧载签名工具剥离了 App Group 容器权限，导致只能读取而无法写入 MobileGestalt。\n\n请更换保留 App Groups 能力的工具重新签名安装（免费个人自签推荐 SideStore / AltStore / Impactor / iLoader；证书重签请确保描述文件勾选了 App Groups 权限，切勿使用默认剥离权限的 Sideloadly 免费签）。"
+                            )
+                        } else {
+                            Alertinator.shared.alert(title: "获取 MobileGestalt 写入权限失败！", body: "错误码：\(res.1)（\(res.2)）。修改将无法保存生效，请尝试重启本应用后再试。")
+                        }
                     }
                 }
                 if !hasLoadedInitialData {
@@ -883,6 +900,49 @@ struct GestaltView: View {
                     dualVaultReady = mgHasSyncedSystemVault()
                 }
             }
+    }
+
+    @ViewBuilder
+    private func spatialAudioRecSlotRow() -> some View {
+        let keys = [MGKey.spatialAudioRec]
+        let canModify = store.canModifyFeatureSlot(keys)
+        let isNativeOn = store.isFeatureSlotNativeEnabled(keys)
+        let binding = store.mgFeatureSlotBinding(keys)
+        let currentlyOn = binding.wrappedValue
+
+        if isNativeOn && !mgOverrideGates {
+            PlainToggle(
+                "空间音频录制（相机 / 语音备忘录录音室）",
+                subtitle: "✅ 本机四麦克风阵列硬件已原生开启（无需额外修改，已锁定防误关）",
+                infoType: .info,
+                infoTitle: "空间音频录制说明",
+                infoMessage: MGMsg.spatialAudioRecInfo,
+                isOn: .constant(true)
+            )
+            .disabled(true)
+        } else if !isSpatialAudioRecHD() && !mgOverrideGates {
+            PlainToggle(
+                "空间音频录制（相机 / 语音备忘录录音室）",
+                subtitle: currentlyOn
+                    ? "⚠️ 非四麦克风机型开启会导致语音备忘录出现无效“录音室”选项并点录音即停，请直接关闭并应用恢复"
+                    : "已由防呆护栏自动锁定：需 iPhone 16 系列起的四麦克风硬件（三麦克风旧机型强开会导致语音备忘录“录音室”无法录音）",
+                infoType: .warning,
+                infoTitle: "空间音频录制硬件防呆说明",
+                infoMessage: MGMsg.spatialAudioRecInfo,
+                isOn: binding
+            )
+            .disabled(!canModify || !currentlyOn)
+        } else {
+            PlainToggle(
+                "空间音频录制（相机 / 语音备忘录录音室）",
+                subtitle: canModify ? "解锁相机视频 3D 空间音频拾音与语音备忘录“录音室”模式（需四麦克风硬件）" : "当前系统版本未包含或无法解析此二进制槽位",
+                infoType: .info,
+                infoTitle: "空间音频录制说明",
+                infoMessage: MGMsg.spatialAudioRecInfo,
+                isOn: binding
+            )
+            .disabled(!canModify)
+        }
     }
 
     @ViewBuilder

@@ -298,8 +298,12 @@ struct AppGroupHubView: View {
         DOMAIN,sequoia.apple.com,DIRECT
         DOMAIN-SUFFIX,smoot.apple.com,DIRECT
 
-        # 2. Apple Intelligence 区域定位校验与 PCC 隐私云计算中继（请使用支持 UDP/QUIC 的低延迟美区节点）
+        # 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（请使用支持 UDP/QUIC 的低并发干净美区节点）
         DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
+        DOMAIN,mask-api.icloud.com,\(policy)
+        DOMAIN,mask.icloud.com,\(policy)
+        DOMAIN,mask-h2.icloud.com,\(policy)
+        DOMAIN-SUFFIX,app.apple.com,\(policy)
         DOMAIN-SUFFIX,apple-relay.apple.com,\(policy)
         DOMAIN-SUFFIX,apple-relay.cloudflare.com,\(policy)
         DOMAIN-SUFFIX,apple-relay.fastly-edge.com,\(policy)
@@ -332,6 +336,15 @@ struct AppGroupHubView: View {
             - "sequoia.apple.com"
             - "+.smoot.apple.com"
             - "+.push.apple.com"
+            - "gspe1-ssl.ls.apple.com"
+            - "mask-api.icloud.com"
+            - "mask.icloud.com"
+            - "mask-h2.icloud.com"
+            - "+.app.apple.com"
+            - "+.apple-relay.apple.com"
+            - "+.apple-relay.cloudflare.com"
+            - "+.apple-relay.fastly-edge.com"
+            - "+.apple-relay.akamaized.net"
 
         rules:
           # 1. 国行 Siri 语音主网关与普通话来电询问必须真实 IP 直连（严禁走代理）
@@ -341,8 +354,12 @@ struct AppGroupHubView: View {
           - DOMAIN,sequoia.apple.com,DIRECT
           - DOMAIN-SUFFIX,smoot.apple.com,DIRECT
 
-          # 2. Apple Intelligence 区域定位校验与 PCC 隐私云计算中继（置顶防 GEOSITE,apple,DIRECT 抢行）
+          # 2. Apple Intelligence 区域定位校验、PCC 隐私计算中继与匿名令牌签发（置顶防 GEOSITE,apple,DIRECT 抢行）
           - DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
+          - DOMAIN,mask-api.icloud.com,\(policy)
+          - DOMAIN,mask.icloud.com,\(policy)
+          - DOMAIN,mask-h2.icloud.com,\(policy)
+          - DOMAIN-SUFFIX,app.apple.com,\(policy)
           - DOMAIN-SUFFIX,apple-relay.apple.com,\(policy)
           - DOMAIN-SUFFIX,apple-relay.cloudflare.com,\(policy)
           - DOMAIN-SUFFIX,apple-relay.fastly-edge.com,\(policy)

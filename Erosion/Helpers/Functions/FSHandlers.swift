@@ -71,18 +71,16 @@ class FSHandlers {
             print("(fs) 获取动态 Inode 基线失败，回退至预设上限: \(error.localizedDescription)")
         }
 
-        let userMax = UInt64(max(maxInode, 15000000))
+        let userMax = UInt64(max(maxInode, 1_000_000))
         let targetMaxInode: UInt64
         if baselineInode > 0 {
-            if maxInode > 15000000 {
-                targetMaxInode = max(baselineInode + 50000, userMax)
-            } else {
-                targetMaxInode = max(baselineInode + 50000, min(baselineInode, userMax))
-            }
+            // Respect userMax (default 15,000,000) so long-used devices with 200M+ cumulative APFS inodes
+            // do not hang for 5–6 minutes scanning 0..baselineInode, while still stopping early on fresh devices.
+            targetMaxInode = min(baselineInode + 50_000, userMax)
         } else {
             targetMaxInode = userMax
         }
-        print("(fs) 正在通过多线程 pathleak 枚举目录: \(normKey) (上限: \(targetMaxInode))")
+        print("(fs) 正在通过多线程 pathleak 枚举目录: \(normKey) (扫描上限: \(targetMaxInode), 本机最大 Inode: \(baselineInode))")
         let leakedPaths = pathleak(normKey, targetMaxInode) ?? []
         print("(fs) pathleak 枚举完成，共找到 \(leakedPaths.count) 个容器路径")
         if !leakedPaths.isEmpty {

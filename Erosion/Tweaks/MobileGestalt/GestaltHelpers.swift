@@ -1009,15 +1009,15 @@ func isNativePersonalTranslatorHD() -> Bool {
             return recorded
         }
     }
-    return currentOriginalMachineName().hasPrefix("iPhone19,")
+    return isAppleIntellHD()
 }
 
 func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: NSDictionary?) -> Bool {
     let m = currentOriginalMachineName()
-    // Ground-truth verified via MGInspector on live iPhone 18 Pro Max (iPhone19,7) running iOS 27:
+    // Ground-truth verified via MGInspector on live iPhone 18 Pro Max (iPhone19,7) & iPhone 15 Pro Max (iPhone16,2) running iOS 27:
     // - rb2tKZxlj0Gm2tBmUQSLqQ (Audio Intelligence, slot #178) is natively FALSE (0x00) on iPhone/iPad,
     //   and forcing it to 1 breaks Photos High-Quality Clean Up ("消除此照片时出错。请稍后再试。").
-    // - M1n2sAqf33NAOgZRGxQYBA (Personal Translator, slot #266) IS natively TRUE (0x01) on iPhone 18 Pro series (iPhone19,*)
+    // - M1n2sAqf33NAOgZRGxQYBA (Personal Translator, slot #266) IS natively TRUE (0x01) on native Apple Intelligence devices
     //   in factory OriginalGestalt.plist, and works natively with Photos High-Quality Clean Up.
     if key == MGKey.audioIntell && (m.hasPrefix("iPhone") || m.hasPrefix("iPad")) {
         return false
@@ -1033,9 +1033,36 @@ func isAdvAISlotNativeTrue(_ key: String, layout: MGCacheDataLayout, savedOrig: 
            layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
             return ogData[slotIdx * 8] == 1
         }
-        return m.hasPrefix("iPhone19,")
+        return isAppleIntellHD()
     }
     return MGCacheDataCoordinator.shared.originalSlotValue(forKey: key, layout: layout, savedOriginalDict: savedOrig) ?? false
+}
+
+/// Returns true only on models equipped with the 4-microphone spatial audio array (iPhone 16 series and newer 4-mic hardware).
+/// Pre-iPhone 16 3-mic models (e.g. iPhone 15 Pro) expose a broken "录音室 (Studio)" option in Voice Memos if forced on.
+func isSpatialAudioRecHD() -> Bool {
+    if case .success(let layout) = MGCacheDataCoordinator.shared.libraryLayout(),
+       let slotIdx = layout.slotIndex(forKey: MGKey.spatialAudioRec) {
+        if let ogDict = NSDictionary(contentsOf: MGURL.savedGestaltURL) {
+            if let val = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.spatialAudioRec, layout: layout, savedOriginalDict: ogDict) {
+                return val
+            }
+            if let ogData = ogDict["CacheData"] as? Data,
+               ogData.count == layout.byteCount,
+               layout.validateSingleBooleanSlot(slotIdx, in: ogData) {
+                return ogData[slotIdx * 8] == 1
+            }
+        }
+        if let recorded = MGCacheDataCoordinator.shared.originalSlotValue(forKey: MGKey.spatialAudioRec, layout: layout, savedOriginalDict: nil) {
+            return recorded
+        }
+    }
+    let m = currentOriginalMachineName()
+    let fourMicPhones = [
+        "iPhone17,1", "iPhone17,2", "iPhone17,3", "iPhone17,4", "iPhone17,5",
+        "iPhone18,1", "iPhone18,2", "iPhone18,3", "iPhone18,5"
+    ]
+    return fourMicPhones.contains(m) || m.hasPrefix("iPhone19,")
 }
 
 func isLiveAdvAIConflictActive() -> Bool {
