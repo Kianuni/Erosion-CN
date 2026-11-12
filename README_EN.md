@@ -83,11 +83,13 @@
   - **Fix**: Update to **`v0.9.1+`** → open **Tweaks → MobileGestalt** → tap **One-Click Setup / Repair** → **Apply** → **power off and cold-reboot**.
 - **If it spins for a few seconds and then fails**:
   - Cloud photo tools and Camera `SIRI` require Apple **Private Cloud Compute (PCC)** anonymous tokens (`mask-api.icloud.com`, `mask.icloud.com`, `mask-h2.icloud.com`) and OHTTP QUIC relays (`*.app.apple.com`, `apple-relay.*`). Shared VPN exit IPs frequently trigger `Code=1009` (`429`) rate limits, or third-party VPN tunnels suspend system iCloud Private Relay. Use iCloud **Private Relay** or route those domains through a clean, low-concurrency US proxy with UDP/QUIC enabled.
+  - ⚠️ **Stop retrying during the cooldown**: once Apple's token issuer returns a `retry-after`, iOS caches it locally and `privatecloudcomputed` rejects every request instantly (log: `Code=1009 "Rate-limited for token issuer based on retry-after header"` / `privacyProxyRateLimited`). Repeated retries or frequent proxy/IP switching may extend it. Wait a few hours (or until the next day), reboot, then try **once**.
 
 ### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
 1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.
 2. **System Region & Geo-Eligibility**: Change **Settings → General → Language & Region → Region** away from `China mainland` (e.g. `Taiwan` or `United States`) and route `gspe1-ssl.ls.apple.com` through a US proxy so `eligibilityd` refreshes.
-3. **`Add eSIM` on Mainland `iPhone 18 Pro / Pro Max` (`A3715` / `A3718`)**: Eject the dual physical SIM tray first and cold-reboot with an **empty SIM tray** so baseband exposes `Add eSIM`; once your overseas eSIM is provisioned, re-insert your physical SIM.
+3. **Use a non-China App Store account**: On Mainland China devices, Apple Intelligence eligibility also depends on the Apple Account country. If **Settings → [your name] → Media & Purchases** is still a China mainland account, the Apple Intelligence menu may not appear or finish activating. Switch Media & Purchases to an overseas account (your iCloud account can stay as-is). Thanks to @Chinsin in [#20](https://github.com/Kianuni/Erosion-CN/issues/20).
+4. **`Add eSIM` on Mainland `iPhone 18 Pro / Pro Max` (`A3715` / `A3718`)**: Eject the dual physical SIM tray first and cold-reboot with an **empty SIM tray** so baseband exposes `Add eSIM`; once your overseas eSIM is provisioned, re-insert your physical SIM.
 
 ### 4. Important Safety Reminder Before iOS Updates / Downgrades
 - `worse_query` currently supports **iOS 27.0 – 27.2.1** and **27.3 beta 1** only — disable automatic iOS updates.

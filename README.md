@@ -123,7 +123,8 @@
 * **系统语言与地区黄金组合**（⚠️ **切勿将系统地区设为「美国」**，否则会丢失中文普通话「询问来电原因」来电筛选！）：
   1. 在 Erosion-CN 开启 **「解除地区限制 (LL / LL/A)」+「解除国行底层限制」** 并冷重启；
   2. `设置 → 通用 → 语言与地区`：**地区改为「台湾」**，首选语言第一项保持 **「简体中文」**；
-  3. `设置 → Apple 智能与 Siri`：Siri 语言设为 **「中文（普通话 - 中国大陆）」**（若 ChatGPT 扩展偶发回复繁体，在 `扩展 → ChatGPT` 登录并在自定义指令写一句“始终使用简体中文回答”即可）。
+  3. `设置 → Apple 智能与 Siri`：Siri 语言设为 **「中文（普通话 - 中国大陆）」**（若 ChatGPT 扩展偶发回复繁体，在 `扩展 → ChatGPT` 登录并在自定义指令写一句“始终使用简体中文回答”即可）；
+  4. `设置 → [你的名字] → 媒体与购买项目`：**App Store 登录外区账户**（iCloud 主账户可保留国区），否则 Apple 智能菜单可能不出现或无法激活。
 * **代理分流规则（Surge / Stash / Loon / Shadowrocket 通用铁律）**：
   1. **Siri 核心域名必须 `DIRECT` 直连 + 真实 IP（严禁走代理或 Fake-IP）**：将 `guzzoni.apple.com`、`*.siri.apple.com`、`dejavu.apple.com`、`sequoia.apple.com`、`*.smoot.apple.com` 设为 `DIRECT`，并在 Surge `[General]` 中把 `guzzoni.apple.com, *.guzzoni.apple.com, *.siri.apple.com` 加入 `skip-proxy` 与 `always-real-ip`（否则 Siri 必报「碰到了一点问题」）；
   2. **仅将 AI 准入、匿名令牌签发与隐私计算中继走低并发干净美区节点**：将 `gspe1-ssl.ls.apple.com`、`mask-api.icloud.com`、`mask.icloud.com`、`mask-h2.icloud.com`、`*.app.apple.com`、`apple-relay.apple.com`、`apple-relay.cloudflare.com`、`apple-relay.fastly-edge.com`、`apple-relay.akamaized.net`、`cp4.cloudflare.com` 及 OpenAI / Google 域名分流至低延迟、低共享并发的**美国节点**（切勿屏蔽 `apple-relay.*` 的 UDP 443 QUIC 流量）；
@@ -152,6 +153,7 @@
 * **情况 B — 转圈加载几秒后报错“消除此照片时出错 / 请稍后再试”**：
   - **原因**：「高质量消除 / 扩图 / 重构」需向苹果私有云计算（PCC）申请 RFC 9577 匿名令牌（`mask-api.icloud.com` / `mask.icloud.com` / `mask-h2.icloud.com`）并建立 OHTTP QUIC 连接（`*.app.apple.com`、`apple-relay.*`）。万人共用的机场出口 IP 极易触发苹果令牌端 `429 (Code=1009)` 限流，且开启第三方 VPN 隧道若拦截 QUIC 或漏分流 `mask*.icloud.com` 会导致系统自动挂起 iCloud 专用代理（Private Relay）。
   - **解决**：确保上述域名全部置顶同走支持 UDP/QUIC 的**干净低并发美国节点**（或直接使用系统级 iCloud Private Relay 干净美区出口），等待限流冷却后重试即可。
+  - ⚠️ **冷却期内请停止反复重试**：苹果令牌端返回 `retry-after` 后，手机会在本地缓存冷却期，期间每次点击都会被 `privatecloudcomputed` 本地秒拒（日志为 `Code=1009 "Rate-limited for token issuer based on retry-after header"` / `privacyProxyRateLimited`），连续重试或频繁切换节点/出口 IP 反而可能延长冷却。建议停用几小时（或隔天）、重启手机后再只试一次。
 * **切勿盲目升级新测试版**：底层 `worse_query` 写入漏洞目前仅确认支持至 **`iOS 27.0 – 27.2.1` 及 `iOS 27.3 beta 1`**（若准备降级/刷机，请务必先在 Erosion 内执行「一键恢复原厂」或「清除并重建缓存」后再刷机）。请关闭系统自动更新，**切勿升级至 `27.3 beta 2` 及后续新测试版**。
 
 ### Q7：自签证书 7 天过期、卸载重装 App 会导致修改失效或丢失原厂备份吗？
@@ -168,7 +170,8 @@
 * **「关于本机」型号末尾已变 `LL/A`，但设置里还没有海外版 Apple 智能菜单**：
   1. 打开 `MobileGestalt → 真机生效核验探针`，确认第 5 行 **`green-tea` 真机值为 `false (Bool)`**（若仍为 `true`，勾选下方「解除国行底层限制」应用后**手动滑动关机冷重启**）；
   2. 前往 `设置 → 通用 → 语言与地区`，确认 **「地区」已从「中国大陆」改为「台湾」（或「美国」）**（停留在「中国大陆」时，即便是真美版设备也会隐藏海外 AI 入口）；
-  3. 连接美国代理节点（确保 `gspe1-ssl.ls.apple.com` 走美区代理），划掉「设置」后台重开（或连着代理重启一次手机）以触发 `eligibilityd` 首次准入刷新（首次激活推荐先用默认「完整美版 `LL + LL/A`」，激活成功后再按需切回「仅改区域代码 `LL`」）。
+  3. 连接美国代理节点（确保 `gspe1-ssl.ls.apple.com` 走美区代理），划掉「设置」后台重开（或连着代理重启一次手机）以触发 `eligibilityd` 首次准入刷新（首次激活推荐先用默认「完整美版 `LL + LL/A`」，激活成功后再按需切回「仅改区域代码 `LL`」）；
+  4. **App Store（媒体与购买项目）需登录外区账户**：国行设备的 Apple 智能资格还会参考 Apple 账户的国家/地区，App Store 停留在国区账户时 AI 菜单可能不出现或无法完成激活（`设置 → [你的名字] → 媒体与购买项目` 切换为外区账户即可，iCloud 主账户可保留国区；感谢 [#20](https://github.com/Kianuni/Erosion-CN/issues/20) @Chinsin 实测反馈）。
 
 ### Q10：万一改出异常，或者之前被别的工具改出「相机黑屏 / eSIM 消失」，怎么一键救回？
 * **一直使用 Erosion-CN 修改的用户**：直接点击主页或 `MobileGestalt` 页顶的 **「一键恢复原厂」**，校验 `SHA-256` 后一键还原原厂参数并清空锁屏铭牌/伪监管/拨号盘残留，手动重启即 100% 恢复出厂状态。
