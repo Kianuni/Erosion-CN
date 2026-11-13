@@ -5,7 +5,7 @@
   <h1>Erosion-CN</h1>
   <p>基于 <a href="https://github.com/forcequitOS/worse_query">worse_query</a> 的 iOS / iPadOS 系统配置与 MobileGestalt 研究工具箱（中英双语 · 防白苹果安全加固版）</p>
   <p>支持 iOS / iPadOS 27.0 – 27.2 / 27.3 beta 1（完整支持）以及 iOS / iPadOS 26.x（部分支持）。</p>
-  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a></p>
+  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow 配套分流与排雷台</a></p>
   <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC"></a>
   <a href="https://github.com/jailbreakdotparty/Erosion"><img alt="Upstream Repo" src="https://img.shields.io/badge/%E4%B8%8A%E6%B8%B8%E4%BB%93%E5%BA%93-jailbreakdotparty%2FErosion-3868DB?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
@@ -88,14 +88,14 @@
 * **代理分流规则（Surge / Stash / Loon / Shadowrocket 通用铁律）**：
   1. **Siri 核心域名必须 `DIRECT` 直连 + 真实 IP（严禁走代理或 Fake-IP）**：将 `guzzoni.apple.com`、`*.siri.apple.com`、`dejavu.apple.com`、`sequoia.apple.com`、`*.smoot.apple.com` 设为 `DIRECT`，并在 Surge `[General]` 中把 `guzzoni.apple.com, *.guzzoni.apple.com, *.siri.apple.com` 加入 `skip-proxy` 与 `always-real-ip`（否则 Siri 必报「碰到了一点问题」）；
   2. **仅将 AI 准入、匿名令牌签发与隐私计算中继走低并发干净美区节点**：将 `gspe1-ssl.ls.apple.com`、`mask-api.icloud.com`、`mask.icloud.com`、`mask-h2.icloud.com`、`*.app.apple.com`、`apple-relay.apple.com`、`apple-relay.cloudflare.com`、`apple-relay.fastly-edge.com`、`apple-relay.akamaized.net`、`cp4.cloudflare.com` 及 OpenAI / Google 域名分流至低延迟、低共享并发的**美国节点**（切勿屏蔽 `apple-relay.*` 的 UDP 443 QUIC 流量）；
-  3. **关闭冲突重写模块**：硬件级改好 `LL/A` 后，请**关闭** `iRingo / NSRingo` 的「定位」与「Siri」模块，防止 MitM 劫持导致断连；
-  4. 💡 **一键导出模块**：可直接在 App 内打开 `功能修改 → [测试特性] 共享组分流规则与书签导出`，一键生成并导出完整配好的 `.sgmodule` 分流模块。
+  3. **关闭冲突解密模块**：改好 `LL/A` 后，请关闭针对 `gspe1-ssl.ls.apple.com`（定位）与 `*.smoot.apple.com`（Siri 搜索）的 MitM 解密重写模块，避免强证书固定校验断连；
+  4. 💡 **推荐配套分流项目 [AppleFlow](https://github.com/Kianuni/AppleFlow)**：提供 Surge / Loon / Shadowrocket / Stash / Mihomo / Quantumult X / Sing-box 全客户端零 MitM 模块与规则集，并可在 **[AppleFlow 在线工作台](https://kianuni.github.io/AppleFlow/)** 一键本地脱敏体检现有配置冲突、实测分流出口区域（也可直接在 App 内打开 `功能修改 → [测试特性] 共享组分流规则与书签导出` 离线导出 `.sgmodule`）。
 
 ### Q4：Siri 聊天已经正常了，为什么「跑马灯视觉智能 (Visual Intelligence)」、「相机内嵌 SIRI 档位」或图乐园提示不可用？
 首先注意 iOS 27 中两套视觉入口的底层架构完全不同：
 * **一、机身按键唤起的「跑马灯视觉智能」（日常推荐，支持中文与国区主 iCloud）**：
   1. **系统地区不能停留在「中国大陆」**：前往 `设置 → 通用 → 语言与地区`，将 **「地区」改为「台湾」**（海外版视觉智能绑定 ChatGPT 与 Google 识图，在「中国大陆」地区下会被直接锁死；改「台湾」既能解锁视觉智能，又能保留普通话来电询问）。
-  2. **定位准入与 Google / Relay 分流**：每次唤起都会实时请求 `gspe1-ssl.ls.apple.com` 校验所在地，并调用 `apple-relay.*` + OpenAI（左下角提问）以及 **`*.google.com`（右下角 Google 识图）**。请确认上述域名均已分流至**美国节点**，且已**关闭 `iRingo / NSRingo` 的定位与 Siri 模块**。
+  2. **定位准入与 Google / Relay 分流**：每次唤起都会实时请求 `gspe1-ssl.ls.apple.com` 校验所在地，并调用 `apple-relay.*` + OpenAI（左下角提问）以及 **`*.google.com`（右下角 Google 识图）**。请确认上述域名均已分流至**美国节点**，且未对定位或 Siri 搜索域名开启 MitM 解密。
   3. **端侧模型下载与唤醒方式**：连接 Wi-Fi 充电静置等待端侧视觉模型下载完成（若曾开过国行千问缓存，先关总开关重启后再开）；锁屏或亮屏时**长按**右侧「相机控制」按键（或在控制中心添加「视觉智能」按钮）唤起。
 * **二、iOS 27 系统「相机」App 底部轮盘内嵌的 `SIRI` 档位**：
   - 该档位属于新一代对话式 Siri AI (Beta) 的实时多模态会话，**不走 OpenAI/Google，而是强制调用 Apple `GenerativeModels` + `Private Cloud Compute (PCC)`**：

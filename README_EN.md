@@ -5,7 +5,7 @@
   <h1>Erosion-CN (Bilingual Edition)</h1>
   <p>An iOS / iPadOS System Customization, Cross-Container &amp; Bootloop-Hardened MobileGestalt Research Toolkit powered by <a href="https://github.com/forcequitOS/worse_query">worse_query</a></p>
   <p>Supports iOS / iPadOS 27.0 – 27.2.1 &amp; 27.3 beta 1 (Full Support) and iOS / iPadOS 26.x (Partial Support).</p>
-  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong></p>
+  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow Routing &amp; Config Doctor</a></p>
   <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=Latest%20Release"></a>
   <a href="https://github.com/jailbreakdotparty/Erosion"><img alt="Upstream Repo" src="https://img.shields.io/badge/Upstream-jailbreakdotparty%2FErosion-3868DB?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
@@ -96,7 +96,7 @@
 
 ### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
 1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.
-2. **System Region & Geo-Eligibility**: Change **Settings → General → Language & Region → Region** away from `China mainland` (e.g. `Taiwan` or `United States`) and route `gspe1-ssl.ls.apple.com` through a US proxy so `eligibilityd` refreshes.
+2. **System Region & Geo-Eligibility**: Change **Settings → General → Language & Region → Region** away from `China mainland` (e.g. `Taiwan` or `United States`) and route `gspe1-ssl.ls.apple.com` through a US proxy so `eligibilityd` refreshes. For ready-to-use zero-MitM routing modules, rule-sets, and a local Config Doctor, see companion project **[AppleFlow](https://github.com/Kianuni/AppleFlow)** ([Web Studio](https://kianuni.github.io/AppleFlow/)).
 3. **Use a non-China App Store account**: On Mainland China devices, Apple Intelligence eligibility also depends on the Apple Account country. If **Settings → [your name] → Media & Purchases** is still a China mainland account, the Apple Intelligence menu may not appear or finish activating. Switch Media & Purchases to an overseas account (your iCloud account can stay as-is). Thanks to @Chinsin in [#20](https://github.com/Kianuni/Erosion-CN/issues/20).
 4. **`Add eSIM` on Mainland `iPhone 18 Pro / Pro Max` (`A3715` / `A3718`)**: Eject the dual physical SIM tray first and cold-reboot with an **empty SIM tray** so baseband exposes `Add eSIM`; once your overseas eSIM is provisioned, re-insert your physical SIM.
 
