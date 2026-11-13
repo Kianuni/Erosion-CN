@@ -57,6 +57,7 @@
 > Always create a full computer backup before modifying system files. Use at your own risk on devices you own.
 
 - **iOS / iPadOS 27.0 – 27.2.1 & 27.3 beta 1**: Full support (including `MobileGestalt` read/write and `CacheData` slot unlocks).
+  - ⚠️ **iOS 27.3 beta 1 limitation on China (`CH/A`) hardware**: writes and most features work, but **generative cloud features (High-Quality Clean Up / Extend / Reframe, Camera `SIRI`) are blocked locally** (log: `Eligibility returned no CN region policy on a CH region code device`) and cannot be bypassed via MobileGestalt. Stay on / return to iOS 27.2.x if you need them. See FAQ #2.
 - **iOS / iPadOS 26.0 – 26.7.2**: Partial support (PosterBoard wallpapers, Keypad themes, Lock Screen footnote, container browser, and read-only diagnostics; iOS 26 sandbox blocks writing to `com.apple.MobileGestalt.plist`).
 
 ---
@@ -87,6 +88,11 @@
     1. **Local cached cooldown**: after Apple's token issuer returns a `retry-after`, `privatecloudcomputed` caches it in memory and rejects every tap instantly without touching the network (log: `Code=1009 "Rate-limited for token issuer based on retry-after header"`). **Rebooting clears this layer.**
     2. **Server-side quota**: if after a reboot the log shows `Code=1009 "Rate limited"` (preceded by a TLS handshake to `apple-relay.*`), the request reached Apple and was rejected by a per-user/device quota. **Rebooting or switching proxies won't help; wait for the quota to recover** (community reports: a few hours up to ~24 hours).
     - Repeated retries or frequent proxy/IP switching consume extra quota. Wait at least half a day to a day, then try **once**. Fast (on-device) Clean Up is unaffected.
+
+- **iOS 27.3 beta on China (`CH/A`) hardware: all slots correct, network fine, still fails**:
+  - iOS 27.3 beta 1 added a China-specific AI policy branch. If Photos' local eligibility check (`GenerativeFunctionsFoundation`) detects `CH` hardware from any source, it looks up a "CN region policy" that Apple hasn't published yet, so the request is blocked **before any network traffic**. Log signature: `Eligibility returned no CN region policy on a CH region code device`. The check does not read MobileGestalt's cached `RegionCode` (it triggers even when the Inspector shows `LL`), so **MobileGestalt edits cannot bypass it**. Do not inject uncached keys, which triggers a cache reset at boot. Confirmed in [#13](https://github.com/Kianuni/Erosion-CN/issues/13), [#22](https://github.com/Kianuni/Erosion-CN/issues/22), [#28](https://github.com/Kianuni/Erosion-CN/issues/28).
+  - **Fix**: return to **iOS 27.2.x** if Apple still signs it (27.2.1 has no such check). Run **One-Tap Factory Restore** (or **Clean Cache Rebuild**) and back up to a computer first; a 27.3 backup cannot be restored onto 27.2.1. Or stay on 27.3 beta and wait for Apple to change it. Siri chat, Writing Tools, and Camera Control Visual Intelligence (OpenAI / Google) are unaffected.
+- **How to tell them apart**: on a Mac, reproduce the error once, run `sudo log collect --device --last 5m --output ~/Desktop/pcc.logarchive`, then `log show ~/Desktop/pcc.logarchive --style compact --predicate 'process == "privatecloudcomputed" OR process == "modelmanagerd" OR process == "Photos"' | grep -E "1009|Rate limited|region policy|InferenceError"`. `1009` means rate limit; `no CN region policy` means the 27.3 beta check.
 
 ### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
 1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.

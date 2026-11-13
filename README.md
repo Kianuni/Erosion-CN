@@ -36,6 +36,7 @@
 > 操作前请务必通过电脑完整备份设备重要数据！修改系统底层配置存在潜在风险，仅供安全研究与学习交流，请仅在本人持有的设备上使用并自行承担风险。
 
 - **iOS / iPadOS 27.0 – 27.2.1**、**27.3 beta 1**（完整支持所有功能，包括 `MobileGestalt` 读取与安全写入）
+  - ⚠️ **`27.3 beta 1` 国行生成式功能限制**：写入与绝大多数功能正常，但国行（`CH/A`）硬件上**照片「高质量消除 / 扩图 / 重构」、相机 `SIRI` 等生成式云端功能会被系统本地拦截**（日志：`Eligibility returned no CN region policy on a CH region code device`），改 `MobileGestalt` 无法绕过，详见 FAQ Q6「情况 C」。需要这些功能请留在 / 降回 `27.2.x`。
 - **iOS / iPadOS 26.0 – 26.7.2**（部分支持：可使用锁屏壁纸、拨号键盘美化、锁屏底部签名文字与部分容器浏览；受底层沙盒限制，iOS 26 不支持写入系统 `MobileGestalt`）
 
 ---
@@ -116,6 +117,14 @@
     1. **本机缓存的冷却**：苹果令牌端返回 `retry-after` 后，`privatecloudcomputed` 会在进程内缓存冷却期，期间每次点击都在本机秒拒、根本不联网（日志为 `Code=1009 "Rate-limited for token issuer based on retry-after header"`）。**重启手机可清掉这一层**。
     2. **苹果服务器端的配额限流**：重启后若日志变为 `Code=1009 "Rate limited"`（前面能看到连上 `apple-relay.*` 并完成 TLS 握手），说明请求已到达苹果服务器、是服务器按用户/设备配额拒绝，**重启和换节点都无效，只能等配额自然恢复**（社区反馈通常为几小时至约 24 小时）。
     - 连续重试或频繁切换节点/出口 IP 会额外消耗配额。建议停用至少半天到一天后再只试一次；期间「快速」消除（端侧）不受影响。
+* **情况 C — `iOS 27.3 beta` 国行设备：四要素全对、网络也正常，依然报错（转圈或瞬间均可能）**：
+  - **原因**：`27.3 beta 1` 新增了国行（`CH`）设备专属的 AI 策略分支。照片 App 的本地资格检查（`GenerativeFunctionsFoundation`）只要从任一来源识别到 `CH` 硬件，就会查询「国行 AI 策略」，而苹果服务器目前尚未下发该策略，于是**在发出任何云端请求前就本地拦截**。日志特征：
+    ```
+    [GenerativeFunctionsFoundation:Eligibility] Eligibility returned no CN region policy on a CH region code device
+    ```
+    该检查读取的并非 `MobileGestalt` 缓存中的 `RegionCode`（探针显示 `LL` 也会触发），推测直读主板 `SysCfg` 非缓存信息，**改 `MobileGestalt` 无法绕过**（⚠️ 切勿尝试注入非缓存键，会触发开机缓存重置）。已有多例实锤（[#13](https://github.com/Kianuni/Erosion-CN/issues/13)、[#22](https://github.com/Kianuni/Erosion-CN/issues/22)、[#28](https://github.com/Kianuni/Erosion-CN/issues/28)）。
+  - **解决**：降回 **`iOS 27.2.x`**（需苹果仍在验证该版本；`27.2.1` 无此检查，已确认高质量消除正常），降级前务必先在 Erosion 执行「一键恢复原厂」或「清除并重建缓存」并用电脑完整备份（`27.3` 的备份无法直接恢复到 `27.2.1`）；或留在 `27.3 beta` 等待苹果后续下发策略 / 调整判定。Siri 聊天、写作工具、视觉智能（跑马灯，走 OpenAI / Google）等不依赖该检查的功能不受影响。
+* **如何区分三种情况**：Mac 连接 iPhone 复现一次报错后执行 `sudo log collect --device --last 5m --output ~/Desktop/pcc.logarchive`，再用 `log show ~/Desktop/pcc.logarchive --style compact --predicate 'process == "privatecloudcomputed" OR process == "modelmanagerd" OR process == "Photos"' | grep -E "1009|Rate limited|region policy|InferenceError"` 过滤：出现 `1009` 为限流（情况 B），出现 `no CN region policy` 为情况 C。
 * **切勿盲目升级新测试版**：底层 `worse_query` 写入漏洞目前仅确认支持至 **`iOS 27.0 – 27.2.1` 及 `iOS 27.3 beta 1`**（若准备降级/刷机，请务必先在 Erosion 内执行「一键恢复原厂」或「清除并重建缓存」后再刷机）。请关闭系统自动更新，**切勿升级至 `27.3 beta 2` 及后续新测试版**。
 
 ### Q7：自签证书 7 天过期、卸载重装 App 会导致修改失效或丢失原厂备份吗？
