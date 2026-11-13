@@ -83,7 +83,10 @@
   - **Fix**: Update to **`v0.9.1+`** → open **Tweaks → MobileGestalt** → tap **One-Click Setup / Repair** → **Apply** → **power off and cold-reboot**.
 - **If it spins for a few seconds and then fails**:
   - Cloud photo tools and Camera `SIRI` require Apple **Private Cloud Compute (PCC)** anonymous tokens (`mask-api.icloud.com`, `mask.icloud.com`, `mask-h2.icloud.com`) and OHTTP QUIC relays (`*.app.apple.com`, `apple-relay.*`). Shared VPN exit IPs frequently trigger `Code=1009` (`429`) rate limits, or third-party VPN tunnels suspend system iCloud Private Relay. Use iCloud **Private Relay** or route those domains through a clean, low-concurrency US proxy with UDP/QUIC enabled.
-  - ⚠️ **Stop retrying during the cooldown**: once Apple's token issuer returns a `retry-after`, iOS caches it locally and `privatecloudcomputed` rejects every request instantly (log: `Code=1009 "Rate-limited for token issuer based on retry-after header"` / `privacyProxyRateLimited`). Repeated retries or frequent proxy/IP switching may extend it. Wait a few hours (or until the next day), reboot, then try **once**.
+  - ⚠️ **There are two layers of rate limiting, so stop retrying during the cooldown**:
+    1. **Local cached cooldown**: after Apple's token issuer returns a `retry-after`, `privatecloudcomputed` caches it in memory and rejects every tap instantly without touching the network (log: `Code=1009 "Rate-limited for token issuer based on retry-after header"`). **Rebooting clears this layer.**
+    2. **Server-side quota**: if after a reboot the log shows `Code=1009 "Rate limited"` (preceded by a TLS handshake to `apple-relay.*`), the request reached Apple and was rejected by a per-user/device quota. **Rebooting or switching proxies won't help; wait for the quota to recover** (community reports: a few hours up to ~24 hours).
+    - Repeated retries or frequent proxy/IP switching consume extra quota. Wait at least half a day to a day, then try **once**. Fast (on-device) Clean Up is unaffected.
 
 ### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
 1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.

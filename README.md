@@ -112,7 +112,10 @@
 * **情况 B — 转圈加载几秒后报错“消除此照片时出错 / 请稍后再试”**：
   - **原因**：「高质量消除 / 扩图 / 重构」需向苹果私有云计算（PCC）申请 RFC 9577 匿名令牌（`mask-api.icloud.com` / `mask.icloud.com` / `mask-h2.icloud.com`）并建立 OHTTP QUIC 连接（`*.app.apple.com`、`apple-relay.*`）。万人共用的机场出口 IP 极易触发苹果令牌端 `429 (Code=1009)` 限流，且开启第三方 VPN 隧道若拦截 QUIC 或漏分流 `mask*.icloud.com` 会导致系统自动挂起 iCloud 专用代理（Private Relay）。
   - **解决**：确保上述域名全部置顶同走支持 UDP/QUIC 的**干净低并发美国节点**（或直接使用系统级 iCloud Private Relay 干净美区出口），等待限流冷却后重试即可。
-  - ⚠️ **冷却期内请停止反复重试**：苹果令牌端返回 `retry-after` 后，手机会在本地缓存冷却期，期间每次点击都会被 `privatecloudcomputed` 本地秒拒（日志为 `Code=1009 "Rate-limited for token issuer based on retry-after header"` / `privacyProxyRateLimited`），连续重试或频繁切换节点/出口 IP 反而可能延长冷却。建议停用几小时（或隔天）、重启手机后再只试一次。
+  - ⚠️ **限流分两层，冷却期内请停止反复重试**：
+    1. **本机缓存的冷却**：苹果令牌端返回 `retry-after` 后，`privatecloudcomputed` 会在进程内缓存冷却期，期间每次点击都在本机秒拒、根本不联网（日志为 `Code=1009 "Rate-limited for token issuer based on retry-after header"`）。**重启手机可清掉这一层**。
+    2. **苹果服务器端的配额限流**：重启后若日志变为 `Code=1009 "Rate limited"`（前面能看到连上 `apple-relay.*` 并完成 TLS 握手），说明请求已到达苹果服务器、是服务器按用户/设备配额拒绝，**重启和换节点都无效，只能等配额自然恢复**（社区反馈通常为几小时至约 24 小时）。
+    - 连续重试或频繁切换节点/出口 IP 会额外消耗配额。建议停用至少半天到一天后再只试一次；期间「快速」消除（端侧）不受影响。
 * **切勿盲目升级新测试版**：底层 `worse_query` 写入漏洞目前仅确认支持至 **`iOS 27.0 – 27.2.1` 及 `iOS 27.3 beta 1`**（若准备降级/刷机，请务必先在 Erosion 内执行「一键恢复原厂」或「清除并重建缓存」后再刷机）。请关闭系统自动更新，**切勿升级至 `27.3 beta 2` 及后续新测试版**。
 
 ### Q7：自签证书 7 天过期、卸载重装 App 会导致修改失效或丢失原厂备份吗？
