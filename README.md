@@ -87,7 +87,7 @@
   4. `设置 → [你的名字] → 媒体与购买项目`：**App Store 登录外区账户**（iCloud 主账户可保留国区），否则 Apple 智能菜单可能不出现或无法激活。
 * **代理分流规则（Surge / Stash / Loon / Shadowrocket 通用铁律）**：
   1. **Siri 核心域名必须 `DIRECT` 直连 + 真实 IP（严禁走代理或 Fake-IP）**：将 `guzzoni.apple.com`、`*.siri.apple.com`、`dejavu.apple.com`、`sequoia.apple.com`、`*.smoot.apple.com` 设为 `DIRECT`，并在 Surge `[General]` 中把 `guzzoni.apple.com, *.guzzoni.apple.com, *.siri.apple.com` 加入 `skip-proxy` 与 `always-real-ip`（否则 Siri 必报「碰到了一点问题」）；
-  2. **仅将 AI 准入、匿名令牌签发与隐私计算中继走低并发干净美区节点**：将 `gspe1-ssl.ls.apple.com`、`mask-api.icloud.com`、`mask.icloud.com`、`mask-h2.icloud.com`、`*.app.apple.com`、`apple-relay.apple.com`、`apple-relay.cloudflare.com`、`apple-relay.fastly-edge.com`、`apple-relay.akamaized.net`、`cp4.cloudflare.com` 及 OpenAI / Google 域名分流至低延迟、低共享并发的**美国节点**（切勿屏蔽 `apple-relay.*` 的 UDP 443 QUIC 流量）；
+  2. **仅将 AI 准入、盲签名签发与隐私计算中继走低并发干净美区节点**：将 `gspe1-ssl.ls.apple.com`、`*.issuer.apple.com`、`ropes.apple.com`、`mask-api.icloud.com`、`mask.icloud.com`、`mask-h2.icloud.com`、`*.app.apple.com`、`apple-relay.apple.com`、`apple-relay.cloudflare.com`、`apple-relay.fastly-edge.com`、`apple-relay.akamaized.net`、`cp4.cloudflare.com` 及 OpenAI / Google 域名分流至支持 UDP/QUIC 的低延迟**美国节点**（切勿屏蔽 UDP 443 QUIC 流量）；
   3. **关闭冲突解密模块**：改好 `LL/A` 后，请关闭针对 `gspe1-ssl.ls.apple.com`（定位）与 `*.smoot.apple.com`（Siri 搜索）的 MitM 解密重写模块，避免强证书固定校验断连；
   4. 💡 **推荐配套分流项目 [AppleFlow](https://github.com/Kianuni/AppleFlow)**：提供 Surge / Loon / Shadowrocket / Stash / Mihomo / Quantumult X / Sing-box 全客户端零 MitM 模块与规则集，并可在 **[AppleFlow 在线工作台](https://kianuni.github.io/AppleFlow/)** 一键本地脱敏体检现有配置冲突、实测分流出口区域（也可直接在 App 内打开 `功能修改 → [测试特性] 共享组分流规则与书签导出` 离线导出 `.sgmodule`）。
 
@@ -110,13 +110,16 @@
 * **情况 A — 点下去「0 秒瞬间报错」（连加载转圈都没有）**：
   - **原因**：原生支持 Apple 智能的 iPhone（`iPhone 15 Pro` 至 `iPhone 18 Pro Max`）原厂 `CacheData` 要求 `Personal Translator`（槽位 `#266`）为 `true`、`Audio Intelligence`（槽位 `#178`）为 `false`。若此前使用 `v0.8.3 – v0.8.5` 误将 `#266` 写成 `false`（或强开了非原生 `#178`），系统 `GenerativeModels / ModelCatalog` 会在本地预检阶段 **0 毫秒直接熔断报错**。
   - **解决**：升级至 **`v0.9.1+`**，进入 `MobileGestalt` 点击顶部体检卡片亮起的 **「一键配齐 / 修复」→「应用」→ 手动关机冷重启** 即可自愈恢复。
-* **情况 B — 转圈加载几秒后报错“消除此照片时出错 / 请稍后再试”**：
-  - **原因**：「高质量消除 / 扩图 / 重构」需向苹果私有云计算（PCC）申请 RFC 9577 匿名令牌（`mask-api.icloud.com` / `mask.icloud.com` / `mask-h2.icloud.com`）并建立 OHTTP QUIC 连接（`*.app.apple.com`、`apple-relay.*`）。万人共用的机场出口 IP 极易触发苹果令牌端 `429 (Code=1009)` 限流，且开启第三方 VPN 隧道若拦截 QUIC 或漏分流 `mask*.icloud.com` 会导致系统自动挂起 iCloud 专用代理（Private Relay）。
-  - **解决**：确保上述域名全部置顶同走支持 UDP/QUIC 的**干净低并发美国节点**（或直接使用系统级 iCloud Private Relay 干净美区出口），等待限流冷却后重试即可。
-  - ⚠️ **限流分两层，冷却期内请停止反复重试**：
-    1. **本机缓存的冷却**：苹果令牌端返回 `retry-after` 后，`privatecloudcomputed` 会在进程内缓存冷却期，期间每次点击都在本机秒拒、根本不联网（日志为 `Code=1009 "Rate-limited for token issuer based on retry-after header"`）。**重启手机可清掉这一层**。
-    2. **苹果服务器端的配额限流**：重启后若日志变为 `Code=1009 "Rate limited"`（前面能看到连上 `apple-relay.*` 并完成 TLS 握手），说明请求已到达苹果服务器、是服务器按用户/设备配额拒绝，**重启和换节点都无效，只能等配额自然恢复**（社区反馈通常为几小时至约 24 小时）。
-    - 连续重试或频繁切换节点/出口 IP 会额外消耗配额。建议停用至少半天到一天后再只试一次；期间「快速」消除（端侧）不受影响。
+* **情况 B — 提示“消除此照片时出错，请稍后再试”（`iOS 27.0 – 27.2.1` 最常见：PCC 漏分流 `Code=32033` / 节点 `QUIC-BLOCK` / `Code=1009` 限流）**：
+  - **原因 1 — 通用规则集漏分流触发 `PrivateCloudComputeError Code=32033`**：市面多数通用 `AI.list` 仅包含 5 条 `apple-relay.*`，漏掉了 PCC 盲签名令牌签发与云端推理网关 **`*.issuer.apple.com`（`inference` / `waitlist`）、`ropes.apple.com`、`mask-api.icloud.com`、`mask.icloud.com`、`mask-h2.icloud.com`、`*.app.apple.com`**，导致它们掉入下方的 `Apple_All` / `GEOSITE,apple` 走了**国内直连**，泄漏大陆 IP 被苹果秒拒并在进程内存写入退避缓存。
+  - **原因 2 — 美区节点未开 UDP 触发 `QUIC-BLOCK`**：PCC 的 OHTTP 通道强依赖 UDP 443 (QUIC)，若代理节点服务端防火墙未开放 UDP 端口或客户端拦截了 QUIC（请求日志出现 `↓ 0 B` / `QUIC-BLOCK`），消除请求会直接中断报错。
+  - **👉 推荐一键修复（配套项目 [AppleFlow](https://github.com/Kianuni/AppleFlow)）**：
+    1. 前往 **[AppleFlow 在线工作台](https://kianuni.github.io/AppleFlow/)** 一键安装覆盖上述全部 PCC 与高质量消除域名的模块 / 规则集（支持 Surge、Loon、Shadowrocket、Stash、Mihomo / OpenClash、Quantumult X、Sing-box，亦可用页面内置的「配置体检」本地离线扫描规则抢行冲突）；
+    2. 确认美区节点服务端已放行 UDP 端口（无 `QUIC-BLOCK`），并在代理软件中点击一次 **「更新外部资源 (Update External Resources)」**；
+    3. **将手机关机重启一次**（彻底清空 `privatecloudcomputed` 内存缓存的 `32033 / 1009` 退避状态），开机后再试一次高质量消除。
+  - ⚠️ **附：若规则与 UDP 均已全通仍报 `Code=1009` 频率限流，请停止连续重试**：
+    1. **本机缓存的冷却**：令牌端返回 `retry-after` 后，`privatecloudcomputed` 会缓存冷却期并在本机秒拒（日志 `Code=1009 "Rate-limited for token issuer based on retry-after header"`），**重启手机可清掉这一层**；
+    2. **苹果服务器端的配额限流**：若重启后仍报 `Code=1009 "Rate limited"`（或万人共用机场节点高并发抢令牌），说明命中服务端频率配额，请停手等待数小时至约 24 小时自然恢复（期间端侧「快速」消除不受影响）。
 * **情况 C — `iOS 27.3 beta` 国行设备：四要素全对、网络也正常，依然报错（转圈或瞬间均可能）**：
   - **原因**：`27.3 beta 1` 新增了国行（`CH`）设备专属的 AI 策略分支。照片 App 的本地资格检查（`GenerativeFunctionsFoundation`）只要从任一来源识别到 `CH` 硬件，就会查询「国行 AI 策略」，而苹果服务器目前尚未下发该策略，于是**在发出任何云端请求前就本地拦截**。日志特征：
     ```
