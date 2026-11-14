@@ -10,6 +10,7 @@
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=Latest%20Release"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20Downloads"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/Kianuni/Erosion-CN?style=flat-square&color=F59E0B&label=Stars"></a>
+    <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json"><img alt="Official AltSource" src="https://img.shields.io/badge/Official%20Source-SideStore%20%2F%20AltStore-0EA5E9?style=flat-square"></a>
     <a href="https://github.com/bebound/AltGallery"><img alt="AltGallery" src="https://img.shields.io/badge/AltGallery-Listed-7C3AED?style=flat-square"></a>
     <a href="https://github.com/jailbreakdotparty/Erosion"><img alt="Upstream Repo" src="https://img.shields.io/badge/Upstream-jailbreakdotparty%2FErosion-3868DB?style=flat-square"></a>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
@@ -77,6 +78,24 @@
 
 > [!WARNING]
 > Erosion requires at least one valid `App Group` entitlement injected by your signing tool. Sign and install using **SideStore, AltStore, Feather, Sideloadly, Impactor, iLoader**, or a paid Apple Developer certificate with an App Group enabled.
+
+### Option A: Subscribe to Official Auto-Updating Source (Recommended)
+
+Tap any button below on your iOS/iPadOS device to add the official source (auto-synced on every GitHub Release, with declared `App Group` entitlement and `SHA-256` checksums):
+
+<p>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=sidestore"><img alt="Add to SideStore" src="https://img.shields.io/badge/Add%20to-SideStore-7C3AED?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=altstore"><img alt="Add to AltStore" src="https://img.shields.io/badge/Add%20to-AltStore-0284C7?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=feather"><img alt="Add to Feather" src="https://img.shields.io/badge/Add%20to-Feather-EC4899?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json"><img alt="More Clients" src="https://img.shields.io/badge/More%20Clients-LiveContainer%20%2F%20Copy%20URL-475569?style=for-the-badge"></a>
+</p>
+
+Or copy and add the source URL manually (compatible with SideStore, AltStore, Feather, LiveContainer, and ESign):
+```text
+https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
+```
+
+### Option B: Manual IPA Sideloading
 
 1. Download the latest `Erosion_v0.9.1_Bilingual.ipa` from [Releases](https://github.com/Kianuni/Erosion-CN/releases/latest).
 2. Sideload with any signing tool that preserves/injects an `App Group` entitlement (check the Home log on first launch to confirm `(wq) Active App Group:` is non-empty).

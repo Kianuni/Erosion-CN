@@ -10,6 +10,7 @@
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20%E4%B8%8B%E8%BD%BD%E9%87%8F"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/Kianuni/Erosion-CN?style=flat-square&color=F59E0B&label=Stars"></a>
+    <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json"><img alt="Official AltSource" src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E6%BA%90-SideStore%20%2F%20AltStore-0EA5E9?style=flat-square"></a>
     <a href="https://github.com/bebound/AltGallery"><img alt="AltGallery" src="https://img.shields.io/badge/AltGallery-%E5%B7%B2%E6%94%B6%E5%BD%95-7C3AED?style=flat-square"></a>
     <a href="https://github.com/jailbreakdotparty/Erosion"><img alt="Upstream Repo" src="https://img.shields.io/badge/%E4%B8%8A%E6%B8%B8%E4%BB%93%E5%BA%93-jailbreakdotparty%2FErosion-3868DB?style=flat-square"></a>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
@@ -54,6 +55,24 @@
 
 > [!WARNING]
 > 本项目底层依赖至少一个有效的 `App Group` 容器权限。请使用支持保留或注入 App Group 的个人 Apple ID 自签工具（如 **SideStore / AltStore / Feather / Sideloadly / Impactor / iLoader**）或带 App Group 权限的开发者证书签名安装。
+
+### 方式一：订阅官方自动更新源（推荐 · 支持一键升级）
+
+在 iPhone / iPad 浏览器中点击下方按钮即可一键添加官方软件源（每次新 Release 发布自动同步，内含 `App Group` 权限声明与 `SHA-256` 校验）：
+
+<p>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=sidestore"><img alt="Add to SideStore" src="https://img.shields.io/badge/%E4%B8%80%E9%94%AE%E6%B7%BB%E5%8A%A0%E8%87%B3-SideStore-7C3AED?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=altstore"><img alt="Add to AltStore" src="https://img.shields.io/badge/%E4%B8%80%E9%94%AE%E6%B7%BB%E5%8A%A0%E8%87%B3-AltStore-0284C7?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json&r=feather"><img alt="Add to Feather" src="https://img.shields.io/badge/%E4%B8%80%E9%94%AE%E6%B7%BB%E5%8A%A0%E8%87%B3-Feather-EC4899?style=for-the-badge"></a>
+  <a href="https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json"><img alt="More Clients" src="https://img.shields.io/badge/%E6%9B%B4%E5%A4%9A%E7%AD%BE%E5%90%8D%E5%B7%A5%E5%85%B7-LiveContainer%20%2F%20%E5%A4%8D%E5%88%B6-475569?style=for-the-badge"></a>
+</p>
+
+手动添加官方源地址（兼容 SideStore / AltStore / Feather / LiveContainer / ESign）：
+```text
+https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
+```
+
+### 方式二：手动下载 IPA 签名安装
 
 1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.9.1_Bilingual.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
