@@ -137,6 +137,19 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 
 ---
 
+## Related Open-Source Projects (Kianuni Ecosystem)
+
+If you find **Erosion-CN** helpful, check out our other open-source iOS tools:
+
+| Project | Description | Highlights |
+| :--- | :--- | :--- |
+| **[AppleFlow](https://github.com/Kianuni/AppleFlow)** | Zero-MitM routing for Apple Intelligence, PCC, and Siri, paired with a local **[Web Config Doctor & Probe](https://kianuni.github.io/AppleFlow/)** | Surge / Loon / Shadowrocket / Stash / Mihomo / QX / Sing-box |
+| **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% read-only iOS sandbox escape scanner, sideloaded IPA auditor & firmware CVE guard | iOS / iPadOS 26.2+ – 27.x security auditing |
+| **[Camlo](https://github.com/Kianuni/Camlo)** | Bring your iPhone lock screen to life: computer-free slide-to-unlock animations, glasses-free 3D & live wallpapers | iOS / iPadOS 26 – 27 lock screen customization |
+| **[Enkard](https://github.com/Kianuni/Enkard)** | Purely offline, zero-cloud encrypted iPhone card vault bound to Apple Secure Enclave hardware | Bank-grade local storage for sensitive cards & credentials |
+
+---
+
 ## Credits & License
 
 - Upstream project: **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** (`lunginspector`, `forcequit`, `0xjohnny`, `Skadz`, `rooootdev`, `neonmodder123`)

@@ -194,6 +194,19 @@ chmod +x ipabuild.sh
 
 ---
 
+## 更多开源项目推荐 (Kianuni Ecosystem)
+
+如果你喜欢 **Erosion-CN**，欢迎关注同系列其他 iOS 开源工具（全部坚持开源透明、无暗桩）：
+
+| 项目 | 定位与核心特性 | 适用系统 / 场景 |
+| :--- | :--- | :--- |
+| **[AppleFlow](https://github.com/Kianuni/AppleFlow)** | 零 MitM 的 Apple 智能、PCC 隐私云计算与中文 Siri 极简分流方案，附带 **[在线配置体检与出口探针台](https://kianuni.github.io/AppleFlow/)** | Surge / Loon / Shadowrocket / Stash / Mihomo / QX / Sing-box |
+| **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% 只读开源的沙盒越权检测、侧载 IPA 安全审查与固件 CVE 防护工具 | iOS / iPadOS 26.2+ – 27.x 侧载排雷与设备自检 |
+| **[Camlo](https://github.com/Kianuni/Camlo)** | **Camlo · 开幕** — 免电脑一键换上滑动解锁变身、裸眼 3D 与动态锁屏壁纸，让 iPhone 锁屏活起来 | iOS / iPadOS 26 – 27 个性化锁屏美化 |
+| **[Enkard](https://github.com/Kianuni/Enkard)** | 纯离线、零云同步、绑定 Apple Secure Enclave 硬件安全芯片的 iPhone 银行级加密卡包 | 个人隐私卡券 / 敏感凭据本地加密收纳 |
+
+---
+
 ## 致谢与开源许可 (Credits & License)
 
 本项目基于 **[GNU General Public License v3.0 (GPLv3)](./LICENSE)** 开源，谨向上游作者与社区研究者致以诚挚感谢：
