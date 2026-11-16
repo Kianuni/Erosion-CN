@@ -24,9 +24,11 @@
 
 ## Overview
 
-**Erosion-CN** started as a Simplified Chinese fork of **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** and evolved into a heavily hardened, feature-packed toolkit. Starting with **v0.9.0**, a single IPA includes **full English + Simplified Chinese bilingual support**:
+> **Not just a translation** — **Erosion-CN** is a bootloop-safe, zero-hardcoded-offset, bilingual (**English / 简体中文**) hardened edition of **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** built for **all regions & devices**.
+
+While it began as a Simplified Chinese fork, it has evolved into an engineering-first overhaul with persistent in-place writes, runtime `libMobileGestalt.dylib` slot resolution, and dual-vault factory backups. Starting with **v0.9.0**, a single IPA ships with **full English + Simplified Chinese support**:
 - Automatically matches your device's system language out of the box (English for all non-Chinese system locales, Simplified Chinese for `zh*`).
-- Includes an instant **Language Switcher** in **Settings → App Language** (`Follow System` / `简体中文` / `English`).
+- Includes an instant **Language Switcher** in **Settings → App Language** (`Follow System` / `English` / `简体中文`).
 
 > 📜 Full version history: [CHANGELOG.md](./CHANGELOG.md) · [Releases](https://github.com/Kianuni/Erosion-CN/releases)  
 > 📖 Independent Architecture Deep-Dive (zh-Hans, with SVG diagrams): [*From `worse_query` Escape to `MobileGestalt` Runtime Reconstruction: Inside Erosion-CN's Bootloop-Safe In-Place Write & Dual-Vault Architecture*](https://lijianfei.com/post/erosion-cn-ios-system-configuration-mobilegestalt-architecture/)
