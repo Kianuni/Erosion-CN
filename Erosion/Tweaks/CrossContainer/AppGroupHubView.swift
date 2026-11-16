@@ -305,6 +305,8 @@ struct AppGroupHubView: View {
 
         \(c2)
         DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
+        DOMAIN-SUFFIX,issuer.apple.com,\(policy)
+        DOMAIN-SUFFIX,ropes.apple.com,\(policy)
         DOMAIN,mask-api.icloud.com,\(policy)
         DOMAIN,mask.icloud.com,\(policy)
         DOMAIN,mask-h2.icloud.com,\(policy)
@@ -318,11 +320,17 @@ struct AppGroupHubView: View {
         \(c3)
         DOMAIN-SUFFIX,openai.com,\(policy)
         DOMAIN-SUFFIX,chatgpt.com,\(policy)
+        DOMAIN-SUFFIX,sora.com,\(policy)
         DOMAIN-SUFFIX,oaistatic.com,\(policy)
         DOMAIN-SUFFIX,oaiusercontent.com,\(policy)
-        DOMAIN-SUFFIX,google.com,\(policy)
-        DOMAIN-SUFFIX,googleapis.com,\(policy)
-        DOMAIN-SUFFIX,gstatic.com,\(policy)
+        DOMAIN-SUFFIX,chatgpt.livekit.cloud,\(policy)
+        DOMAIN,lens.google.com,\(policy)
+        DOMAIN-SUFFIX,gemini.google.com,\(policy)
+        DOMAIN,gemini.gstatic.com,\(policy)
+        DOMAIN,generativelanguage.googleapis.com,\(policy)
+        DOMAIN-SUFFIX,anthropic.com,\(policy)
+        DOMAIN-SUFFIX,claude.ai,\(policy)
+        DOMAIN-SUFFIX,claudeusercontent.com,\(policy)
         """
     }
 
@@ -366,6 +374,8 @@ struct AppGroupHubView: View {
 
           \(sc2)
           - DOMAIN,gspe1-ssl.ls.apple.com,\(policy)
+          - DOMAIN-SUFFIX,issuer.apple.com,\(policy)
+          - DOMAIN-SUFFIX,ropes.apple.com,\(policy)
           - DOMAIN,mask-api.icloud.com,\(policy)
           - DOMAIN,mask.icloud.com,\(policy)
           - DOMAIN,mask-h2.icloud.com,\(policy)
@@ -379,11 +389,17 @@ struct AppGroupHubView: View {
           \(sc3)
           - DOMAIN-SUFFIX,openai.com,\(policy)
           - DOMAIN-SUFFIX,chatgpt.com,\(policy)
+          - DOMAIN-SUFFIX,sora.com,\(policy)
           - DOMAIN-SUFFIX,oaistatic.com,\(policy)
           - DOMAIN-SUFFIX,oaiusercontent.com,\(policy)
-          - DOMAIN-SUFFIX,google.com,\(policy)
-          - DOMAIN-SUFFIX,googleapis.com,\(policy)
-          - DOMAIN-SUFFIX,gstatic.com,\(policy)
+          - DOMAIN-SUFFIX,chatgpt.livekit.cloud,\(policy)
+          - DOMAIN,lens.google.com,\(policy)
+          - DOMAIN-SUFFIX,gemini.google.com,\(policy)
+          - DOMAIN,gemini.gstatic.com,\(policy)
+          - DOMAIN,generativelanguage.googleapis.com,\(policy)
+          - DOMAIN-SUFFIX,anthropic.com,\(policy)
+          - DOMAIN-SUFFIX,claude.ai,\(policy)
+          - DOMAIN-SUFFIX,claudeusercontent.com,\(policy)
         """
     }
 

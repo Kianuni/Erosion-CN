@@ -22219,6 +22219,118 @@
           }
         }
       }
+    },
+    "基于 [jailbreak.party](https://jailbreak.party) 上游构建 · Kianuni 中英双语与防白苹果安全加固版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Built on [jailbreak.party](https://jailbreak.party) · Kianuni Bilingual & Bootloop-Hardened Edition"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基于 [jailbreak.party](https://jailbreak.party) 上游构建 · Kianuni 中英双语与防白苹果安全加固版"
+          }
+        }
+      }
+    },
+    "更多开源项目 (Kianuni)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More Open-Source Projects (Kianuni)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多开源项目 (Kianuni)"
+          }
+        }
+      }
+    },
+    "致谢与开源参考": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credits & Open-Source References"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "致谢与开源参考"
+          }
+        }
+      }
+    },
+    "零 MitM 的 Apple 智能、PCC 与中文 Siri 极简分流方案 & 在线配置体检台": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zero-MitM routing for Apple Intelligence, PCC & Siri + Web Config Doctor"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "零 MitM 的 Apple 智能、PCC 与中文 Siri 极简分流方案 & 在线配置体检台"
+          }
+        }
+      }
+    },
+    "100% 只读开源的 iOS 沙盒越权检测、侧载 IPA 审查与固件 CVE 防护工具": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100% read-only iOS sandbox escape scanner, IPA auditor & firmware CVE guard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100% 只读开源的 iOS 沙盒越权检测、侧载 IPA 审查与固件 CVE 防护工具"
+          }
+        }
+      }
+    },
+    "免电脑一键换上滑动解锁变身、裸眼 3D 与动态锁屏壁纸": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computer-free slide-to-unlock animations, glasses-free 3D & live wallpapers"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "免电脑一键换上滑动解锁变身、裸眼 3D 与动态锁屏壁纸"
+          }
+        }
+      }
+    },
+    "纯离线、零云同步、绑定 Secure Enclave 的 iPhone 银行级加密卡包": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purely offline, zero-cloud encrypted iPhone card vault bound to Secure Enclave"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "纯离线、零云同步、绑定 Secure Enclave 的 iPhone 银行级加密卡包"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

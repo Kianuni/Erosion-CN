@@ -55,4 +55,7 @@
 13. **单包完整中英双语支持与 `Personal Translator (#266)` 基线双向自愈（`v0.9.0 – v0.9.1`）**
     - 单一 IPA 同时内置完整 **简体中文 (`zh-Hans`)** 与 **英文 (`en`)** 语言包：中文系统默认显示简体中文，非中文系统自动切换为英文界面，「设置 → 界面语言」支持 **跟随系统 / 简体中文 / English** 三档实时热切换；
     - **`v0.9.1` 修复原生 AI 机型 `Personal Translator` 槽位 `#266` 误关导致相册云端工具与相机 Siri 0 秒瞬间报错的问题**：锁定 `iPhone 15 Pro` 至 `iPhone 18 Pro Max` 全系原生 AI iPhone 的 `#266 = true`、`#178 = false` 原厂基线（免疫跨版本 OTA 与污染缓存），并新增双向异常检测与「一键配齐 / 修复」自愈还原。
+14. **设置页生态推荐与内置分流规则同步（`v0.9.2`）**
+    - **设置页重构与生态联动**：移除「特别致谢与特性参考」分组，将上游作者与特性参考统一合并至「致谢与开源参考」；同时新增「更多开源项目 (Kianuni)」推荐卡片，集中展示 `AppleFlow`、`WQGuard`、`Camlo`、`Enkard` 四个同系列开源项目（同步完整中英双语翻译）；
+    - **内置分流导出同步 `AppleFlow v1.0.1`**：补齐 PCC 盲签名关键域名 `*.issuer.apple.com` 与 `ropes.apple.com`（消除内置导出规则下相册高质量消除报 `Code=32033`），并收窄过宽的 `google.com` / `googleapis.com` / `gstatic.com` 后缀，替换为 `lens.google.com`、`gemini.google.com`、`chatgpt.livekit.cloud`、`sora.com` 与 `claudeusercontent.com` 等精准生产域名。
 
