@@ -31,6 +31,7 @@ struct FileBrowserView: View {
     var path: URL = URL(fileURLWithPath: "/")
     var isContainer = false
     var shouldGrant = false
+    var highlightTargetURL: URL? = nil
     
     @State private var dirFiles: [FileItem] = []
     @State private var unfilteredFiles: [FileItem] = []
@@ -53,37 +54,50 @@ struct FileBrowserView: View {
     @State private var failMsg = ""
     @State private var isLoading = false
     @State private var hasLoaded = false
+    @State private var didAutoScrollToHighlight = false
     
     var body: some View {
-        List {
-            if isLoading {
-                Section {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            ProgressView()
-                                .offset(y: 0.5)
-                            Text("正在加载文件...")
-                                .fontWeight(.medium)
-                        }
-                        if isContainer {
-                            Text("由于容器路径扫描耗时较长，首次加载可能需要 30 秒以上，请耐心等待。")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+        ScrollViewReader { scrollProxy in
+            List {
+                if isLoading {
+                    Section {
+                        VStack(alignment: .leading) {
+                            HStack {
+                                ProgressView()
+                                    .offset(y: 0.5)
+                                Text("正在加载文件...")
+                                    .fontWeight(.medium)
+                            }
+                            if isContainer {
+                                Text("由于容器路径扫描耗时较长，首次加载可能需要 30 秒以上，请耐心等待。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                }
-            } else if showFailure {
-                CompactAlert(title: "无法加载目录文件！", symbol: "folder.badge.questionmark", text: failMsg)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            } else {
-                ForEach(dirFiles) { file in
-                    if file.type == .folder {
-                        FolderRow(file: file, shouldGrant: isContainer ? true : false, isContainer: isContainer)
-                    } else {
-                        FileRow(file: file)
+                } else if showFailure {
+                    CompactAlert(title: "无法加载目录文件！", symbol: "folder.badge.questionmark", text: failMsg)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(dirFiles) { file in
+                        Group {
+                            if file.type == .folder {
+                                FolderRow(file: file, shouldGrant: isContainer ? true : false, isContainer: isContainer)
+                            } else {
+                                FileRow(file: file)
+                            }
+                        }
+                        .id(file.id)
+                        .listRowBackground(matchesHighlight(file) ? Color.orange.opacity(0.16) : Color?.none)
                     }
                 }
+            }
+            .onChange(of: dirFiles.map(\.id)) {
+                scrollToHighlightedIfNeeded(using: scrollProxy)
+            }
+            .onAppear {
+                scrollToHighlightedIfNeeded(using: scrollProxy)
             }
         }
         .navigationTitle(path.lastPathComponent)
@@ -357,6 +371,27 @@ struct FileBrowserView: View {
         }
     }
     
+    private func matchesHighlight(_ item: FileItem) -> Bool {
+        guard let highlightTargetURL else { return false }
+        let targetCanon = FMNavigationStore.canonicalPath(highlightTargetURL.standardizedFileURL.path)
+        let itemCanon = FMNavigationStore.canonicalPath(item.fileURL.standardizedFileURL.path)
+        return itemCanon == targetCanon
+    }
+
+    private func scrollToHighlightedIfNeeded(using proxy: ScrollViewProxy) {
+        guard !didAutoScrollToHighlight,
+              highlightTargetURL != nil,
+              let matched = dirFiles.first(where: { matchesHighlight($0) }) else {
+            return
+        }
+        didAutoScrollToHighlight = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(matched.id, anchor: .center)
+            }
+        }
+    }
+
     private func filterFiles(_ files: [FileItem], query: String) -> [FileItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return files }

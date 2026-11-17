@@ -94,6 +94,7 @@ struct InfoViewer: View {
     @State private var currentReadable: Bool
     @State private var currentWritable: Bool
     @State private var currentExecutable: Bool
+    @State private var hasAdSentinel = false
     @State private var applyNotice: String?
     @State private var applyIsError = false
     @State private var didGrantTempWrite = false
@@ -148,6 +149,12 @@ struct InfoViewer: View {
                     BoolInfoCell(currentReadable, label: "可读")
                     BoolInfoCell(currentWritable, label: "可写")
                     BoolInfoCell(currentExecutable, label: "可执行")
+                    if hasAdSentinel {
+                        StringInfoCell(
+                            LocalizationManager.isEnglish ? "Active (.erosion_adlock)" : "已生效 (.erosion_adlock)",
+                            label: LocalizationManager.isEnglish ? "Anti-Recreate Lock" : "防重建保护"
+                        )
+                    }
                 } header: {
                     HeaderLabel("权限信息", symbol: "shield")
                 } footer: {
@@ -193,32 +200,61 @@ struct InfoViewer: View {
     private var chmodSection: some View {
         let readOnlyMode = isDirectoryItem ? 0o555 : 0o444
         let readWriteMode = isDirectoryItem ? 0o755 : 0o644
+        let liveLowBits = currentMode & 0o777
+        let isAlreadyReadOnly = (liveLowBits == readOnlyMode)
+        let isAlreadyReadWrite = (liveLowBits == readWriteMode) && !hasAdSentinel
 
         Section {
             Button {
                 draftMode = readOnlyMode
                 applyPermissions(readOnlyMode)
             } label: {
-                Label(
-                    LocalizationManager.isEnglish
-                        ? "Set Read-Only (\(String(format: "%04o", readOnlyMode)))"
-                        : "设为只读 (锁死广告缓存 \(String(format: "%04o", readOnlyMode)))",
-                    systemImage: "lock.fill"
-                )
-                .foregroundStyle(.orange)
+                if isAlreadyReadOnly {
+                    Label(
+                        hasAdSentinel
+                            ? (LocalizationManager.isEnglish
+                                ? "Read-Only & Sentinel Active (\(String(format: "%04o", readOnlyMode)))"
+                                : "当前已是只读防重建锁死状态 (\(String(format: "%04o", readOnlyMode)))")
+                            : (LocalizationManager.isEnglish
+                                ? "Already Read-Only (\(String(format: "%04o", readOnlyMode)))"
+                                : "当前已是只读锁死状态 (\(String(format: "%04o", readOnlyMode)))"),
+                        systemImage: "checkmark.shield.fill"
+                    )
+                    .foregroundStyle(.green)
+                } else {
+                    Label(
+                        LocalizationManager.isEnglish
+                            ? "Set Read-Only (\(String(format: "%04o", readOnlyMode)))"
+                            : "设为只读 (锁死广告缓存 \(String(format: "%04o", readOnlyMode)))",
+                        systemImage: "lock.fill"
+                    )
+                    .foregroundStyle(.orange)
+                }
             }
+            .disabled(isAlreadyReadOnly)
 
             Button {
                 draftMode = readWriteMode
                 applyPermissions(readWriteMode)
             } label: {
-                Label(
-                    LocalizationManager.isEnglish
-                        ? "Restore Read-Write (\(String(format: "%04o", readWriteMode)))"
-                        : "恢复默认读写 (\(String(format: "%04o", readWriteMode)))",
-                    systemImage: "lock.open.fill"
-                )
+                if isAlreadyReadWrite {
+                    Label(
+                        LocalizationManager.isEnglish
+                            ? "Already Default Read-Write (\(String(format: "%04o", readWriteMode)))"
+                            : "当前已是默认可读写状态 (\(String(format: "%04o", readWriteMode)))",
+                        systemImage: "checkmark.circle"
+                    )
+                    .foregroundStyle(.secondary)
+                } else {
+                    Label(
+                        LocalizationManager.isEnglish
+                            ? "Restore Read-Write (\(String(format: "%04o", readWriteMode)))"
+                            : "恢复默认读写 (\(String(format: "%04o", readWriteMode)))",
+                        systemImage: "lock.open.fill"
+                    )
+                }
             }
+            .disabled(isAlreadyReadWrite)
 
             PermissionBitRow(
                 title: LocalizationManager.isEnglish ? "Owner (u)" : "所有者 (u)",
@@ -252,6 +288,7 @@ struct InfoViewer: View {
                         .fontWeight(.semibold)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled((draftMode & 0o777) == liveLowBits)
             }
 
             if let applyNotice {
@@ -276,6 +313,13 @@ struct InfoViewer: View {
         }
     }
 
+    private func checkHasAdSentinel(atPath path: String) -> Bool {
+        guard isDirectoryItem else { return false }
+        let sentinelPath = (path as NSString).appendingPathComponent(".erosion_adlock")
+        var sSt = stat()
+        return lstat(sentinelPath, &sSt) == 0 && ((sSt.st_mode & S_IFMT) == S_IFREG)
+    }
+
     private func refreshLivePermissions() {
         let targetPath = file.fileURL.path
         var st = stat()
@@ -295,6 +339,7 @@ struct InfoViewer: View {
         currentReadable = fm.isReadableFile(atPath: targetPath)
         currentWritable = fm.isWritableFile(atPath: targetPath)
         currentExecutable = fm.isExecutableFile(atPath: targetPath)
+        hasAdSentinel = checkHasAdSentinel(atPath: targetPath)
     }
 
     private func applyPermissions(_ targetMode: Int) {
@@ -342,6 +387,12 @@ struct InfoViewer: View {
             return
         }
 
+        if isDirectoryItem && (desired & 0o200) != 0 && checkHasAdSentinel(atPath: targetPath) {
+            let sentinelPath = (targetPath as NSString).appendingPathComponent(".erosion_adlock")
+            _ = Darwin.chmod(sentinelPath, 0o644)
+            _ = Darwin.unlink(sentinelPath)
+        }
+
         var st = stat()
         guard lstat(targetPath, &st) == 0 else {
             applyIsError = true
@@ -358,6 +409,7 @@ struct InfoViewer: View {
         currentReadable = fm.isReadableFile(atPath: targetPath)
         currentWritable = fm.isWritableFile(atPath: targetPath)
         currentExecutable = fm.isExecutableFile(atPath: targetPath)
+        hasAdSentinel = checkHasAdSentinel(atPath: targetPath)
 
         guard (verifiedMode & 0o777) == desired else {
             applyIsError = true

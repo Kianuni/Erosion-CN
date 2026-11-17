@@ -8,7 +8,7 @@
 import SwiftUI
 import Darwin
 
-struct ContainerCacheEntry: Identifiable, Sendable {
+struct ContainerCacheEntry: Identifiable, Hashable, Sendable {
     let id: String
     let bundleID: String
     let displayTitle: String
@@ -44,10 +44,12 @@ private final class ScanCancellationFlag: @unchecked Sendable {
 }
 
 struct CacheCleanerView: View {
+    @ObservedObject private var langMgr = LocalizationManager.shared
     @State private var isScanning = false
     @State private var isStopping = false
     @State private var isCleaning = false
     @State private var entries: [ContainerCacheEntry] = []
+    @State private var inspectEntry: ContainerCacheEntry?
     @State private var searchText = ""
     @State private var includeSystemContainers = false
     @State private var scanCompletedCount = 0
@@ -55,6 +57,7 @@ struct CacheCleanerView: View {
     @State private var activeScanToken: ScanCancellationFlag?
     @AppStorage("totalFreedBytesHistory") private var totalFreedBytesHistory: Int = 0
 
+    nonisolated private static var isEn: Bool { LocalizationManager.isEnglish }
     nonisolated private static let autoSelectThresholdBytes: Int64 = 1024 * 1024
 
     nonisolated private static let protectedBundleIDs: Set<String> = [
@@ -95,6 +98,10 @@ struct CacheCleanerView: View {
         filteredEntries.reduce(0) { $0 + $1.totalCleanableBytes }
     }
 
+    private var selectedEntriesCount: Int {
+        filteredEntries.filter(\.isSelected).count
+    }
+
     private var selectedReclaimableBytes: Int64 {
         filteredEntries.filter(\.isSelected).reduce(0) { $0 + $1.totalCleanableBytes }
     }
@@ -102,8 +109,8 @@ struct CacheCleanerView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("当前可安全释放缓存")
                                 .font(.subheadline)
@@ -112,7 +119,8 @@ struct CacheCleanerView: View {
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(totalReclaimableBytes > 0 ? Color.accentColor : Color.secondary)
                         }
-                        Spacer()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                         if totalFreedBytesHistory > 0 {
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text("累计已释放")
@@ -122,40 +130,57 @@ struct CacheCleanerView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.green)
                             }
+                            .layoutPriority(1)
                         }
                     }
 
                     Divider()
 
-                    HStack {
-                        Button {
-                            scanCaches()
-                        } label: {
-                            Label("重新扫描", systemImage: "arrow.clockwise")
-                                .font(.subheadline)
-                        }
-                        .disabled(isScanning || isCleaning)
+                    VStack(spacing: 10) {
+                        HStack(spacing: 12) {
+                            Button {
+                                scanCaches()
+                            } label: {
+                                Label("重新扫描", systemImage: "arrow.clockwise")
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.85)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isScanning || isCleaning)
 
-                        Spacer()
+                            Spacer(minLength: 8)
+
+                            Text(Self.isEn
+                                 ? "\(selectedEntriesCount) selected"
+                                 : "已选 \(selectedEntriesCount) 项")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
 
                         Button(role: .destructive) {
-                            let selectedCount = filteredEntries.filter(\.isSelected).count
-                            guard selectedCount > 0 else { return }
-                            Alertinator.shared.alert(
-                                title: L("确认清理所选应用缓存吗？"),
-                                body: L("将清理 \(selectedCount) 个应用容器内的 Library/Caches 与 tmp 临时碎片（预计释放 \(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes))）。\n\n安全承诺：绝不触碰 Documents、聊天记录数据库或登录配置。"),
-                                actionLabel: L("立即清理"),
-                                action: {
-                                    cleanSelectedEntries()
-                                }
-                            )
+                            confirmCleanSelected()
                         } label: {
-                            Label("一键清理已选 (\(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes)))", systemImage: "sparkles")
-                                .font(.subheadline.weight(.semibold))
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                Text(Self.isEn
+                                     ? "Clean Selected (\(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes)))"
+                                     : "一键清理已选 (\(AppContainerDirectoryHelper.formatBytes(selectedReclaimableBytes)))")
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.85)
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
                         }
-                        .disabled(isScanning || isCleaning || selectedReclaimableBytes <= 0)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(.red)
+                        .disabled(isScanning || isCleaning || selectedEntriesCount == 0 || selectedReclaimableBytes <= 0)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
 
                 PlainToggle(
@@ -219,9 +244,10 @@ struct CacheCleanerView: View {
                                 Text("Caches: \(AppContainerDirectoryHelper.formatBytes(entry.cachesBytes)) · tmp: \(AppContainerDirectoryHelper.formatBytes(entry.tmpBytes))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.85)
                             }
-
-                            Spacer()
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             VStack(alignment: .trailing, spacing: 6) {
                                 Text(AppContainerDirectoryHelper.formatBytes(entry.totalCleanableBytes))
@@ -229,8 +255,8 @@ struct CacheCleanerView: View {
                                     .foregroundStyle(entry.totalCleanableBytes > 50 * 1024 * 1024 ? Color.orange : Color.primary)
 
                                 HStack(spacing: 10) {
-                                    NavigationLink {
-                                        ContainerSubdirBrowserView(containerURL: entry.containerURL, relativeSubpath: "Library/Caches")
+                                    Button {
+                                        inspectEntry = entry
                                     } label: {
                                         Text("查看")
                                             .font(.caption2)
@@ -248,6 +274,7 @@ struct CacheCleanerView: View {
                                     .disabled(isScanning || isCleaning)
                                 }
                             }
+                            .layoutPriority(1)
                         }
                         .padding(.vertical, 2)
                     }
@@ -304,6 +331,9 @@ struct CacheCleanerView: View {
         .navigationTitle("容器缓存清理")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索应用名称或 Bundle ID")
+        .navigationDestination(item: $inspectEntry) { entry in
+            ContainerSubdirBrowserView(containerURL: entry.containerURL, relativeSubpath: "Library/Caches")
+        }
         .onChange(of: includeSystemContainers) {
             if includeSystemContainers && !entries.contains(where: { $0.bundleID.hasPrefix("com.apple.") && $0.bundleID != "com.apple.mobilesafari" }) && !isScanning && !isCleaning {
                 scanCaches()
@@ -314,6 +344,22 @@ struct CacheCleanerView: View {
                 scanCaches()
             }
         }
+    }
+
+    private func confirmCleanSelected() {
+        guard !isScanning && !isCleaning else { return }
+        let targets = filteredEntries.filter(\.isSelected)
+        guard !targets.isEmpty else { return }
+        let bytes = targets.reduce(Int64(0)) { $0 + $1.totalCleanableBytes }
+        guard bytes > 0 else { return }
+        Alertinator.shared.alert(
+            title: L("确认清理所选应用缓存吗？"),
+            body: L("将清理 \(targets.count) 个应用容器内的 Library/Caches 与 tmp 临时碎片（预计释放 \(AppContainerDirectoryHelper.formatBytes(bytes))）。\n\n安全承诺：绝不触碰 Documents、聊天记录数据库或登录配置。"),
+            actionLabel: L("立即清理"),
+            action: {
+                cleanEntries(targets)
+            }
+        )
     }
 
     private func toggleSelection(for id: String) {
@@ -506,9 +552,9 @@ struct CacheCleanerView: View {
         let cachesPath = url.appendingPathComponent("Library/Caches").path
         let tmpPath = url.appendingPathComponent("tmp").path
 
-        let cBytes = fastDirectorySize(atPath: cachesPath, maxDepth: 5, cancelFlag: cancelFlag)
+        let cBytes = fastDirectorySize(atPath: cachesPath, maxDepth: 7, cancelFlag: cancelFlag)
         if cancelFlag.isCancelled { return nil }
-        let tBytes = fastDirectorySize(atPath: tmpPath, maxDepth: 4, cancelFlag: cancelFlag)
+        let tBytes = fastDirectorySize(atPath: tmpPath, maxDepth: 6, cancelFlag: cancelFlag)
         if cancelFlag.isCancelled { return nil }
 
         let total = cBytes + tBytes
@@ -672,77 +718,139 @@ struct CacheCleanerView: View {
         guard !isScanning && !isCleaning else { return }
         isCleaning = true
         DispatchQueue.global(qos: .userInitiated).async {
-            let freed = Self.purgeCacheContents(for: entry)
+            let outcome = Self.purgeCacheContents(for: entry)
             DispatchQueue.main.async {
-                if let idx = entries.firstIndex(where: { $0.id == entry.id }) {
-                    entries.remove(at: idx)
+                if outcome.authorized {
+                    if let idx = entries.firstIndex(where: { $0.id == entry.id }) {
+                        if outcome.remainingCaches + outcome.remainingTmp <= 4096 {
+                            entries.remove(at: idx)
+                        } else {
+                            entries[idx].cachesBytes = outcome.remainingCaches
+                            entries[idx].tmpBytes = outcome.remainingTmp
+                        }
+                    }
+                    totalFreedBytesHistory += Int(max(outcome.freed, 0))
+                    isCleaning = false
+                    Haptic.shared.play(.soft)
+                    ErosionManager.shared.refreshFiles.toggle()
+                    Alertinator.shared.alert(
+                        title: L("清理完成！"),
+                        body: L("已安全清理「\(entry.displayTitle)」缓存，释放空间 \(AppContainerDirectoryHelper.formatBytes(outcome.freed))。")
+                    )
+                } else {
+                    isCleaning = false
+                    Haptic.shared.notify(.error)
+                    Alertinator.shared.alert(
+                        title: Self.isEn ? "Clean Failed" : "清理失败",
+                        body: Self.isEn
+                            ? "Could not obtain write access to \"\(entry.displayTitle)\" container."
+                            : "未能获取「\(entry.displayTitle)」容器写入权限，清理未执行。"
+                    )
                 }
-                totalFreedBytesHistory += Int(max(freed, 0))
-                isCleaning = false
-                Haptic.shared.play(.soft)
-                Alertinator.shared.alert(
-                    title: L("清理完成！"),
-                    body: L("已安全清理「\(entry.displayTitle)」缓存，释放空间 \(AppContainerDirectoryHelper.formatBytes(freed))。")
-                )
             }
         }
     }
 
-    private func cleanSelectedEntries() {
+    private func cleanEntries(_ targets: [ContainerCacheEntry]) {
         guard !isScanning && !isCleaning else { return }
-        let targets = filteredEntries.filter(\.isSelected)
         guard !targets.isEmpty else { return }
         isCleaning = true
         DispatchQueue.global(qos: .userInitiated).async {
             var totalFreed: Int64 = 0
-            var cleanedIDs: Set<String> = []
+            var authorizedCount = 0
+            var unauthorizedCount = 0
+            var outcomes: [String: (remainingCaches: Int64, remainingTmp: Int64)] = [:]
+
             for target in targets {
-                let freed = Self.purgeCacheContents(for: target)
-                totalFreed += freed
-                cleanedIDs.insert(target.id)
+                let res = Self.purgeCacheContents(for: target)
+                if res.authorized {
+                    authorizedCount += 1
+                    totalFreed += res.freed
+                    outcomes[target.id] = (res.remainingCaches, res.remainingTmp)
+                } else {
+                    unauthorizedCount += 1
+                }
             }
+
             DispatchQueue.main.async {
-                entries.removeAll { cleanedIDs.contains($0.id) }
+                if !outcomes.isEmpty {
+                    entries = entries.compactMap { entry in
+                        guard let out = outcomes[entry.id] else {
+                            return entry
+                        }
+                        if out.remainingCaches + out.remainingTmp <= 4096 {
+                            return nil
+                        }
+                        var updated = entry
+                        updated.cachesBytes = out.remainingCaches
+                        updated.tmpBytes = out.remainingTmp
+                        return updated
+                    }
+                }
                 totalFreedBytesHistory += Int(max(totalFreed, 0))
                 isCleaning = false
-                Haptic.shared.play(.soft)
-                Alertinator.shared.alert(
-                    title: L("批量清理完成！"),
-                    body: L("已成功清理 \(cleanedIDs.count) 个应用的冗余缓存与临时文件，共释放 \(AppContainerDirectoryHelper.formatBytes(totalFreed)) 存储空间！")
-                )
+                if authorizedCount > 0 {
+                    Haptic.shared.play(.soft)
+                    ErosionManager.shared.refreshFiles.toggle()
+                } else {
+                    Haptic.shared.notify(.error)
+                }
+
+                if unauthorizedCount == 0 {
+                    Alertinator.shared.alert(
+                        title: L("批量清理完成！"),
+                        body: L("已成功清理 \(authorizedCount) 个应用的冗余缓存与临时文件，共释放 \(AppContainerDirectoryHelper.formatBytes(totalFreed)) 存储空间！")
+                    )
+                } else {
+                    Alertinator.shared.alert(
+                        title: Self.isEn ? "Completed with Errors" : "部分容器清理受限",
+                        body: Self.isEn
+                            ? "Cleaned \(authorizedCount) containers (freed \(AppContainerDirectoryHelper.formatBytes(totalFreed))); \(unauthorizedCount) containers could not obtain write access."
+                            : "已清理 \(authorizedCount) 个容器（释放 \(AppContainerDirectoryHelper.formatBytes(totalFreed))），另有 \(unauthorizedCount) 个容器未能获取写入权限。"
+                    )
+                }
             }
         }
     }
 
-    private static func purgeCacheContents(for entry: ContainerCacheEntry) -> Int64 {
+    nonisolated private static func isAdSentinelLockedDir(atPath path: String) -> Bool {
+        let sentinel = (path as NSString).appendingPathComponent(".erosion_adlock")
+        var st = stat()
+        return lstat(sentinel, &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG
+    }
+
+    private static func purgeCacheContents(for entry: ContainerCacheEntry) -> (authorized: Bool, freed: Int64, remainingCaches: Int64, remainingTmp: Int64) {
         let wasActive = wq.hasActiveAccess(path: entry.containerURL.path)
-        guard wq.grantAccess(path: entry.containerURL.path).0 else { return 0 }
+        let rootGrant = wq.grantAccess(path: entry.containerURL.path, requireWrite: true)
+        guard rootGrant.0 || rootGrant.1 >= 0 else {
+            return (false, 0, entry.cachesBytes, entry.tmpBytes)
+        }
         defer {
-            if !wasActive {
+            if !wasActive && rootGrant.1 >= 0 {
                 wq.releaseAccess(path: entry.containerURL.path)
             }
         }
 
-        let dirs = [
-            entry.containerURL.appendingPathComponent("Library/Caches"),
-            entry.containerURL.appendingPathComponent("tmp"),
-            entry.containerURL.appendingPathComponent("Library/WebKit/WebsiteData/CacheStorage")
-        ]
+        let cacheDir = entry.containerURL.appendingPathComponent("Library/Caches")
+        let tmpDir = entry.containerURL.appendingPathComponent("tmp")
+        let webkitCacheDir = entry.containerURL.appendingPathComponent("Library/WebKit/WebsiteData/CacheStorage")
+        let targets: [(url: URL, depth: Int)] = [(cacheDir, 7), (tmpDir, 6), (webkitCacheDir, 7)]
+
         var totalFreed: Int64 = 0
-        for dir in dirs {
+        for (dir, depth) in targets {
             var dirSt = stat()
             guard lstat(dir.path, &dirSt) == 0, (dirSt.st_mode & S_IFMT) == S_IFDIR else { continue }
             let subWasActive = wq.hasActiveAccess(path: dir.path)
-            _ = wq.grantAccess(path: dir.path)
+            let subGrant = wq.grantAccess(path: dir.path, requireWrite: true)
             defer {
-                if !subWasActive {
+                if !subWasActive && subGrant.1 >= 0 {
                     wq.releaseAccess(path: dir.path)
                 }
             }
-            let before = fastDirectorySize(atPath: dir.path, maxDepth: 5)
+            let before = fastDirectorySize(atPath: dir.path, maxDepth: depth)
             guard let children = try? fm.contentsOfDirectory(atPath: dir.path) else { continue }
             for child in children {
-                guard !child.contains("/"), child != ".", child != ".." else { continue }
+                guard !child.contains("/"), child != ".", child != "..", child != ".erosion_adlock" else { continue }
                 if entry.bundleID == "com.apple.mobilephone" && child == "TelephonyUI-10" {
                     continue
                 }
@@ -750,14 +858,19 @@ struct CacheCleanerView: View {
                 var childSt = stat()
                 guard lstat(childURL.path, &childSt) == 0 else { continue }
                 let mode = childSt.st_mode & S_IFMT
+                if mode == S_IFDIR && isAdSentinelLockedDir(atPath: childURL.path) {
+                    continue
+                }
                 // Only remove regular files and regular subdirectories; skip sockets/FIFOs/symlinks
                 if mode == S_IFREG || mode == S_IFDIR {
                     try? fm.removeItem(at: childURL)
                 }
             }
-            let after = fastDirectorySize(atPath: dir.path, maxDepth: 5)
+            let after = fastDirectorySize(atPath: dir.path, maxDepth: depth)
             totalFreed += max(0, before - after)
         }
-        return totalFreed
+        let remainingCaches = fastDirectorySize(atPath: cacheDir.path, maxDepth: 7)
+        let remainingTmp = fastDirectorySize(atPath: tmpDir.path, maxDepth: 6)
+        return (true, totalFreed, remainingCaches, remainingTmp)
     }
 }

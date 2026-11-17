@@ -226,7 +226,7 @@ struct AdFolderLocateBrowserView: View {
     var body: some View {
         Group {
             if let parentReadyURL {
-                FileBrowserView(path: parentReadyURL, shouldGrant: true)
+                FileBrowserView(path: parentReadyURL, shouldGrant: true, highlightTargetURL: targetFolderURL)
                     .safeAreaInset(edge: .top, spacing: 0) {
                         HStack(spacing: 8) {
                             Image(systemName: "scope")
@@ -275,21 +275,21 @@ struct AdFolderLocateBrowserView: View {
         .onAppear {
             guard parentReadyURL == nil && errorMsg == nil else { return }
             let parentURL = targetFolderURL.deletingLastPathComponent()
-            let rootGrant = wq.grantAccess(path: containerURL.path)
-            guard rootGrant.0 else {
+            let rootGrant = wq.grantAccess(path: containerURL.path, requireWrite: false)
+            guard rootGrant.0 || rootGrant.1 >= 0 else {
                 errorMsg = LocalizationManager.isEnglish
                     ? "Container access denied: \(rootGrant.2)"
                     : "无法获取应用容器权限：\(rootGrant.2)"
                 return
             }
-            let parentGrant = wq.grantAccess(path: parentURL.path)
-            guard parentGrant.0 else {
+            let parentGrant = wq.grantAccess(path: parentURL.path, requireWrite: false)
+            guard parentGrant.0 || parentGrant.1 >= 0 else {
                 errorMsg = LocalizationManager.isEnglish
                     ? "Parent directory access denied: \(parentGrant.2)"
                     : "无法访问上级目录：\(parentGrant.2)"
                 return
             }
-            _ = wq.grantAccess(path: targetFolderURL.path)
+            _ = wq.grantAccess(path: targetFolderURL.path, requireWrite: false)
             parentReadyURL = parentURL
         }
     }
@@ -1841,24 +1841,6 @@ struct AdCacheBlockerView: View {
         let targetURL = item.url
         let targetPath = targetURL.path
 
-        var st = stat()
-        guard lstat(targetPath, &st) == 0 else {
-            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
-                    isEn ? "Target no longer exists." : "目标目录或文件已不存在。")
-        }
-        let fmt = st.st_mode & S_IFMT
-        guard fmt == S_IFDIR || fmt == S_IFREG else {
-            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
-                    isEn ? "Unsupported file type (symlinks blocked)." : "不支持的条目类型（已拦截符号链接）。")
-        }
-        let isDir = (fmt == S_IFDIR)
-
-        let ownerName = (try? fm.attributesOfItem(atPath: targetPath)[.ownerAccountName] as? String) ?? ""
-        guard canSafelyModifyPermissions(url: targetURL, owner: ownerName) else {
-            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
-                    isEn ? "Blocked by system container safety policy." : "已被系统安全策略拦截，禁止修改该路径。")
-        }
-
         let containerWasActive = wq.hasActiveAccess(path: containerURL.path)
         let cGrant = wq.grantAccess(path: containerURL.path, requireWrite: true)
         defer {
@@ -1878,6 +1860,24 @@ struct AdCacheBlockerView: View {
         guard tGrant.0 || tGrant.1 >= 0 || cGrant.0 || cGrant.1 >= 0 else {
             return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
                     isEn ? "Sandbox grant failed: \(tGrant.2)" : "沙盒写权限授权失败：\(tGrant.2)")
+        }
+
+        var st = stat()
+        guard lstat(targetPath, &st) == 0 else {
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
+                    isEn ? "Target no longer exists." : "目标目录或文件已不存在。")
+        }
+        let fmt = st.st_mode & S_IFMT
+        guard fmt == S_IFDIR || fmt == S_IFREG else {
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
+                    isEn ? "Unsupported file type (symlinks blocked)." : "不支持的条目类型（已拦截符号链接）。")
+        }
+        let isDir = (fmt == S_IFDIR)
+
+        let ownerName = (try? fm.attributesOfItem(atPath: targetPath)[.ownerAccountName] as? String) ?? ""
+        guard canSafelyModifyPermissions(url: targetURL, owner: ownerName) else {
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
+                    isEn ? "Blocked by system container safety policy." : "已被系统安全策略拦截，禁止修改该路径。")
         }
 
         if isDir {
