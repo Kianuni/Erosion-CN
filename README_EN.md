@@ -22,6 +22,9 @@
 
 ---
 
+> [!WARNING]
+> **Important Version Notice (2026-11-17)**: Apple has **patched `worse_query` in `iOS / iPadOS 27.3 beta 2` (`24C5049d`)** — updating breaks `MobileGestalt` access and resets existing tweaks. **Maximum supported version is `27.3 beta 1`**. Stay on **`iOS 27.2.1`** (best feature compatibility) and disable automatic updates.
+
 ## Overview
 
 > **Not just a translation** — **Erosion-CN** is a bootloop-safe, zero-hardcoded-offset, bilingual (**English / 简体中文**) hardened edition of **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** built for **all regions & devices**.

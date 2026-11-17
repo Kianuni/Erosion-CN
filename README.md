@@ -22,6 +22,9 @@
 
 ---
 
+> [!WARNING]
+> **系统版本重要提醒（2026-11-17）**：苹果已于 **`iOS / iPadOS 27.3 beta 2`（Build `24C5049d`）** 正式封堵 `worse_query` 沙盒漏洞——升级后将无法读写 `MobileGestalt` 且已生效的修改会被系统重置。**当前最高仅支持至 `27.3 beta 1`**，强烈建议停留在 **`iOS 27.2.1`**（功能最完整）并关闭系统自动更新。
+
 ## 项目简介
 
 **Erosion-CN** 衍生自上游 **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)**，提供中英双语界面，修复了原版多项真机 Bug，并做了防白苹果安全加固：
