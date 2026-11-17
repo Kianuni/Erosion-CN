@@ -58,4 +58,17 @@
 14. **设置页生态推荐与内置分流规则同步（`v0.9.2`）**
     - **设置页重构与生态联动**：移除「特别致谢与特性参考」分组，将上游作者与特性参考统一合并至「致谢与开源参考」；同时新增「更多开源项目 (Kianuni)」推荐卡片，集中展示 `AppleFlow`、`WQGuard`、`Camlo`、`Enkard` 四个同系列开源项目（同步完整中英双语翻译）；
     - **内置分流导出同步 `AppleFlow v1.0.1`**：补齐 PCC 盲签名关键域名 `*.issuer.apple.com` 与 `ropes.apple.com`（消除内置导出规则下相册高质量消除报 `Code=32033`），并收窄过宽的 `google.com` / `googleapis.com` / `gstatic.com` 后缀，替换为 `lens.google.com`、`gemini.google.com`、`chatgpt.livekit.cloud`、`sora.com` 与 `claudeusercontent.com` 等精准生产域名。
+15. **文件管理全能增强、APFS 零空间暂存舱、缓存极速清理与 `iOS 27.3` 分版本守卫（`v1.0.0`）**
+    - **APFS `clonefile()` 零空间应用换签 / 重装暂存舱 (`APFSStagingVault` / `APFSStagingSheet`)**：参考 `yangokok886 / WCMigrate`（GPLv3）思路重构内核级写时复制（CoW）暂存与五重防呆护栏：
+      1. **签名证书到期门控**：解析 `embedded.mobileprovision` 剩余有效期，不足 24 小时或已过期时发出高优预警，提示先在 SideStore / AltStore 刷新签名后再暂存卸载；
+      2. **10 秒活跃 SQLite WAL 写入锁检测**：暂存与还原前扫描 `Documents` / `Library`（深度 ≤ 4）中最近 10 秒写入的 `*-wal` / `*.sqlite-wal` / `*.db-wal` 文件并拦截提示先上滑关闭目标应用；
+      3. **只克隆不移动协议**：调用 `Darwin` `clonefile()` 暂存 `Documents`、`Library/Application Support` 与 `Library/Preferences`（绝不删除或改动源容器），并自动探测微信 32 位十六进制 MD5 账号目录数量；
+      4. **`manifest.json` 完整性校验**：记录子目录、文件数、逻辑字节数与来源 Bundle ID，写后核验克隆项数一致才标记为就绪；
+      5. **原子 `.erosion_pre_restore_bak` 交换回滚 + 跨 Bundle ID 适配 + 暂存舱保留**：还原时先迁移目标旧目录至 `.erosion_pre_restore_bak` 再从暂存舱 `clonefile()` 写入（保持暂存舱副本不删除），跨 Bundle ID 自动复制适配 `Library/Preferences/<sourceBID>.plist` → `<targetBID>.plist`，异常自动回滚，完成后展示 Keychain 重新登录与验证后手动点击「释放暂存舱」引导（主页同步常驻防误删横幅），全过程保持屏幕常亮。
+    - **Wi-Fi 局域网 HTTP 文件传输 (`WiFiShareServer` / `WiFiShareSheet`)**：基于 `Network.framework` (`NWListener`) 构建轻量局域网服务（优先 8080 端口，支持随机可用端口回退与 `en0` IPv4 自动获取），默认开启 HTTP Basic Auth（用户名 `erosion` + 每轮随机 6 位 PIN）、暗黑响应式网页端、64 KB 分块下载、文件夹 `.zip` 打包下载（上限 2 GB）、`PUT /api/upload` 64 KB 流式直写 `.part` 零内存堆积上传及重名非破坏性自动顺延（`name 2.ext`），关闭弹窗或切入后台自动停服并释放防息屏锁。
+    - **文件夹深度递归搜索、最大 100 文件分析、最近访问与路径直达 (`FolderAnalysisSheet` / `FMNavigationStore`)**：支持可取消异步深层搜索（实时扫描计数、最多 500 条结果，支持点击打开详情或跳转父目录）、`fstatat` 极速统计 Top 100 最大常规文件、记录最近打开的 15 个非根目录（带一键清空）以及自动识别剪贴板 `/var/` / `/private/var/` 路径的「路径直达」。
+    - **POSIX 文件权限编辑器 (`InfoViewer`)**：仅对用户应用容器内部子路径与 App Group 数据子路径（严格封锁容器根目录、`SystemGroup`、`Bundle`、`Daemon`、`System` 与非 `mobile` 属主路径）开放可视化 `chmod` 修改，提供一键「设为只读（0555/0444 锁死本地开屏缓存广告）」、一键「恢复默认读写（0755/0644）」与 `r/w/x` 独立开关及 `lstat` 写后核验。
+    - **容器缓存清理提速与选择菜单升级 (`CacheCleanerView`)**：切换扫描队列至 `.userInitiated` QoS，加入单轮 `deniedContainers` 拒绝缓存、POSIX `opendir` / `readdir` / `fstatat` 无桥接高速字节统计、实时进度与「停止」按钮；全选栏升级为「选择」菜单（`全选当前` / `反选当前` / `清空已选`，其中清空覆盖搜索过滤隐藏项）。
+    - **`iOS 27.3 beta 2+` 漏洞封堵哨兵与 `27.3 beta 1` 国行策略提醒 (`DeviceInfoHelpers` / `ContentView` / `GestaltView`)**：保持应用正常启动不强退，精确识别 `iOS 27.3 beta 1`（`24C503*`）与已封堵 `worse_query` 的 `iOS 27.3 beta 2+`（`24C504*`+ / `26.7.3+`），在主页顶部与授权报错中给出中英双语提示（最高支持 `27.3 beta 1`，推荐 `27.2.1`），并在 `27.3 beta 1` 的 `MobileGestalt` 准入区新增 `eligibilityd` 国行策略本地拦截只读提醒。
+    - **开源致谢增补**：新增感谢 `kolbicz / WQFiles` 与 `yangokok886 / WCMigrate`（GPLv3）。
 

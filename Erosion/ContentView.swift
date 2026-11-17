@@ -11,11 +11,57 @@ import SwiftUI
 struct ContentView: View {
     @AppStorage("ogMachineName") var ogMachineName = ""
     @EnvironmentObject var mgr: ErosionManager
+    @ObservedObject private var stagingVault = APFSStagingVault.shared
     @State private var showSettings = false
     
     var body: some View {
         NavigationStack {
             List {
+                if isWorseQueryPatchedOS() {
+                    Section {
+                        CompactAlert(
+                            title: LocalizationManager.isEnglish
+                                ? "worse_query Patched on This iOS Build"
+                                : "当前系统版本已封堵 worse_query 漏洞",
+                            symbol: "exclamationmark.octagon.fill",
+                            text: LocalizationManager.isEnglish
+                                ? "Apple patched worse_query in iOS 27.3 beta 2+ (and 26.7.3+). System/MobileGestalt writes are unavailable on this OS build. Highest supported version is iOS 27.3 beta 1, and iOS 27.2.1 is recommended."
+                                : "Apple 已于 iOS 27.3 beta 2+（及 26.7.3+）封堵 worse_query 沙盒漏洞，当前系统无法写入 MobileGestalt 或跨容器修改文件。最高仅支持至 iOS 27.3 beta 1，强烈建议停留在 iOS 27.2.1。",
+                            color: .red
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
+                if stagingVault.activeStagedItemsCount > 0 {
+                    Section {
+                        CompactAlert(
+                            title: LocalizationManager.isEnglish
+                                ? "Do NOT Uninstall Erosion (\(stagingVault.activeStagedItemsCount) Staged)"
+                                : "切勿卸载 Erosion（暂存舱有 \(stagingVault.activeStagedItemsCount) 份待还原数据）",
+                            symbol: "externaldrive.badge.exclamationmark",
+                            text: LocalizationManager.isEnglish
+                                ? "APFS Swap Vault holds \(stagingVault.activeStagedItemsCount) staged app snapshot(s) awaiting restore. Do NOT delete Erosion until you restore and release the vault in Tweaks → App & Game Save Manager."
+                                : "APFS 零空间暂存舱当前保存着 \(stagingVault.activeStagedItemsCount) 份应用数据等待还原。请前往「功能修改 → 应用与游戏存档管理」完成还原并释放暂存舱前，切勿卸载本应用！",
+                            color: .orange
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+
+                        NavigationLink(destination: AppDataBackupView()) {
+                            Label(
+                                LocalizationManager.isEnglish
+                                    ? "Open App & Game Save Manager (APFS Vault)"
+                                    : "前往：应用与游戏存档管理 (APFS 暂存舱)",
+                                systemImage: "bolt.shield.fill"
+                            )
+                            .foregroundStyle(.orange)
+                            .fontWeight(.semibold)
+                        }
+                    }
+                }
+
                 Section {
                     LogView()
                         .modifier(TerminalPlatter())

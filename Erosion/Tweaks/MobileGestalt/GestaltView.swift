@@ -190,6 +190,22 @@ struct GestaltView: View {
                         }
                     }
 
+                    if isIOS27_3Beta1() {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundStyle(.orange)
+                                .padding(.top, 2)
+                            Text(
+                                LocalizationManager.isEnglish
+                                    ? "iOS 27.3 beta 1 Notice: On China (CH/A) devices, Photos Clean Up / Wand / Camera Siri are blocked locally by eligibilityd CN region policy and cannot be bypassed via MobileGestalt. iOS 27.2.1 is recommended."
+                                    : "iOS 27.3 beta 1 提示：国行 (CH/A) 设备上的照片「消除 / 魔棒」与相机 Siri 会被系统 eligibilityd CN 地区策略本地拦截（改 MobileGestalt 无法绕过），建议降回或停留在 iOS 27.2.1。"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+
                     PlainToggle(L("启用安全研究设备界面 (SRD UI)"), minVrs: 26.0, isOn: store.mgKeyBinding([MGKey.srd]))
                     if showRegionTweak || mgOverrideGates || store.mgRegionRestrictionsBinding().wrappedValue {
                         PlainToggle(L("解除地区限制（国行 AI / 美版 LL/A）"), isOn: store.mgRegionRestrictionsBinding())

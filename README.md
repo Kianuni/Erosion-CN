@@ -36,7 +36,15 @@
 - **原厂双备份 + 一键恢复**：沙盒与系统金库双重 `SHA-256` 备份，卸载重装不丢，可一键还原原机出厂参数。
 - **国行 Apple 智能解锁**：完整美版 `LL + LL/A` / 仅改 `LL` 双模式，四要素体检与一键配齐修复，真机生效核验探针，`SiriHub`、`Audio Intelligence` 等坑位自动防呆。
 - **国行底层限制解除**：FaceTime 音频、境外 eSIM、「无线局域网」显示为「Wi-Fi」。
-- **实用工具**：应用存档备份、缓存清理、跨容器文件浏览、语音备忘录无损导出、电池与崩溃诊断，以及 Surge / Stash 分流规则一键导出。
+- **实用工具**：APFS `clonefile()` 零空间应用暂存舱（五重防呆）、Wi-Fi 局域网 HTTP 文件传输、文件夹深度搜索与最大 100 文件分析、POSIX `chmod` 权限修改、POSIX 极速缓存清理、跨容器文件浏览、语音备忘录无损导出、电池与崩溃诊断，以及配合 [AppleFlow](https://github.com/Kianuni/AppleFlow) 的分流规则一键导出。
+
+### `v1.0.0` 里程碑核心新特性
+
+- **APFS `clonefile()` 零空间应用换签 / 重装暂存舱**：五重防呆护栏（`embedded.mobileprovision` 24 小时到期预警、10 秒活跃 SQLite WAL 写入锁拦截、只克隆不移动 `clonefile()` + 微信 MD5 账号识别、`manifest.json` 项数校验、`.erosion_pre_restore_bak` 原子回滚 + 跨 Bundle ID 偏好适配 + 暂存舱保留 + 主页常驻防误删横幅）。
+- **Wi-Fi 局域网 HTTP 文件传输**：基于 `NWListener` + 随机 6 位 PIN Basic Auth + 暗黑 WebUI，支持 64 KB 流式下载/上传、文件夹 `.zip` 打包（2 GB 上限）与重名非破坏性自动顺延。
+- **文件管理器深度增强**：子目录异步递归搜索（上限 500 条）、Top 100 最大文件分析、最近访问 15 条目录与剪贴板路径直达；以及受保护路径严格拦截的 POSIX `chmod` 权限修改器。
+- **容器缓存清理提速与选择菜单**：`.userInitiated` + POSIX `fstatat` 极速扫描、拒绝容器去重缓存、实时进度/停止按钮与「全选 / 反选 / 清空已选」菜单。
+- **`iOS 27.3 beta 2+` 漏洞封堵哨兵与 `27.3 beta 1` 提醒**：精确区分 `27.3 beta 1` (`24C503*`) 与 `27.3 beta 2+` (`24C504*`+ / `26.7.3+`)，主页顶部与沙盒报错提供明确引导而不强退应用。
 
 > 📜 完整的技术改进说明与版本历史见 [CHANGELOG.md](./CHANGELOG.md)，各版本发布说明见 [Releases](https://github.com/Kianuni/Erosion-CN/releases)。  
 > 📖 外部独立底层架构解析：[《从 worse_query 逃逸到 MobileGestalt 运行时重构：深入 Erosion-CN 的防白苹果原位写入、双重金库与国行底层解锁架构》](https://lijianfei.com/post/erosion-cn-ios-system-configuration-mobilegestalt-architecture/)
@@ -77,7 +85,7 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 
 ### 方式二：手动下载 IPA 签名安装
 
-1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v0.9.1_Bilingual.ipa`。
+1. 前往 [Releases 页面](https://github.com/Kianuni/Erosion-CN/releases/latest) 下载最新的 `Erosion_v1.0.0_Bilingual.ipa`。
 2. 使用上述签名工具安装至设备；首次运行可在「主页」日志确认已成功识别 `App Group`。
 3. 详细使用说明与原厂状态恢复教程请查阅：
    - 📘 [USAGE_GUIDE.md（安装与使用指南）](./USAGE_GUIDE.md)
@@ -227,6 +235,7 @@ chmod +x ipabuild.sh
 - **[KirbySD](https://www.v2ex.com/t/1246550)** — 分享 `MobileGestalt` 二进制 `CacheData` 中 `green-tea` / `not-green-tea` 布尔槽位研究思路
 - **[PoomSmart / MGKeys](https://github.com/PoomSmart/MGKeys)** — 长期维护与整理 `MobileGestalt` 混淆键值映射表
 - **[kolbicz / WQFiles](https://github.com/kolbicz/WQFiles)** — 分享 LaunchServices `.csstore` (`"bdsl"`) 容器图谱解析研究思路（GPLv3）
+- **[yangokok886 / WCMigrate](https://github.com/yangokok886/WCMigrate)** — 分享基于 APFS `clonefile()` 写时复制的应用数据迁移与暂存研究思路（GPLv3）
 
 ---
 

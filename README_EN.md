@@ -66,6 +66,14 @@ While it began as a Simplified Chinese fork, it has evolved into an engineering-
    - **App Group Hub & Safari Bookmarks Exporter (`AppGroupHubView`)**: Export Safari bookmarks (HTML / JSON) and generate Surge `.sgmodule` / Stash `.stoverride` routing rules.
    - **Voice Memos & Call Recording Extractor (`VoiceMemosAIView`)**: Batch-export lossless `.m4a` recordings titled via `CloudRecordings.db` and inspect on-device AI/speech model caches.
 
+6. **`v1.0.0` Milestone — APFS Swap Vault, Wi-Fi File Sharing, File Manager Pro & OS Sentinel**
+   - **APFS `clonefile()` Zero-Space App Swap Vault (`APFSStagingVault` / `APFSStagingSheet`)**: Kernel CoW `clonefile()` snapshot staging for `Documents`, `Library/Application Support`, and `Library/Preferences` with **5-layer foolproofing** — (1) `embedded.mobileprovision` `< 24h` / expired cert gate, (2) 10s active SQLite WAL lock check, (3) copy-never-move `clonefile()` with WeChat 32-hex MD5 account detection, (4) `manifest.json` item-count integrity verification, and (5) atomic `.erosion_pre_restore_bak` swap & rollback + cross-BundleID `.plist` adaptation + vault retention + persistent Home banner warning against uninstalling Erosion.
+   - **Wi-Fi HTTP File Sharing (`WiFiShareServer` / `WiFiShareSheet`)**: `NWListener` HTTP server with random 6-digit PIN Basic Auth, dark-mode Web UI, 64 KB chunked downloads, folder `.zip` downloads (2 GB cap), 64 KB chunked `.part` uploads with non-destructive auto-renaming, and automatic stop on dismiss/background.
+   - **Folder Search, Top 100 Largest Files, Recent & Go to Path (`FolderAnalysisSheet` / `FMNavigationStore`)**: Cancellable recursive subfolder search (500-match cap), fast `fstatat` Top 100 largest files ranking, 15 recent non-root folders, and clipboard-aware `/var/` Go to Path.
+   - **POSIX Permission Editor (`InfoViewer`)**: Safe `chmod` toggles (`0555`/`0444` read-only, `0755`/`0644` read-write, custom `r/w/x` bits with `lstat` verification) strictly restricted to non-root user app & App Group data subpaths (`mobile` owner only; `SystemGroup`/`Bundle`/`Daemon`/`System` blocked).
+   - **Fast Cache Cleaner & Selection Menu (`CacheCleanerView`)**: `.userInitiated` scan queue, per-scan `deniedContainers` cache, POSIX `opendir`/`readdir`/`fstatat` size counting, live progress + Stop button, and `Select All` / `Invert` / `Select None` menu (including hidden entries).
+   - **`iOS 27.3 beta 2+` Patched Sentinel & `27.3 beta 1` Notice (`DeviceInfoHelpers` / `ContentView` / `GestaltView`)**: Accurately distinguishes `27.3 beta 1` (`24C503*`) from `27.3 beta 2+` (`24C504*`+ / `26.7.3+`), displays non-blocking Home & `worse_query` error warnings without force-exiting the app, and shows a read-only `eligibilityd` CN policy notice on `27.3 beta 1`.
+
 ---
 
 ## Compatibility
@@ -102,7 +110,7 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 
 ### Option B: Manual IPA Sideloading
 
-1. Download the latest `Erosion_v0.9.1_Bilingual.ipa` from [Releases](https://github.com/Kianuni/Erosion-CN/releases/latest).
+1. Download the latest `Erosion_v1.0.0_Bilingual.ipa` from [Releases](https://github.com/Kianuni/Erosion-CN/releases/latest).
 2. Sideload with any signing tool that preserves/injects an `App Group` entitlement (check the Home log on first launch to confirm `(wq) Active App Group:` is non-empty).
 3. If your device is not already in English, Erosion will automatically switch to English; you can also toggle languages manually at any time under **Settings (gear icon) → App Language**.
 
@@ -164,7 +172,7 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 
 - Upstream project: **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** (`lunginspector`, `forcequit`, `0xjohnny`, `Skadz`, `rooootdev`, `neonmodder123`)
 - Exploit: **[forcequitOS/worse_query](https://github.com/forcequitOS/worse_query)**
-- References & Special Thanks: `huamidev (GestaltX)`, `kolbicz (WQFiles)`, `KirbySD`, `PoomSmart (MGKeys)`
+- GPLv3 Credits & References: **[kolbicz / WQFiles](https://github.com/kolbicz/WQFiles)** (`.csstore` container graph research, GPLv3), **[yangokok886 / WCMigrate](https://github.com/yangokok886/WCMigrate)** (APFS `clonefile()` app data staging/migration ideas, GPLv3), `huamidev (GestaltX)`, `KirbySD`, `PoomSmart (MGKeys)`
 - Licensed under **[GPLv3](./LICENSE)**.
 
 ---
