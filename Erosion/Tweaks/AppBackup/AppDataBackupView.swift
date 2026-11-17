@@ -108,6 +108,7 @@ struct LocalSaveBackupItem: Identifiable {
 }
 
 struct AppDataBackupView: View {
+    @ObservedObject private var stagingVault = APFSStagingVault.shared
     @State private var isScanning = false
     @State private var scanProgressText = L("正在扫描本机应用数据容器...")
     @State private var containers: [AppSaveContainerItem] = []
@@ -115,6 +116,24 @@ struct AppDataBackupView: View {
     @State private var searchText = ""
     @State private var includeSystemApps = false
     @State private var showBackupImporter = false
+    @State private var showStagingSheet = false
+    @State private var quickStageAlert: QuickStageAlert?
+
+    private enum QuickStageAlert: Identifiable {
+        case certGate(ProvisioningCertInfo, AppSaveContainerItem, Int?)
+        case confirmStage(AppSaveContainerItem, Int?)
+        case stageSucceeded(APFSStageOutcome)
+        case stageError(String)
+
+        var id: String {
+            switch self {
+            case .certGate(_, let item, _): return "qcert_\(item.id)"
+            case .confirmStage(let item, _): return "qconfirm_\(item.id)"
+            case .stageSucceeded(let out): return "qok_\(out.record.id)"
+            case .stageError(let msg): return "qerr_\(msg.prefix(24))"
+            }
+        }
+    }
 
     private static let backupsRootURL = URL.documentsDirectory.appendingPathComponent("AppDataBackups")
 
@@ -131,163 +150,273 @@ struct AppDataBackupView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Button {
-                        showBackupImporter = true
-                    } label: {
-                        Label("导入外部备份包 (.zip)", systemImage: "square.and.arrow.down")
-                    }
-                    Spacer()
-                    Button {
-                        scanAllContainers()
-                    } label: {
-                        Label("刷新列表", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(isScanning)
-                }
-                PlainToggle(
-                    L("显示系统内置应用容器 (com.apple.*)"),
-                    subtitle: L("默认仅展示第三方应用与游戏容器"),
-                    isOn: $includeSystemApps
-                )
-            } header: {
-                HeaderLabel(L("备份与筛选控制"), symbol: "slider.horizontal.3")
-            }
-
-            if !backups.isEmpty {
+        ZStack {
+            List {
                 Section {
-                    ForEach(backups) { backup in
-                        VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "externaldrive.badge.timemachine")
+                                .font(.title2)
+                                .foregroundStyle(stagingVault.activeStagedItemsCount > 0 ? Color.orange : Color.accentColor)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(apfsVaultText(
+                                    "APFS Zero-Space App Swap Vault",
+                                    "APFS 零空间极速暂存舱 (换签/重装专享)"
+                                ))
+                                .font(.headline)
+                                Text(apfsVaultText(
+                                    "Clone Documents, Application Support & Preferences via kernel CoW clonefile() with 5-layer foolproofing — zero double storage cost.",
+                                    "通过内核级 CoW clonefile() 五重防呆瞬间暂存应用全部核心目录，无需翻倍磁盘空间即可安全重装、换签或多开搬家。"
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if stagingVault.activeStagedItemsCount > 0 {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                Text(apfsVaultText(
+                                    "\(stagingVault.activeStagedItemsCount) staged snapshot(s) active — Do NOT uninstall Erosion until restored & verified!",
+                                    "当前有 \(stagingVault.activeStagedItemsCount) 个快照在暂存舱等待还原，释放前切勿卸载 Erosion！"
+                                ))
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+                        }
+
+                        HStack(spacing: 8) {
+                            Image(systemName: stagingVault.certInfo.requiresUrgentResignWarning ? "exclamationmark.shield.fill" : "signature")
+                                .foregroundStyle(stagingVault.certInfo.requiresUrgentResignWarning ? .red : .secondary)
+                            Text(stagingVault.certInfo.remainingDisplayText)
+                                .font(.caption)
+                                .foregroundStyle(stagingVault.certInfo.requiresUrgentResignWarning ? .red : .secondary)
+                        }
+
+                        Button {
+                            showStagingSheet = true
+                        } label: {
                             HStack {
-                                Text(AppContainerDirectoryHelper.displayName(for: backup.bundleID))
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
+                                Label(
+                                    stagingVault.activeStagedItemsCount > 0
+                                        ? apfsVaultText(
+                                            "Open APFS Swap Vault (\(stagingVault.activeStagedItemsCount) Active)",
+                                            "打开 APFS 暂存舱管理台 (\(stagingVault.activeStagedItemsCount) 个待还原)"
+                                        )
+                                        : apfsVaultText(
+                                            "Open APFS Swap Vault",
+                                            "打开 APFS 零空间暂存舱"
+                                        ),
+                                    systemImage: "bolt.shield.fill"
+                                )
+                                .font(.subheadline.weight(.semibold))
                                 Spacer()
-                                Text(AppContainerDirectoryHelper.formatBytes(backup.fileSize))
-                                    .font(.caption)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
-                            Text(backup.fileURL.lastPathComponent)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-
-                            HStack(spacing: 14) {
-                                Button {
-                                    Alertinator.shared.alert(
-                                        title: L("确定还原此存档备份吗？"),
-                                        body: L("将把 \(backup.fileURL.lastPathComponent) 中的 Documents 与 Preferences 存档还原至「\(backup.bundleID)」当前容器（自动匹配重装后的最新容器 UUID）。还原前请先在后台关闭目标应用！"),
-                                        actionLabel: L("确认还原"),
-                                        action: {
-                                            restoreBackup(backup)
-                                        }
-                                    )
-                                } label: {
-                                    Label("一键还原", systemImage: "arrow.uturn.backward.circle.fill")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-
-                                Button {
-                                    presentShareSheet(with: backup.fileURL)
-                                } label: {
-                                    Label("导出分享", systemImage: "square.and.arrow.up")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-
-                                Spacer()
-
-                                Button(role: .destructive) {
-                                    deleteBackup(backup)
-                                } label: {
-                                    Label("删除", systemImage: "trash")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            .padding(.top, 2)
+                            .padding(.vertical, 6)
                         }
-                        .padding(.vertical, 3)
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    HeaderLabel(
+                        apfsVaultText("APFS Zero-Space Swap Vault", "APFS 零空间暂存舱"),
+                        symbol: "bolt.shield.fill"
+                    )
+                }
+
+                Section {
+                    HStack {
+                        Button {
+                            showBackupImporter = true
+                        } label: {
+                            Label("导入外部备份包 (.zip)", systemImage: "square.and.arrow.down")
+                        }
+                        Spacer()
+                        Button {
+                            scanAllContainers(forceRefresh: true)
+                        } label: {
+                            Label("刷新列表", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(isScanning)
+                    }
+                    PlainToggle(
+                        L("显示系统内置应用容器 (com.apple.*)"),
+                        subtitle: L("默认仅展示第三方应用与游戏容器"),
+                        isOn: $includeSystemApps
+                    )
+                } header: {
+                    HeaderLabel(L("备份与筛选控制"), symbol: "slider.horizontal.3")
+                }
+
+                if !backups.isEmpty {
+                    Section {
+                        ForEach(backups) { backup in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(AppContainerDirectoryHelper.displayName(for: backup.bundleID))
+                                        .fontWeight(.medium)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(AppContainerDirectoryHelper.formatBytes(backup.fileSize))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(backup.fileURL.lastPathComponent)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+
+                                HStack(spacing: 14) {
+                                    Button {
+                                        Alertinator.shared.alert(
+                                            title: L("确定还原此存档备份吗？"),
+                                            body: L("将把 \(backup.fileURL.lastPathComponent) 中的 Documents 与 Preferences 存档还原至「\(backup.bundleID)」当前容器（自动匹配重装后的最新容器 UUID）。还原前请先在后台关闭目标应用！"),
+                                            actionLabel: L("确认还原"),
+                                            action: {
+                                                restoreBackup(backup)
+                                            }
+                                        )
+                                    } label: {
+                                        Label("一键还原", systemImage: "arrow.uturn.backward.circle.fill")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    Button {
+                                        presentShareSheet(with: backup.fileURL)
+                                    } label: {
+                                        Label("导出分享", systemImage: "square.and.arrow.up")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    Spacer()
+
+                                    Button(role: .destructive) {
+                                        deleteBackup(backup)
+                                    } label: {
+                                        Label("删除", systemImage: "trash")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.top, 2)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    } header: {
+                        HeaderLabel(L("本地已保存的存档备份 (\(backups.count))"), symbol: "archivebox.fill")
+                    } footer: {
+                        Text("即使卸载重装了游戏或应用导致容器 UUID 改变，点击“一键还原”也会按 Bundle ID 自动定位当前最新容器并原位写回存档。")
+                    }
+                }
+
+                Section {
+                    if isScanning {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(scanProgressText)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                    } else if filteredContainers.isEmpty {
+                        Text("未找到匹配的应用数据容器")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(filteredContainers) { item in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(item.displayTitle)
+                                        .fontWeight(.medium)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(AppContainerDirectoryHelper.formatBytes(item.saveDataSize))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("容器 UUID: \(item.containerURL.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+
+                                HStack(spacing: 14) {
+                                    Button {
+                                        startQuickStage(for: item)
+                                    } label: {
+                                        Label(
+                                            apfsVaultText("APFS Stage", "APFS 极速暂存"),
+                                            systemImage: "bolt.shield.fill"
+                                        )
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .disabled(stagingVault.isBusy)
+
+                                    Button {
+                                        backupContainer(item)
+                                    } label: {
+                                        Label("备份存档", systemImage: "externaldrive.badge.plus")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.top, 2)
+
+                                HStack(spacing: 12) {
+                                    NavigationLink {
+                                        ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Documents")
+                                    } label: {
+                                        Label("修改 Documents", systemImage: "folder.badge.gearshape")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    NavigationLink {
+                                        ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Library/Preferences")
+                                    } label: {
+                                        Label("修改配置 Plist", systemImage: "doc.text.magnifyingglass")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    NavigationLink {
+                                        ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: nil)
+                                    } label: {
+                                        Label("完整目录", systemImage: "folder")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.top, 1)
+                            }
+                            .padding(.vertical, 3)
+                        }
                     }
                 } header: {
-                    HeaderLabel(L("本地已保存的存档备份 (\(backups.count))"), symbol: "archivebox.fill")
+                    HeaderLabel(L("应用与游戏存档列表 (\(filteredContainers.count))"), symbol: "gamecontroller.fill")
                 } footer: {
-                    Text("即使卸载重装了游戏或应用导致容器 UUID 改变，点击“一键还原”也会按 Bundle ID 自动定位当前最新容器并原位写回存档。")
+                    Text("点击“备份存档”会将该应用的 Documents 与 Library/Preferences 打包为 ZIP；点击“修改 Documents”或“修改配置 Plist”可直接调用内置无损 Plist/文本编辑器修改游戏数值或配置。")
                 }
             }
 
-            Section {
-                if isScanning {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text(scanProgressText)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 6)
-                } else if filteredContainers.isEmpty {
-                    Text("未找到匹配的应用数据容器")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(filteredContainers) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(item.displayTitle)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text(AppContainerDirectoryHelper.formatBytes(item.saveDataSize))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text("容器 UUID: \(item.containerURL.lastPathComponent)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-
-                            HStack(spacing: 12) {
-                                Button {
-                                    backupContainer(item)
-                                } label: {
-                                    Label("备份存档", systemImage: "externaldrive.badge.plus")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-
-                                NavigationLink {
-                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Documents")
-                                } label: {
-                                    Label("修改 Documents", systemImage: "folder.badge.gearshape")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-
-                                NavigationLink {
-                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Library/Preferences")
-                                } label: {
-                                    Label("修改配置 Plist", systemImage: "doc.text.magnifyingglass")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-
-                                NavigationLink {
-                                    ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: nil)
-                                } label: {
-                                    Label("完整目录", systemImage: "folder")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            .padding(.top, 2)
-                        }
-                        .padding(.vertical, 3)
-                    }
+            if stagingVault.isBusy && !showStagingSheet {
+                Color.black.opacity(0.28)
+                    .ignoresSafeArea()
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text(stagingVault.busyMessage)
+                        .font(.subheadline.weight(.medium))
+                        .multilineTextAlignment(.center)
                 }
-            } header: {
-                HeaderLabel(L("应用与游戏存档列表 (\(filteredContainers.count))"), symbol: "gamecontroller.fill")
-            } footer: {
-                Text("点击“备份存档”会将该应用的 Documents 与 Library/Preferences 打包为 ZIP；点击“修改 Documents”或“修改配置 Plist”可直接调用内置无损 Plist/文本编辑器修改游戏数值或配置。")
+                .padding(20)
+                .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 32)
             }
         }
         .navigationTitle("应用与游戏存档管理")
@@ -296,6 +425,28 @@ struct AppDataBackupView: View {
         .fileImporter(isPresented: $showBackupImporter, allowedContentTypes: [.zip, .item]) { result in
             handleImportBackup(result)
         }
+        .sheet(isPresented: $showStagingSheet, onDismiss: {
+            stagingVault.reloadRecords()
+        }) {
+            APFSStagingSheet(
+                containers: $containers,
+                onRequestRescan: {
+                    scanAllContainers(forceRefresh: true)
+                }
+            )
+        }
+        .alert(
+            quickStageAlertTitle(for: quickStageAlert),
+            isPresented: Binding(
+                get: { quickStageAlert != nil },
+                set: { if !$0 { quickStageAlert = nil } }
+            ),
+            presenting: quickStageAlert
+        ) { alertItem in
+            quickStageAlertActions(for: alertItem)
+        } message: { alertItem in
+            Text(quickStageAlertMessage(for: alertItem))
+        }
         .onChange(of: includeSystemApps) {
             if includeSystemApps && !containers.contains(where: { $0.bundleID.hasPrefix("com.apple.") }) && !isScanning {
                 scanAllContainers()
@@ -303,9 +454,108 @@ struct AppDataBackupView: View {
         }
         .onAppear {
             loadLocalBackups()
+            stagingVault.refreshCertificateStatus()
+            stagingVault.reloadRecords()
             if containers.isEmpty && !isScanning {
                 scanAllContainers()
             }
+        }
+    }
+
+    private func startQuickStage(for item: AppSaveContainerItem) {
+        let cert = stagingVault.refreshCertificateStatus()
+        Task {
+            let wcCount = await stagingVault.inspectWeChatAccounts(in: item)
+            if cert.requiresUrgentResignWarning {
+                quickStageAlert = .certGate(cert, item, wcCount)
+            } else {
+                quickStageAlert = .confirmStage(item, wcCount)
+            }
+        }
+    }
+
+    private func executeQuickStage(_ item: AppSaveContainerItem) {
+        Task {
+            do {
+                let outcome = try await stagingVault.stageContainer(item)
+                quickStageAlert = .stageSucceeded(outcome)
+            } catch {
+                quickStageAlert = .stageError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func quickStageAlertTitle(for alert: QuickStageAlert?) -> String {
+        guard let alert else { return "" }
+        switch alert {
+        case .certGate:
+            return apfsVaultText(
+                "Certificate Expiring Soon — Re-sign First!",
+                "高危预警：签名剩余不足 24 小时！"
+            )
+        case .confirmStage(let item, _):
+            return apfsVaultText("APFS Stage \(item.displayTitle)?", "确认 APFS 零空间暂存「\(item.displayTitle)」？")
+        case .stageSucceeded:
+            return apfsVaultText("Staged to APFS Vault!", "APFS 零空间暂存成功！")
+        case .stageError:
+            return apfsVaultText("Staging Blocked / Failed", "APFS 暂存已拦截或失败")
+        }
+    }
+
+    private func quickStageAlertMessage(for alert: QuickStageAlert) -> String {
+        switch alert {
+        case .certGate(let cert, let item, _):
+            return apfsVaultText(
+                "Profile \"\(cert.profileName)\" status: \(cert.remainingDisplayText).\n\nRefresh/re-sign Erosion in SideStore or AltStore BEFORE staging \"\(item.bundleID)\" and uninstalling the old app!",
+                "描述文件「\(cert.profileName)」状态：\(cert.remainingDisplayText)。\n\n强烈建议先前往 SideStore / AltStore 续签 Erosion，再暂存「\(item.bundleID)」并卸载旧应用，避免无法打开 Erosion 还原数据！"
+            )
+        case .confirmStage(let item, let wcCount):
+            let wcNote = wcCount.map {
+                apfsVaultText("\n• Detected \($0) WeChat MD5 account folder(s)", "\n• 已识别 \($0) 个微信 MD5 账号数据目录")
+            } ?? ""
+            return apfsVaultText(
+                "Swipe-close \"\(item.bundleID)\" from the iOS App Switcher first (Layer 2 blocks if SQLite WAL was modified in the last 10s).\n• Clones Documents, Application Support & Preferences via CoW clonefile() without modifying source files\(wcNote)",
+                "请先从 iOS 后台上滑彻底关闭「\(item.bundleID)」（第 2 层防呆将拦截 10 秒内活跃写入的 WAL 数据库）。\n• 仅执行 CoW clonefile() 零空间克隆，绝不修改源容器\(wcNote)"
+            )
+        case .stageSucceeded(let outcome):
+            let wcNote = outcome.weChatAccountCount.map {
+                apfsVaultText("\nWeChat MD5 account folders detected: \($0)", "\n已识别微信 MD5 账号目录：\($0) 个")
+            } ?? ""
+            return apfsVaultText(
+                "Verified \(outcome.record.verifiedItemCount) items (\(outcome.record.fileCount) files, \(AppContainerDirectoryHelper.formatBytes(outcome.record.logicalByteSize))).\(wcNote)\n\nOpen the APFS Swap Vault to restore after reinstalling or switching Bundle IDs.",
+                "已通过 manifest.json 核验 \(outcome.record.verifiedItemCount) 项（\(outcome.record.fileCount) 个文件，\(AppContainerDirectoryHelper.formatBytes(outcome.record.logicalByteSize))）。\(wcNote)\n\n重装或更换多开包名后，点击顶部「打开 APFS 暂存舱」即可还原。"
+            )
+        case .stageError(let msg):
+            return msg
+        }
+    }
+
+    @ViewBuilder
+    private func quickStageAlertActions(for alert: QuickStageAlert) -> some View {
+        switch alert {
+        case .certGate(_, let item, let wcCount):
+            Button(apfsVaultText("Cancel & Refresh First (Recommended)", "取消并先去续签 (推荐)"), role: .cancel) {}
+            Button(apfsVaultText("I Understand Risk, Continue", "已知风险，继续暂存"), role: .destructive) {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    quickStageAlert = .confirmStage(item, wcCount)
+                }
+            }
+        case .confirmStage(let item, _):
+            Button(apfsVaultText("Cancel", "取消"), role: .cancel) {}
+            Button(apfsVaultText("Stage Now", "确认暂存")) {
+                executeQuickStage(item)
+            }
+        case .stageSucceeded:
+            Button(apfsVaultText("Open Vault", "打开暂存舱")) {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    showStagingSheet = true
+                }
+            }
+            Button(apfsVaultText("OK", "确定"), role: .cancel) {}
+        case .stageError:
+            Button(apfsVaultText("OK", "确定"), role: .cancel) {}
         }
     }
 
@@ -353,12 +603,15 @@ struct AppDataBackupView: View {
         "com.apple.Preferences"
     ]
 
-    private func scanAllContainers() {
+    private func scanAllContainers(forceRefresh: Bool = false) {
         let wantSystem = includeSystemApps
         isScanning = true
         scanProgressText = L("正在扫描本机应用数据容器...")
-        DispatchQueue.global(qos: .utility).async {
-            let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
+        DispatchQueue.global(qos: forceRefresh ? .userInitiated : .utility).async {
+            if forceRefresh {
+                CSStoreEngine.shared.invalidate()
+            }
+            let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path, forceRefresh: forceRefresh)
             var discovered: [AppSaveContainerItem] = []
             for rawPath in rawPaths {
                 let url = URL(fileURLWithPath: rawPath)
