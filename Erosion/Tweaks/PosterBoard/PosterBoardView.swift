@@ -6,10 +6,18 @@
 //
 
 import SwiftUI
-
+import UIKit
 import UniformTypeIdentifiers
 
 let pbHandler = PBHandler()
+
+private enum CamloURL {
+    static let githubRepo = "https://github.com/Kianuni/Camlo"
+    static let appsJSON = "https://raw.githubusercontent.com/Kianuni/Camlo/main/apps.json"
+    static let addSideStore = "https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Camlo/main/apps.json&r=sidestore"
+    static let addAltStore = "https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Camlo/main/apps.json&r=altstore"
+    static let addFeather = "https://altdirect.app/?url=https://raw.githubusercontent.com/Kianuni/Camlo/main/apps.json&r=feather"
+}
 
 enum PBMsg {
     static var noTendies: String { L("点击此处或底部按钮导入 .tendies 壁纸包，即可开始应用自定义锁屏壁纸。") }
@@ -22,146 +30,154 @@ enum PBMsg {
 }
 
 struct PosterBoardView: View {
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var langMgr = LocalizationManager.shared
     @AppStorage("pbContainerPath") private var pbContainerPath = ""
-    @State private var isReady = false
+    @State private var isResolvingContainer = false
     @State private var hasContainerAccess = false
+    @State private var containerLookupAttempted = false
+    @State private var copiedCamloRepo = false
     @AppStorage("tendiesArray") private var tendiesArray: [TendiesObject] = []
     @AppStorage("hasShownFirstRunMsg") private var hasShownFirstRunMsg = false
     
     @State private var showImporter = false
     let columns = Array(repeating: GridItem(.flexible()), count: device.userInterfaceIdiom == .pad ? 4 : 2)
+
+    private var isEn: Bool { langMgr.isEnglish }
     
     var body: some View {
-        Group {
-            if !isReady {
-                VStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(1.25)
-                    Text("正在定位系统容器路径...")
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ScrollView {
-                    if tendiesArray.isEmpty {
-                        Button {
-                            showImporter = true
-                        } label: {
-                            VStack(alignment: .leading) {
-                                CompactAlert(title: L("尚未导入壁纸包"), symbol: "exclamationmark.triangle.fill", text: PBMsg.noTendies)
-                                    .padding(.horizontal, 15)
-                            }
-                            .frame(alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                        }
-                    }
-                    LazyVGrid(columns: columns) {
-                        ForEach($tendiesArray) { $tendies in
-                            Button {
-                                if !tendies.isOn && tendiesArray.filter({ $0.isOn }).flatMap({ $0.descrNames }).count > 15 {
-                                    Alertinator.shared.alert(title: L("已达壁纸数量上限！"), body: PBMsg.tooManyTendies)
-                                } else {
-                                    tendies.isOn.toggle()
-                                }
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Image(systemName: tendies.targetDescr == .photos ? "play.rectangle" : "photo")
-                                        .imageScale(.large)
-                                        .foregroundStyle(Color.accentColor)
-                                    VStack {
-                                        Text(tendies.name)
-                                            .lineLimit(1)
-                                            .fontWeight(.medium)
-                                        Text("共 \(tendies.descrNames.count) 张壁纸")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding()
-                                .padding(.vertical, 10)
-                                .background {
-                                    if tendies.targetDescr == .mercury {
-                                        VStack {
-                                            Text("M")
-                                                .font(.footnote)
-                                                .padding(6)
-                                                .background(Color.accentColor)
-                                                .clipShape(.circle)
-                                            Spacer()
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                        .frame(maxHeight: .infinity)
-                                        .padding(12)
-                                    }
-                                }
-                                .background {
-                                    RoundedRectangle(cornerRadius: 26)
-                                        .fill(Color(.secondarySystemBackground))
-                                        .overlay {
-                                            if tendies.isOn {
-                                                RoundedRectangle(cornerRadius: 26)
-                                                    .fill(Color.clear)
-                                                    .strokeBorder(lineWidth: 2)
-                                                    .foregroundStyle(Color.accentColor)
-                                            }
-                                        }
-                                }
-                                .contextMenu {
-                                    Button {
-                                        let url = AppURL.pbFolders.appendingPathComponent(tendies.folderName)
-                                        fsHandlers.openInFilesApp(url)
-                                    } label: {
-                                        Label("在“文件”中查看目录", systemImage: "folder")
-                                    }
-                                    
-                                    Button(role: .destructive) {
-                                        withAnimation {
-                                            let url = AppURL.pbFolders.appendingPathComponent(tendies.folderName)
-                                            try? fm.removeItem(at: url)
-                                            tendiesArray.removeAll { $0.id == tendies.id }
-                                        }
-                                    } label: {
-                                        Label("删除", systemImage: "trash")
-                                    }
-                                }
-                            }
-                        }
-                    }
+        ScrollView {
+            VStack(spacing: 12) {
+                camloGuideCard
                     .padding(.horizontal, 15)
-                    .foregroundStyle(Color(.label))
+                    .padding(.top, 8)
+
+                containerStatusBanner
+                    .padding(.horizontal, 15)
+
+                if tendiesArray.isEmpty {
+                    Button {
+                        ensureLocalPBDirs()
+                        showImporter = true
+                    } label: {
+                        VStack(alignment: .leading) {
+                            CompactAlert(title: L("尚未导入壁纸包"), symbol: "exclamationmark.triangle.fill", text: PBMsg.noTendies)
+                                .padding(.horizontal, 15)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                    }
                 }
+
+                LazyVGrid(columns: columns) {
+                    ForEach($tendiesArray) { $tendies in
+                        Button {
+                            if !tendies.isOn && tendiesArray.filter({ $0.isOn }).flatMap({ $0.descrNames }).count > 15 {
+                                Alertinator.shared.alert(title: L("已达壁纸数量上限！"), body: PBMsg.tooManyTendies)
+                            } else {
+                                tendies.isOn.toggle()
+                            }
+                        } label: {
+                            VStack(spacing: 8) {
+                                Image(systemName: tendies.targetDescr == .photos ? "play.rectangle" : "photo")
+                                    .imageScale(.large)
+                                    .foregroundStyle(Color.accentColor)
+                                VStack {
+                                    Text(tendies.name)
+                                        .lineLimit(1)
+                                        .fontWeight(.medium)
+                                    Text("共 \(tendies.descrNames.count) 张壁纸")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                            .padding(.vertical, 10)
+                            .background {
+                                if tendies.targetDescr == .mercury {
+                                    VStack {
+                                        Text("M")
+                                            .font(.footnote)
+                                            .padding(6)
+                                            .background(Color.accentColor)
+                                            .clipShape(.circle)
+                                        Spacer()
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                    .frame(maxHeight: .infinity)
+                                    .padding(12)
+                                }
+                            }
+                            .background {
+                                RoundedRectangle(cornerRadius: 26)
+                                    .fill(Color(.secondarySystemBackground))
+                                    .overlay {
+                                        if tendies.isOn {
+                                            RoundedRectangle(cornerRadius: 26)
+                                                .fill(Color.clear)
+                                                .strokeBorder(lineWidth: 2)
+                                                .foregroundStyle(Color.accentColor)
+                                        }
+                                    }
+                            }
+                            .contextMenu {
+                                Button {
+                                    let url = AppURL.pbFolders.appendingPathComponent(tendies.folderName)
+                                    fsHandlers.openInFilesApp(url)
+                                } label: {
+                                    Label("在“文件”中查看目录", systemImage: "folder")
+                                }
+                                
+                                Button(role: .destructive) {
+                                    withAnimation {
+                                        let url = AppURL.pbFolders.appendingPathComponent(tendies.folderName)
+                                        try? fm.removeItem(at: url)
+                                        tendiesArray.removeAll { $0.id == tendies.id }
+                                    }
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 15)
+                .foregroundStyle(Color(.label))
             }
+            .padding(.bottom, 8)
         }
         .navigationTitle("自定义锁屏壁纸")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            DispatchQueue.global(qos: .userInitiated).async {
-                doSetupStuff()
+            ensureLocalPBDirs()
+            if !hasContainerAccess || pbContainerPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                resolvePosterBoardContainer(forceRefresh: false)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if isReady {
-                VStack {
-                    Button {
-                        showImporter = true
-                    } label: {
-                        ButtonLabel(L("导入 .tendies 壁纸包"), symbol: "arrow.down.doc")
-                    }
+            VStack {
+                Button {
+                    ensureLocalPBDirs()
+                    showImporter = true
+                } label: {
+                    ButtonLabel(L("导入 .tendies 壁纸包"), symbol: "arrow.down.doc")
                 }
-                .buttonStyle(ActionButtonStyle())
-                .frame(maxWidth: .infinity)
-                .padding(device.userInterfaceIdiom == .pad ? 0 : 15)
             }
+            .buttonStyle(ActionButtonStyle())
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 10)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        ensureLocalPBDirs()
                         showImporter = true
                     } label: {
                         Label("导入 .tendies 壁纸包", systemImage: "arrow.down.doc")
                     }
-                    .disabled(!isReady)
                     
                     Button {
                         openApp(withBID: SysBID.poster)
@@ -178,17 +194,23 @@ struct PosterBoardView: View {
                                     .onChange(of: pbContainerPath) { _, newPath in
                                         let trimmed = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
                                         hasContainerAccess = !trimmed.isEmpty && wq.grantAccess(path: trimmed).0 && fm.fileExists(atPath: trimmed)
+                                        containerLookupAttempted = true
                                     }
-                                Button("重新获取路径") {
-                                    DispatchQueue.global(qos: .userInitiated).async {
-                                        let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
-                                        let access = !fetched.isEmpty && wq.grantAccess(path: fetched).0 && fm.fileExists(atPath: fetched)
-                                        DispatchQueue.main.async {
-                                            pbContainerPath = fetched
-                                            hasContainerAccess = access
+                                Button {
+                                    resolvePosterBoardContainer(forceRefresh: true)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Text(isResolvingContainer
+                                             ? (isEn ? "Locating Container..." : "正在重新获取路径...")
+                                             : L("重新获取路径"))
+                                        if isResolvingContainer {
+                                            Spacer()
+                                            ProgressView()
+                                                .controlSize(.small)
                                         }
                                     }
                                 }
+                                .disabled(isResolvingContainer)
                             } header: {
                                 HeaderLabel("PosterBoard", symbol: "photo")
                             }
@@ -207,21 +229,21 @@ struct PosterBoardView: View {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
-                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty || isResolvingContainer)
                                 Button("重置水星壁纸 (MercuryPoster)", role: .destructive) {
                                     let res = resetWallpapers(for: PBPath.mercury)
                                     if res {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
-                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty || isResolvingContainer)
                                 Button("重置视频壁纸 (Videos)", role: .destructive) {
                                     let res = resetWallpapers(for: PBPath.photos)
                                     if res {
                                         Haptic.shared.play(.soft)
                                     }
                                 }
-                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty)
+                                .disabled(!hasContainerAccess || pbContainerPath.isEmpty || isResolvingContainer)
                             } header: {
                                 HeaderLabel(L("数据管理"), symbol: "loupe")
                             } footer: {
@@ -239,6 +261,32 @@ struct PosterBoardView: View {
             
             ToolbarItem(placement: .topBarTrailing) {
                 Button("应用", role: .adaptiveConfirm) {
+                    ensureLocalPBDirs()
+                    if isResolvingContainer {
+                        Alertinator.shared.alert(
+                            title: isEn ? "Locating PosterBoard Container" : "正在定位系统容器",
+                            body: isEn
+                                ? "PosterBoard container lookup is still running in the background. Please try again once locating finishes."
+                                : "系统正在后台定位 PosterBoard 容器路径，请稍候待定位完成后再点击「应用」。",
+                            showCancel: false
+                        )
+                        return
+                    }
+                    let trimmedPath = pbContainerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard hasContainerAccess, !trimmedPath.isEmpty else {
+                        Alertinator.shared.alert(
+                            title: L("无法访问 PosterBoard 容器！"),
+                            body: isEn
+                                ? "Could not locate or authorize com.apple.PosterBoard yet. Tap Retry Lookup or configure the path in top-right Wallpaper Settings."
+                                : "未能定位或授权 com.apple.PosterBoard 容器。请点击“重新定位”，或前往右上角“壁纸设置”检查路径与权限。",
+                            actionLabel: isEn ? "Retry Lookup" : "重新定位",
+                            action: {
+                                resolvePosterBoardContainer(forceRefresh: true)
+                            }
+                        )
+                        return
+                    }
+
                     if !hasShownFirstRunMsg {
                         Alertinator.shared.alert(title: L("操作提示"), body: PBMsg.applyInfo, actionLabel: L("继续"), action: {
                             hasShownFirstRunMsg = true
@@ -268,71 +316,256 @@ struct PosterBoardView: View {
                     }
                 }
                 .disabled(tendiesArray.filter({ $0.isOn }).isEmpty)
-                .disabled(!hasContainerAccess || pbContainerPath.isEmpty || !fm.fileExists(atPath: AppURL.pb.path))
             }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item]) { result in
+            ensureLocalPBDirs()
             let res = handleImport(result)
             if !res {
                 Alertinator.shared.alert(title: L("导入 .tendies 壁纸包失败！"), body: PBMsg.imprtFailed)
             }
         }
     }
-    
-    private func doSetupStuff() {
-        var resolvedPath = pbContainerPath
-        var accessOK = false
-        if !resolvedPath.isEmpty {
-            let grant = wq.grantAccess(path: resolvedPath)
-            if grant.0 && fm.fileExists(atPath: resolvedPath) {
-                accessOK = true
-            } else {
-                resolvedPath = ""
+
+    private var camloGuideCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles.tv.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isEn ? "Want Live Video, Reveal & 3D Depth Lock Screens? Try Camlo" : "想要实况动态 / 3D 景深锁屏？试试 Camlo · 开幕")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(isEn
+                         ? "Companion open-source lock-screen studio (~9 MB): turn Live Photos & videos into swipe-reveal and 3D depth dynamic wallpapers on-device, browse 385+ free cloud & museum wallpapers, and apply directly or export .tendies packages."
+                         : "同系列开源动态锁屏工坊（~9 MB）：免电脑将相册视频、实况照片一键制作为上滑揭幕变身与裸眼 3D 景深动态壁纸，免费直连 385+ 款云端与馆藏壁纸，支持直接写入锁屏或导出 .tendies 包。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
-        if resolvedPath.isEmpty {
-            let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
-            if !fetched.isEmpty {
-                resolvedPath = fetched
-                let grant = wq.grantAccess(path: resolvedPath)
-                accessOK = grant.0 && fm.fileExists(atPath: resolvedPath)
-            }
-        }
-        DispatchQueue.main.async {
-            if !resolvedPath.isEmpty {
-                pbContainerPath = resolvedPath
-            }
-            hasContainerAccess = accessOK
-            if !accessOK {
-                Alertinator.shared.alert(title: L("无法访问 PosterBoard 容器！"), body: L("未能定位或授权 com.apple.PosterBoard 容器，请检查权限或在右上角“壁纸设置”中重新获取路径。"))
-            }
-            if !fm.fileExists(atPath: AppURL.pb.path) || !fm.fileExists(atPath: AppURL.pbFolders.path) {
-                do {
-                    try fm.createDirIfNeeded(at: AppURL.pb)
-                    try fm.createDirIfNeeded(at: AppURL.pbFolders)
-                } catch {
-                    Alertinator.shared.alert(title: L("初始化壁纸目录失败！"), body: AppMsg.opFailed)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    camloGitHubButton
+                    camloRepoMenu
+                    Spacer(minLength: 0)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    camloGitHubButton
+                    camloRepoMenu
                 }
             }
-            isReady = true
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .strokeBorder(Color.accentColor.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    private var camloGitHubButton: some View {
+        Button {
+            if let url = URL(string: CamloURL.githubRepo) {
+                openURL(url)
+            }
+        } label: {
+            Label(isEn ? "Get on GitHub" : "前往 GitHub", systemImage: "arrow.up.right.square.fill")
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+    }
+
+    private var camloRepoMenu: some View {
+        Menu {
+            Button {
+                UIPasteboard.general.string = CamloURL.appsJSON
+                Haptic.shared.play(.soft)
+                copiedCamloRepo = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    copiedCamloRepo = false
+                }
+            } label: {
+                Label(isEn ? "Copy Repo Source URL" : "复制软件源地址 (apps.json)", systemImage: "doc.on.doc")
+            }
+
+            Divider()
+
+            Button {
+                if let url = URL(string: CamloURL.addSideStore) {
+                    openURL(url)
+                }
+            } label: {
+                Label(isEn ? "Add to SideStore" : "一键添加至 SideStore", systemImage: "plus.circle")
+            }
+
+            Button {
+                if let url = URL(string: CamloURL.addAltStore) {
+                    openURL(url)
+                }
+            } label: {
+                Label(isEn ? "Add to AltStore" : "一键添加至 AltStore", systemImage: "plus.circle")
+            }
+
+            Button {
+                if let url = URL(string: CamloURL.addFeather) {
+                    openURL(url)
+                }
+            } label: {
+                Label(isEn ? "Add to Feather" : "一键添加至 Feather", systemImage: "plus.circle")
+            }
+        } label: {
+            Label(
+                copiedCamloRepo
+                    ? (isEn ? "Source Copied" : "已复制源地址")
+                    : (isEn ? "Add Repo Source" : "订阅软件源"),
+                systemImage: copiedCamloRepo ? "checkmark" : "plus.app"
+            )
+            .font(.caption.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder
+    private var containerStatusBanner: some View {
+        if isResolvingContainer {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(isEn
+                     ? "Locating PosterBoard container in background (you can import .tendies packages right away)…"
+                     : "正在后台定位 PosterBoard 系统容器（可先直接导入壁纸包）…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(.secondarySystemBackground))
+            )
+        } else if containerLookupAttempted && !hasContainerAccess {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(isEn
+                     ? "PosterBoard container not located yet. You can still import .tendies packages; tap Retry before applying to Lock Screen."
+                     : "暂未定位到 PosterBoard 容器，仍可先导入管理壁纸包；应用到锁屏前请点击重试，或在「壁纸设置」中配置路径。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(isEn ? "Retry" : "重试") {
+                    resolvePosterBoardContainer(forceRefresh: true)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.orange)
+                .layoutPriority(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.orange.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+            )
+        }
+    }
+    
+    private func ensureLocalPBDirs() {
+        if !fm.fileExists(atPath: AppURL.pb.path) || !fm.fileExists(atPath: AppURL.pbFolders.path) {
+            do {
+                try fm.createDirIfNeeded(at: AppURL.pb)
+                try fm.createDirIfNeeded(at: AppURL.pbFolders)
+            } catch {
+                Alertinator.shared.alert(title: L("初始化壁纸目录失败！"), body: AppMsg.opFailed)
+            }
+        }
+    }
+
+    private func resolvePosterBoardContainer(forceRefresh: Bool = false) {
+        guard !isResolvingContainer else { return }
+        let initialCachedPath = forceRefresh ? "" : pbContainerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        isResolvingContainer = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            if forceRefresh {
+                CSStoreEngine.shared.invalidate()
+                fsHandlers.invalidateCache()
+            }
+
+            var resolvedPath = initialCachedPath
+            var accessOK = false
+            if !resolvedPath.isEmpty {
+                let grant = wq.grantAccess(path: resolvedPath)
+                if grant.0 && fm.fileExists(atPath: resolvedPath) {
+                    accessOK = true
+                } else {
+                    resolvedPath = ""
+                }
+            }
+            if resolvedPath.isEmpty {
+                let fetched = fsHandlers.getContainerPath(forMatch: "com.apple.PosterBoard")
+                if !fetched.isEmpty {
+                    resolvedPath = fetched
+                    let grant = wq.grantAccess(path: resolvedPath)
+                    accessOK = grant.0 && fm.fileExists(atPath: resolvedPath)
+                }
+            }
+
+            DispatchQueue.main.async {
+                if !resolvedPath.isEmpty {
+                    pbContainerPath = resolvedPath
+                } else if forceRefresh {
+                    pbContainerPath = ""
+                }
+                hasContainerAccess = accessOK
+                containerLookupAttempted = true
+                isResolvingContainer = false
+            }
         }
     }
     
     private func applyObjects(_ objects: [TendiesObject]) -> (Bool, String) {
-        guard !pbContainerPath.isEmpty else {
+        let containerPath = pbContainerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !containerPath.isEmpty else {
             return (false, L("未找到 PosterBoard 容器路径。"))
         }
-        let rootGrant = wq.grantAccess(path: pbContainerPath)
+        let rootGrant = wq.grantAccess(path: containerPath)
         if !rootGrant.0 {
-            print("(pb) failed to grant access to container root \(pbContainerPath): \(rootGrant.2)")
+            print("(pb) failed to grant access to container root \(containerPath): \(rootGrant.2)")
             return (false, rootGrant.2)
         }
         
         let descrTargets = Set(objects.map(\.targetDescr))
         var resolvedTargetDirs: [PBPath: URL] = [:]
         for descrTarget in descrTargets {
-            let relPath = descrTarget.resolvedPath(in: pbContainerPath)
-            let targetURL = URL(fileURLWithPath: pbContainerPath).appendingPathComponent(relPath)
+            let relPath = descrTarget.resolvedPath(in: containerPath)
+            let targetURL = URL(fileURLWithPath: containerPath).appendingPathComponent(relPath)
             do {
                 try fm.createDirectory(at: targetURL, withIntermediateDirectories: true)
             } catch {
@@ -366,17 +599,18 @@ struct PosterBoardView: View {
     }
     
     private func resetWallpapers(for item: PBPath) -> Bool {
-        guard !pbContainerPath.isEmpty else {
+        let containerPath = pbContainerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !containerPath.isEmpty else {
             Alertinator.shared.alert(title: L("重置壁纸失败！"), body: L("未找到 PosterBoard 容器路径。"))
             return false
         }
-        let rootGrant = wq.grantAccess(path: pbContainerPath)
+        let rootGrant = wq.grantAccess(path: containerPath)
         if !rootGrant.0 {
             Alertinator.shared.alert(title: L("重置壁纸失败！"), body: L("无法获取 PosterBoard 容器权限：\(rootGrant.2)"))
             return false
         }
-        let relPath = item.resolvedPath(in: pbContainerPath)
-        let target = URL(fileURLWithPath: pbContainerPath).appendingPathComponent(relPath)
+        let relPath = item.resolvedPath(in: containerPath)
+        let target = URL(fileURLWithPath: containerPath).appendingPathComponent(relPath)
         if !fm.fileExists(atPath: target.path) {
             return true
         }

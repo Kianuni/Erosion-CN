@@ -747,33 +747,39 @@ struct AdCacheBlockerView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .top, spacing: 8) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(Self.isEn ? "Detected Ad Caches & Configs" : "已定位开屏广告目录与配置")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text("\(totalAdFoldersCount)")
-                                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundStyle(totalAdFoldersCount > 0 ? Color.accentColor : Color.secondary)
                                 Text(Self.isEn
                                      ? "targets across \(detectedEntries.count) containers"
                                      : "项目标 · 涉及 \(detectedEntries.count) 个容器")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.85)
                             }
                         }
-
-                        Spacer()
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         VStack(alignment: .trailing, spacing: 3) {
                             Text(Self.isEn ? "Sentinel Protected" : "防重建锁就绪")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
                             Text("\(fullyLockedCount) / \(totalAdFoldersCount)")
                                 .font(.subheadline.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(fullyLockedCount > 0 ? .green : .secondary)
                         }
+                        .layoutPriority(1)
                     }
 
                     if totalReclaimableAdBytes > 0 {
@@ -782,77 +788,87 @@ struct AdCacheBlockerView: View {
                              : "未锁目标待清空广告体积：\(AppContainerDirectoryHelper.formatBytes(totalReclaimableAdBytes))")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Divider()
 
-                    HStack(spacing: 10) {
-                        Button {
-                            scanAdFolders()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.clockwise")
-                                Text(Self.isEn ? "Rescan" : "重新扫描")
-                            }
-                            .font(.subheadline)
-                            .fixedSize()
-                        }
-                        .disabled(isScanning || isOperating)
-
-                        Spacer()
-
-                        if totalAdFoldersCount > 0 {
-                            Menu {
-                                Button {
-                                    confirmBatchLockAll()
-                                } label: {
-                                    Label(
-                                        Self.isEn ? "Lock / Harden All (Sentinel)" : "一键锁死 / 加固全部",
-                                        systemImage: "lock.fill"
-                                    )
-                                }
-                                .disabled(pendingLockOrHardenCount == 0)
-
-                                Button {
-                                    batchUnlockAll()
-                                } label: {
-                                    Label(
-                                        Self.isEn ? "Restore All Read-Write" : "全部恢复默认读写",
-                                        systemImage: "lock.open.fill"
-                                    )
-                                }
-                                .disabled(unlockedOnlyCount == 0)
+                    VStack(spacing: 10) {
+                        HStack(spacing: 12) {
+                            Button {
+                                scanAdFolders()
                             } label: {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "ellipsis.circle")
-                                    Text(Self.isEn ? "Batch" : "批量操作")
+                                    Image(systemName: "arrow.clockwise")
+                                    Text(Self.isEn ? "Rescan" : "重新扫描")
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                 }
                                 .font(.subheadline)
-                                .fixedSize()
                             }
+                            .buttonStyle(.borderless)
                             .disabled(isScanning || isOperating)
+
+                            Spacer(minLength: 8)
+
+                            if totalAdFoldersCount > 0 {
+                                Menu {
+                                    Button {
+                                        confirmBatchLockAll()
+                                    } label: {
+                                        Label(
+                                            Self.isEn ? "Lock / Harden All (Sentinel)" : "一键锁死 / 加固全部",
+                                            systemImage: "lock.fill"
+                                        )
+                                    }
+                                    .disabled(pendingLockOrHardenCount == 0)
+
+                                    Button {
+                                        batchUnlockAll()
+                                    } label: {
+                                        Label(
+                                            Self.isEn ? "Restore All Read-Write" : "全部恢复默认读写",
+                                            systemImage: "lock.open.fill"
+                                        )
+                                    }
+                                    .disabled(unlockedOnlyCount == 0)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "ellipsis.circle")
+                                        Text(Self.isEn ? "Batch" : "批量操作")
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.85)
+                                    }
+                                    .font(.subheadline)
+                                }
+                                .disabled(isScanning || isOperating)
+                            }
                         }
 
                         if pendingLockOrHardenCount > 0 {
                             Button {
                                 confirmBatchLockAll()
                             } label: {
-                                HStack(spacing: 4) {
+                                HStack(spacing: 6) {
                                     Image(systemName: "lock.shield.fill")
-                                    Text(Self.isEn ? "Lock All (\(pendingLockOrHardenCount))" : "一键全锁 (\(pendingLockOrHardenCount))")
+                                    Text(Self.isEn
+                                         ? "Lock All Pending (\(pendingLockOrHardenCount))"
+                                         : "一键全锁 (\(pendingLockOrHardenCount))")
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                 }
-                                .font(.caption.weight(.semibold))
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.white)
-                                .fixedSize()
+                                .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
                             .tint(.orange)
-                            .fixedSize()
                             .disabled(isScanning || isOperating)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
 
                 PlainToggle(
@@ -945,7 +961,7 @@ struct AdCacheBlockerView: View {
             } else {
                 ForEach(displayedEntries) { entry in
                     Section {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.displayTitle)
                                     .font(.subheadline.weight(.semibold))
@@ -953,9 +969,9 @@ struct AdCacheBlockerView: View {
                                 Text(appStatusSubtitle(for: entry))
                                     .font(.caption2)
                                     .foregroundStyle(appStatusColor(for: entry))
+                                    .lineLimit(1)
                             }
-
-                            Spacer(minLength: 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             Button {
                                 locateTarget = LocateAdTarget(containerURL: entry.containerURL, folderURL: nil)
@@ -963,13 +979,14 @@ struct AdCacheBlockerView: View {
                                 HStack(spacing: 3) {
                                     Image(systemName: "folder")
                                     Text(Self.isEn ? "Browse" : "看容器")
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                 }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .fixedSize()
                             }
                             .buttonStyle(.borderless)
-                            .fixedSize()
+                            .layoutPriority(1)
 
                             if !entry.items.isEmpty {
                                 let hasPending = entry.items.contains { $0.needsActionToLock }
@@ -981,14 +998,15 @@ struct AdCacheBlockerView: View {
                                         Text(hasPending
                                              ? (Self.isEn ? "Lock All" : "全锁该组")
                                              : (Self.isEn ? "Unlock All" : "全部恢复"))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.85)
                                     }
                                     .font(.caption.weight(.semibold))
-                                    .fixedSize()
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                                 .tint(hasPending ? .orange : .green)
-                                .fixedSize()
+                                .layoutPriority(1)
                                 .disabled(isScanning || isOperating)
                             }
                         }
@@ -2265,86 +2283,107 @@ private struct AdFolderRowView: View {
                     .fixedSize()
             }
 
-            HStack(spacing: 6) {
-                Button(action: onLocate) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "scope")
-                        Text(Self.isEn ? "Locate" : "定位")
-                    }
-                    .font(.caption.weight(.medium))
-                    .fixedSize()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-
-                if let onPreview {
-                    Button(action: onPreview) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "eye")
-                            Text(Self.isEn ? "Preview" : "预览")
-                        }
-                        .font(.caption.weight(.medium))
-                        .fixedSize()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .fixedSize()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    leftActionButtons
+                    Spacer(minLength: 4)
+                    lockActionButton
                 }
 
-                if let onRemoveCustom {
-                    Button(role: .destructive, action: onRemoveCustom) {
-                        Image(systemName: "trash")
-                            .font(.caption)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        leftActionButtons
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .fixedSize()
-                    .disabled(isBusy)
-                }
-
-                Spacer(minLength: 4)
-
-                if !item.needsActionToLock {
-                    Button(action: onToggleLock) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "lock.open.fill")
-                            Text(Self.isEn
-                                 ? (item.isDirectory ? "Unlock 0755" : "Unlock 0644")
-                                 : "恢复读写")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .fixedSize()
+                    HStack {
+                        Spacer(minLength: 0)
+                        lockActionButton
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(.green)
-                    .fixedSize()
-                    .disabled(isBusy)
-                } else {
-                    let isHardenOnly = item.isDirectory && item.isLockedReadOnly && !item.hasSentinelLock
-                    Button(action: onToggleLock) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "lock.fill")
-                            Text(isHardenOnly
-                                 ? (Self.isEn ? "Harden" : "加固防重建")
-                                 : (Self.isEn
-                                    ? (item.isDirectory ? "Lock 0555" : "Lock 0444")
-                                    : "一键锁死"))
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .fixedSize()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.orange)
-                    .fixedSize()
-                    .disabled(isBusy)
                 }
             }
             .padding(.top, 2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 3)
+    }
+
+    @ViewBuilder
+    private var leftActionButtons: some View {
+        Button(action: onLocate) {
+            HStack(spacing: 3) {
+                Image(systemName: "scope")
+                Text(Self.isEn ? "Locate" : "定位")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .font(.caption.weight(.medium))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+
+        if let onPreview {
+            Button(action: onPreview) {
+                HStack(spacing: 3) {
+                    Image(systemName: "eye")
+                    Text(Self.isEn ? "Preview" : "预览")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+
+        if let onRemoveCustom {
+            Button(role: .destructive, action: onRemoveCustom) {
+                Image(systemName: "trash")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isBusy)
+        }
+    }
+
+    @ViewBuilder
+    private var lockActionButton: some View {
+        if !item.needsActionToLock {
+            Button(action: onToggleLock) {
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.open.fill")
+                    Text(Self.isEn
+                         ? (item.isDirectory ? "Unlock 0755" : "Unlock 0644")
+                         : "恢复读写")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.green)
+            .disabled(isBusy)
+        } else {
+            let isHardenOnly = item.isDirectory && item.isLockedReadOnly && !item.hasSentinelLock
+            Button(action: onToggleLock) {
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.fill")
+                    Text(isHardenOnly
+                         ? (Self.isEn ? "Harden" : "加固防重建")
+                         : (Self.isEn
+                            ? (item.isDirectory ? "Lock 0555" : "Lock 0444")
+                            : "一键锁死"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(.orange)
+            .disabled(isBusy)
+        }
     }
 }
