@@ -20,6 +20,7 @@ struct APFSStagingSheet: View {
     @State private var showTargetPickerForRecord: APFSStagingRecord?
     @State private var postRestoreOutcome: APFSRestoreOutcome?
     @State private var didShowInitialCertAlert = false
+    @State private var showGuide = false
 
     @State private var activeAlert: StagingAlertType?
 
@@ -97,14 +98,23 @@ struct APFSStagingSheet: View {
                     .disabled(vault.isBusy)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        vault.refreshCertificateStatus()
-                        vault.reloadRecords()
-                        onRequestRescan?()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 14) {
+                        Button {
+                            showGuide = true
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                        .disabled(vault.isBusy)
+
+                        Button {
+                            vault.refreshCertificateStatus()
+                            vault.reloadRecords()
+                            onRequestRescan?()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(vault.isBusy)
                     }
-                    .disabled(vault.isBusy)
                 }
             }
             .onAppear {
@@ -143,6 +153,9 @@ struct APFSStagingSheet: View {
             }
             .sheet(item: $postRestoreOutcome) { outcome in
                 APFSPostRestoreGuideSheet(outcome: outcome)
+            }
+            .sheet(isPresented: $showGuide) {
+                APFSVaultGuideSheet()
             }
             .alert(
                 alertTitle(for: activeAlert),

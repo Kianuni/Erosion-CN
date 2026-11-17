@@ -117,6 +117,7 @@ struct AppDataBackupView: View {
     @State private var includeSystemApps = false
     @State private var showBackupImporter = false
     @State private var showStagingSheet = false
+    @State private var showVaultGuide = false
     @State private var quickStageAlert: QuickStageAlert?
 
     private enum QuickStageAlert: Identifiable {
@@ -220,6 +221,30 @@ struct AppDataBackupView: View {
                             }
                             .padding(.vertical, 6)
                         }
+
+                        Divider()
+
+                        Button {
+                            showVaultGuide = true
+                        } label: {
+                            HStack {
+                                Label(
+                                    apfsVaultText(
+                                        "Usage Guide: 6-Step Swap & Cross-App Migration",
+                                        "使用说明：无损重装换签与多开搬家步骤"
+                                    ),
+                                    systemImage: "book.pages.fill"
+                                )
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.vertical, 4)
                 } header: {
@@ -367,28 +392,43 @@ struct AppDataBackupView: View {
                                 }
                                 .padding(.top, 2)
 
-                                HStack(spacing: 12) {
+                                HStack(spacing: 10) {
                                     NavigationLink {
                                         ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Documents")
                                     } label: {
-                                        Label("修改 Documents", systemImage: "folder.badge.gearshape")
-                                            .font(.caption)
+                                        Label(
+                                            apfsVaultText("Documents", "文档目录"),
+                                            systemImage: "folder.badge.gearshape"
+                                        )
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                     }
                                     .buttonStyle(.borderless)
 
                                     NavigationLink {
                                         ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: "Library/Preferences")
                                     } label: {
-                                        Label("修改配置 Plist", systemImage: "doc.text.magnifyingglass")
-                                            .font(.caption)
+                                        Label(
+                                            apfsVaultText("Preferences", "偏好配置"),
+                                            systemImage: "doc.text.magnifyingglass"
+                                        )
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                     }
                                     .buttonStyle(.borderless)
 
                                     NavigationLink {
                                         ContainerSubdirBrowserView(containerURL: item.containerURL, relativeSubpath: nil)
                                     } label: {
-                                        Label("完整目录", systemImage: "folder")
-                                            .font(.caption)
+                                        Label(
+                                            apfsVaultText("Full Container", "完整目录"),
+                                            systemImage: "folder"
+                                        )
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                     }
                                     .buttonStyle(.borderless)
                                 }
@@ -400,7 +440,10 @@ struct AppDataBackupView: View {
                 } header: {
                     HeaderLabel(L("应用与游戏存档列表 (\(filteredContainers.count))"), symbol: "gamecontroller.fill")
                 } footer: {
-                    Text("点击“备份存档”会将该应用的 Documents 与 Library/Preferences 打包为 ZIP；点击“修改 Documents”或“修改配置 Plist”可直接调用内置无损 Plist/文本编辑器修改游戏数值或配置。")
+                    Text(apfsVaultText(
+                        "Tap \"APFS Stage\" for zero-space same-device app swap; tap \"Backup Save\" to archive Documents & Preferences as ZIP; tap \"Documents\" or \"Preferences\" to edit game saves or configs.",
+                        "点击“APFS 极速暂存”适合本机换签重装与微信/大应用搬家；点击“备份存档”将打包为 ZIP；点击“文档目录”或“偏好配置”可调用内置无损 Plist/文本编辑器修改存档数值或配置。"
+                    ))
                 }
             }
 
@@ -421,9 +464,21 @@ struct AppDataBackupView: View {
         }
         .navigationTitle("应用与游戏存档管理")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showVaultGuide = true
+                } label: {
+                    Label(apfsVaultText("Guide", "使用说明"), systemImage: "questionmark.circle")
+                }
+            }
+        }
         .searchable(text: $searchText, prompt: "搜索应用名称或 Bundle ID")
         .fileImporter(isPresented: $showBackupImporter, allowedContentTypes: [.zip, .item]) { result in
             handleImportBackup(result)
+        }
+        .sheet(isPresented: $showVaultGuide) {
+            APFSVaultGuideSheet()
         }
         .sheet(isPresented: $showStagingSheet, onDismiss: {
             stagingVault.reloadRecords()

@@ -78,6 +78,10 @@
       - 保持应用正常启动不强退，精确识别 `iOS 27.3 beta 1`（`24C503*`）与已封堵 `worse_query` 的 `iOS 27.3 beta 2+`（`24C504*`+ / `26.7.3+`），在主页顶部与授权报错中给出中英双语提示（最高支持 `27.3 beta 1`，推荐 `27.2.1`），并在 `27.3 beta 1` 的 `MobileGestalt` 准入区新增 `eligibilityd` 国行策略本地拦截只读提醒；
       - 新增只读 `LiveContainer`（`LC_HOME_PATH` 环境变量）环境识别：当运行于 `LiveContainer` 内且遭遇容器授权失败时，在主页卡片、启动日志与授权错误中明确提示用户在 LiveContainer 应用设置中检查宿主 App Group 配置或改为独立侧载安装。
     - **开源致谢增补**：新增感谢 `kolbicz / WQFiles` 与 `yangokok886 / WCMigrate`（GPLv3）。
+16. **APFS 换包内置分步使用说明、存档卡片单行排版优化与指南同步（`v1.0.1`）**
+    - **内置交互式双语换包指南 (`APFSVaultGuideSheet`)**：在「应用与游戏存档管理」顶部栏、APFS 暂存舱简介卡片下方以及暂存舱管理台右上角同步加入 `? 使用说明` 入口，清晰拆解「APFS 极速暂存 vs `.zip` 存档备份」适用场景、同应用掉签重装标准 6 步、官微 ↔ 多开微信跨包搬家 4 步以及三条防翻车红线；
+    - **修复存档卡片快捷按钮三行折行问题 (`AppDataBackupView`)**：将每条容器卡片底部的目录跳转按钮精简为单行防截断标签（「文档目录 / `Documents`」、「偏好配置 / `Preferences`」、「完整目录 / `Full Container`」），彻底消除 `修改 Docume / nts` 异常折行；
+    - **同步扩充 [`USAGE_GUIDE.md`](./USAGE_GUIDE.md)**：补齐 `iOS 27.3 beta 2` 封堵说明及 `v1.0.0 – v1.0.1` 全新模块（APFS 换包、Wi-Fi 互传、POSIX 权限修改、深层搜索/百大文件与缓存清理）图文操作说明。
 
 ---
 
@@ -140,3 +144,7 @@
       - Distinguishes `27.3 beta 1` (`24C503*`) from `worse_query`-patched `27.3 beta 2+` (`24C504*+` / `26.7.3+`), surfaces clear EN/ZH Home & error diagnostics without force-quitting, and shows a read-only `eligibilityd` CH/A notice on `27.3 beta 1`;
       - Detects read-only `LiveContainer` execution (`LC_HOME_PATH` env var) and displays clear EN/ZH guidance in startup logs, Home alert card, and container authorization failures advising users to check host App Group settings in LiveContainer or install standalone.
     - **Additional Open-Source Credits**: Added GPLv3 acknowledgments for **[kolbicz / WQFiles](https://github.com/kolbicz/WQFiles)** and **[yangokok886 / WCMigrate](https://github.com/yangokok886/WCMigrate)**.
+16. **In-App APFS Swap Guide, Card Layout Polish & Updated `USAGE_GUIDE.md` (`v1.0.1`)**
+    - **Built-in Bilingual Usage Guide (`APFSVaultGuideSheet`)**: Added `? Guide` / `使用说明` entry points in the Save Manager toolbar, APFS Swap Vault overview card, and `APFSStagingSheet` toolbar covering when to pick APFS Stage vs `.zip` Save Backup, the 6-step same-app re-sign/reinstall workflow, official-to-clone cross-Bundle-ID migration (`com.tencent.xin` → `com.tencent.wx`), and 3 critical safety rules.
+    - **Fixed 3-Line Button Text Wrapping (`AppDataBackupView`)**: Refined container card link labels to single-line bilingual buttons (`Documents`, `Preferences`, `Full Container`) with `.lineLimit(1)` and `.minimumScaleFactor(0.85)`.
+    - **Expanded [`USAGE_GUIDE.md`](./USAGE_GUIDE.md)**: Added the `iOS 27.3 beta 2` patched alert and complete walkthroughs for all `v1.0.0 – v1.0.1` file management, Wi-Fi sharing, POSIX `chmod`, Cache Cleaner, and APFS Swap Vault features.
