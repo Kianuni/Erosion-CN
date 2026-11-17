@@ -48,6 +48,14 @@ struct FMRootView: View {
                             systemImage: "arrow.forward.circle"
                         )
                     }
+                    NavigationLink {
+                        AdCacheBlockerView()
+                    } label: {
+                        Label(
+                            LocalizationManager.isEnglish ? "Splash Ad Cache Blocker" : "开屏广告缓存精准锁死",
+                            systemImage: "lock.shield"
+                        )
+                    }
                     NavigationLink("MobileGestalt 缓存目录", destination: FileBrowserView(path: MGURL.fsGestaltURL.deletingLastPathComponent(), shouldGrant: true))
                     NavigationLink("系统配置描述文件目录", destination: FileBrowserView(path: FSURL.configProfiles, shouldGrant: true))
                     NavigationLink("本应用文档目录 (Documents)", destination: FileBrowserView(path: URL.documentsDirectory))

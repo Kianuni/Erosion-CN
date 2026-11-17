@@ -82,6 +82,11 @@
     - **内置交互式双语换包指南 (`APFSVaultGuideSheet`)**：在「应用与游戏存档管理」顶部栏、APFS 暂存舱简介卡片下方以及暂存舱管理台右上角同步加入 `? 使用说明` 入口，清晰拆解「APFS 极速暂存 vs `.zip` 存档备份」适用场景、同应用掉签重装标准 6 步、官微 ↔ 多开微信跨包搬家 4 步以及三条防翻车红线；
     - **修复存档卡片快捷按钮三行折行问题 (`AppDataBackupView`)**：将每条容器卡片底部的目录跳转按钮精简为单行防截断标签（「文档目录 / `Documents`」、「偏好配置 / `Preferences`」、「完整目录 / `Full Container`」），彻底消除 `修改 Docume / nts` 异常折行；
     - **同步扩充 [`USAGE_GUIDE.md`](./USAGE_GUIDE.md)**：补齐 `iOS 27.3 beta 2` 封堵说明及 `v1.0.0 – v1.0.1` 全新模块（APFS 换包、Wi-Fi 互传、POSIX 权限修改、深层搜索/百大文件与缓存清理）图文操作说明。
+17. **开屏广告缓存精准定位锁死与 Wi-Fi 互传认证/浏览器体验优化（`v1.0.2`）**
+    - **开屏广告缓存精准锁死 (`AdCacheBlockerView` / `AdFolderLocateBrowserView`)**：在 `功能修改 → 应用存档与空间清理` 与 `文件浏览 → 快捷访问` 同步加入 **「开屏广告缓存精准锁死」** 专页，结合主流 App 已知开屏路径与 `Documents` / `Library/Caches` / `Library/Application Support` / `tmp` 浅层 POSIX 扫描精准匹配 `KSAdSDK`、`BUAdSDK`/`Pangle`、`GDTMobSDK`/`TADCache`、`BaiduMobAd`、`SplashAd`、`LaunchAd` 等广告目录（严格排除 `SplashBoard`、WebKit、Cookies、`Downloads`、容器根目录与符号链接），提供一键 **`定位目录`**、清空物料后 **`一键锁死 (0555)`**、**`恢复读写 (0755)`**、单应用/全局批量操作及未命中容器人工排查开关；
+    - **Wi-Fi 无线互传认证兼容、浏览器排查指引与按钮排版修复 (`WiFiShareServer` / `WiFiShareSheet`)**：
+      - `WiFiShareEngine.isAuthorized` 放宽用户名校验为大小写不敏感的 `erosion` 或直接留空（仍严格要求 6 位随机 PIN 恒定时间校验），解决浏览器输完密码仍反复弹窗的问题；
+      - 优化 `WiFiShareSheet` 中「复制 / 复制密码」按钮为紧凑胶囊排版（不再拉伸过长，并新增用户名一键复制），同时加入 **「浏览器打开说明」** 卡片，推荐优先使用 **Safari**、说明 Mac 上 Chrome/Edge/Arc **「本地网络」** 权限开启步骤、`http://` 协议提醒及前台保活规则。
 
 ---
 
@@ -148,3 +153,8 @@
     - **Built-in Bilingual Usage Guide (`APFSVaultGuideSheet`)**: Added `? Guide` / `使用说明` entry points in the Save Manager toolbar, APFS Swap Vault overview card, and `APFSStagingSheet` toolbar covering when to pick APFS Stage vs `.zip` Save Backup, the 6-step same-app re-sign/reinstall workflow, official-to-clone cross-Bundle-ID migration (`com.tencent.xin` → `com.tencent.wx`), and 3 critical safety rules.
     - **Fixed 3-Line Button Text Wrapping (`AppDataBackupView`)**: Refined container card link labels to single-line bilingual buttons (`Documents`, `Preferences`, `Full Container`) with `.lineLimit(1)` and `.minimumScaleFactor(0.85)`.
     - **Expanded [`USAGE_GUIDE.md`](./USAGE_GUIDE.md)**: Added the `iOS 27.3 beta 2` patched alert and complete walkthroughs for all `v1.0.0 – v1.0.1` file management, Wi-Fi sharing, POSIX `chmod`, Cache Cleaner, and APFS Swap Vault features.
+17. **Per-App Splash Ad Cache Blocker (`chmod`) & Wi-Fi Sharing Auth / Browser UX Polish (`v1.0.2`)**
+    - **Splash Ad Cache Blocker (`AdCacheBlockerView` / `AdFolderLocateBrowserView`)**: Added dedicated entry points in both `Tweaks → App Saves & Cleanup` and `File Browser → Quick Access` (`Splash Ad Cache Blocker`). Combines curated per-app splash ad paths with a shallow POSIX ad-SDK scan across `Documents`, `Library/Caches`, `Library/Application Support`, and `tmp` (`KSAdSDK`, `BUAdSDK`/`Pangle`, `GDTMobSDK`/`TADCache`, `BaiduMobAd`, `SplashAd`, `LaunchAd`, etc.) while strictly excluding `SplashBoard`, WebKit, Cookies, `Downloads`, container roots, and symlinks — offering one-tap **Locate** in File Browser, wipe + **`0555` Read-Only Lock**, **`0755` Restore**, per-app/global batch controls, and a manual inspection toggle for unmatched apps;
+    - **Wi-Fi File Sharing Auth Flexibility, Browser Guide & Compact Buttons (`WiFiShareServer` / `WiFiShareSheet`)**:
+      - Updated `WiFiShareEngine.isAuthorized` to accept case-insensitive `'erosion'` or a blank username when the 6-digit random PIN matches in constant time, eliminating browser password-prompt loops;
+      - Replaced stretched Copy / Copy PIN row buttons with compact `.small` pill buttons (plus a Copy Username button) and added a bilingual **Browser & Connection Tips** section recommending **Safari** first, detailing macOS **Privacy & Security → Local Network** steps for Chrome/Edge/Arc, `http://` usage, and foreground keep-awake behavior.

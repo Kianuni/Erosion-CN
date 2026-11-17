@@ -89,28 +89,34 @@ struct WiFiShareSheet: View {
 
                 Section {
                     if let urlStr = server.shareURLString {
-                        HStack {
+                        HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(LocalizationManager.isEnglish ? "Browser URL" : "访问地址")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Text(urlStr)
                                     .font(.system(.body, design: .monospaced).weight(.semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                                     .textSelection(.enabled)
                             }
-                            Spacer()
+                            Spacer(minLength: 8)
                             Button {
                                 copyToPasteboard(urlStr, tag: "url")
                             } label: {
-                                Label(
-                                    copiedTag == "url"
-                                        ? (LocalizationManager.isEnglish ? "Copied" : "已复制")
-                                        : (LocalizationManager.isEnglish ? "Copy" : "复制"),
-                                    systemImage: copiedTag == "url" ? "checkmark" : "doc.on.doc"
-                                )
+                                HStack(spacing: 4) {
+                                    Image(systemName: copiedTag == "url" ? "checkmark" : "doc.on.doc")
+                                    Text(copiedTag == "url"
+                                         ? (LocalizationManager.isEnglish ? "Copied" : "已复制")
+                                         : (LocalizationManager.isEnglish ? "Copy" : "复制"))
+                                }
                                 .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .fixedSize()
                             }
                             .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .fixedSize()
                         }
                     } else {
                         HStack {
@@ -121,16 +127,34 @@ struct WiFiShareSheet: View {
                         }
                     }
 
-                    HStack {
-                        Text(LocalizationManager.isEnglish ? "Username" : "用户名")
-                        Spacer()
-                        Text(server.username)
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(LocalizationManager.isEnglish ? "Username (optional)" : "用户名（可留空）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(server.username)
+                                .font(.system(.body, design: .monospaced).weight(.medium))
+                                .textSelection(.enabled)
+                        }
+                        Spacer(minLength: 8)
+                        Button {
+                            copyToPasteboard(server.username, tag: "user")
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: copiedTag == "user" ? "checkmark" : "doc.on.doc")
+                                Text(copiedTag == "user"
+                                     ? (LocalizationManager.isEnglish ? "Copied" : "已复制")
+                                     : (LocalizationManager.isEnglish ? "Copy" : "复制"))
+                            }
+                            .font(.caption.weight(.semibold))
+                            .fixedSize()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .fixedSize()
                     }
 
-                    HStack {
+                    HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(LocalizationManager.isEnglish ? "Session PIN (6-digit)" : "一次性随机密码 (6位)")
                                 .font(.caption)
@@ -140,19 +164,22 @@ struct WiFiShareSheet: View {
                                 .foregroundStyle(Color.accentColor)
                                 .textSelection(.enabled)
                         }
-                        Spacer()
+                        Spacer(minLength: 8)
                         Button {
                             copyToPasteboard(server.pin, tag: "pin")
                         } label: {
-                            Label(
-                                copiedTag == "pin"
-                                    ? (LocalizationManager.isEnglish ? "Copied" : "已复制")
-                                    : (LocalizationManager.isEnglish ? "Copy PIN" : "复制密码"),
-                                systemImage: copiedTag == "pin" ? "checkmark" : "key.fill"
-                            )
+                            HStack(spacing: 4) {
+                                Image(systemName: copiedTag == "pin" ? "checkmark" : "key.fill")
+                                Text(copiedTag == "pin"
+                                     ? (LocalizationManager.isEnglish ? "Copied" : "已复制")
+                                     : (LocalizationManager.isEnglish ? "Copy PIN" : "复制密码"))
+                            }
                             .font(.caption.weight(.semibold))
+                            .fixedSize()
                         }
                         .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .fixedSize()
                         .disabled(server.pin.isEmpty)
                     }
 
@@ -171,12 +198,55 @@ struct WiFiShareSheet: View {
                     }
                 } header: {
                     HeaderLabel(LocalizationManager.isEnglish ? "Connection & Basic Auth" : "连接信息与认证凭据", symbol: "lock.shield")
-                } footer: {
-                    Text(
-                        LocalizationManager.isEnglish
-                            ? "Open the URL above in any browser on the same Wi-Fi and enter username 'erosion' with the 6-digit PIN. The screen stays awake while running, and stops automatically if dismissed or backgrounded."
-                            : "在同局域网电脑或手机浏览器打开上述地址，输入用户名 erosion 与 6 位随机密码即可浏览、打包下载或拖入上传。运行期间屏幕保持常亮，关闭页面或退回后台将自动停止服务。"
-                    )
+                }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label {
+                            Text(
+                                LocalizationManager.isEnglish
+                                    ? "Safari recommended: Open the address in Safari first. If Chrome, Edge, or Arc cannot connect on macOS, enable it in System Settings -> Privacy & Security -> Local Network (toggle off and on again if needed), or try another browser."
+                                    : "优先推荐 Safari 打开：建议优先使用电脑或手机自带的 Safari 浏览器；若 Chrome / Edge / Arc 打不开，请检查 Mac「系统设置 ➔ 隐私与安全性 ➔ 本地网络」中对应浏览器的权限（已开启可先关闭再重开），或换其他浏览器重试。"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "safari.fill")
+                                .foregroundStyle(Color.accentColor)
+                                .font(.caption)
+                        }
+
+                        Label {
+                            Text(
+                                LocalizationManager.isEnglish
+                                    ? "Protocol & Login: Keep the URL starting with http:// (not https://). At the prompt, enter the 6-digit PIN above (username 'erosion' or blank)."
+                                    : "协议与登录：网址必须以 http:// 开头（不要用 https://）；弹出登录框时输入上方 6 位随机密码即可（用户名填 erosion 或留空均可）。"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "key.viewfinder")
+                                .foregroundStyle(.orange)
+                                .font(.caption)
+                        }
+
+                        Label {
+                            Text(
+                                LocalizationManager.isEnglish
+                                    ? "Stay on this page: The screen stays awake while active. Dismissing or switching apps stops the server and rotates the PIN."
+                                    : "保活提示：传输期间请保持停留在当前页面（屏幕自动常亮）；关闭页面或切出到微信等其他 App 会自动停服并刷新密码。"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "iphone.radiowaves.left.and.right")
+                                .foregroundStyle(.green)
+                                .font(.caption)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                } header: {
+                    HeaderLabel(LocalizationManager.isEnglish ? "Browser & Connection Tips" : "浏览器打开说明", symbol: "safari")
                 }
 
                 if !server.events.isEmpty {

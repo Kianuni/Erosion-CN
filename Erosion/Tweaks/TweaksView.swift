@@ -22,6 +22,10 @@ struct TweaksView: View {
                 Section {
                     NavigationLink("应用与游戏存档管理", destination: AppDataBackupView())
                     NavigationLink("容器缓存扫描与清理", destination: CacheCleanerView())
+                    NavigationLink(
+                        LocalizationManager.isEnglish ? "Splash Ad Cache Blocker (chmod)" : "开屏广告缓存精准锁死",
+                        destination: AdCacheBlockerView()
+                    )
                 } header: {
                     HeaderLabel("应用存档与空间清理", symbol: "externaldrive.badge.checkmark")
                 }

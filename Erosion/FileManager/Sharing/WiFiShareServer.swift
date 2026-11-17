@@ -387,11 +387,22 @@ private nonisolated final class WiFiShareEngine: @unchecked Sendable {
     // MARK: - Auth & Path Helpers
 
     func isAuthorized(headerValue: String?) -> Bool {
-        guard let headerValue else { return false }
+        guard let headerValue, !pin.isEmpty else { return false }
         let trimmed = headerValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.lowercased().hasPrefix("basic ") else { return false }
         let provided = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-        return Self.constantTimeEqual(provided, expectedBasicToken)
+        if Self.constantTimeEqual(provided, expectedBasicToken) {
+            return true
+        }
+        guard let decodedData = Data(base64Encoded: provided),
+              let decoded = String(data: decodedData, encoding: .utf8),
+              let colonIdx = decoded.firstIndex(of: ":") else {
+            return false
+        }
+        let rawUser = String(decoded[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+        let rawPass = String(decoded[decoded.index(after: colonIdx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let userOK = rawUser.isEmpty || rawUser.lowercased() == "erosion"
+        return userOK && Self.constantTimeEqual(rawPass, pin)
     }
 
     private static func constantTimeEqual(_ a: String, _ b: String) -> Bool {
