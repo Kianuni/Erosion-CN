@@ -102,3 +102,10 @@ func buildNumber() -> String {
 func isPad() -> Bool {
     return UIDevice.current.userInterfaceIdiom == .pad
 }
+
+func isRunningInLiveContainer() -> Bool {
+    if let lcHome = ProcessInfo.processInfo.environment["LC_HOME_PATH"], !lcHome.isEmpty {
+        return true
+    }
+    return Bundle.main.bundlePath.contains("LiveContainer")
+}

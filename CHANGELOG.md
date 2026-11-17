@@ -1,8 +1,13 @@
-# Erosion-CN 改进详情与版本历史
+# Erosion-CN 改进详情与版本历史 / Changelog & Technical Improvements
 
-> 本文档收录 Erosion-CN 相对上游的完整技术改进说明（原 README「项目简介与核心改进」章节）。各版本发布说明另见 [Releases](https://github.com/Kianuni/Erosion-CN/releases)。
+> **[简体中文](#简体中文) · [English](#english)**  
+> 各版本安装包与发布说明另见 [Releases](https://github.com/Kianuni/Erosion-CN/releases)。
 
-**Erosion-CN** 分支衍生自官方上游项目 **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)**，完成了 **100% 简体中文界面本地化**，修复了原版多项严重真机 Bug，并进行了系统级防白苹果安全加固与底层能力扩展：
+---
+
+## 简体中文
+
+> 本文档收录 **Erosion-CN** 相对上游 **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)** 的完整技术改进与版本演进历史：
 
 1. **修复重启后修改自动失效还原（反弹回原厂状态）的严重 Bug**
    - 原版在未手动切换过设置开关时，`mgWriteAtomically` 默认返回 `false`，导致实际走了临时文件替换（`replaceItemAt`），破坏了系统缓存文件的 Inode 与 `_mobilegestalt` POSIX 属主权限，设备一重启即被系统丢弃重建；同时原版在 iOS 27 上额外注入了非缓存键 `RegionInfo`（`zHeENZu+wbg7PUprwNwBWg`），触发开机缓存合法性校验整包重置。
@@ -58,7 +63,7 @@
 14. **设置页生态推荐与内置分流规则同步（`v0.9.2`）**
     - **设置页重构与生态联动**：移除「特别致谢与特性参考」分组，将上游作者与特性参考统一合并至「致谢与开源参考」；同时新增「更多开源项目 (Kianuni)」推荐卡片，集中展示 `AppleFlow`、`WQGuard`、`Camlo`、`Enkard` 四个同系列开源项目（同步完整中英双语翻译）；
     - **内置分流导出同步 `AppleFlow v1.0.1`**：补齐 PCC 盲签名关键域名 `*.issuer.apple.com` 与 `ropes.apple.com`（消除内置导出规则下相册高质量消除报 `Code=32033`），并收窄过宽的 `google.com` / `googleapis.com` / `gstatic.com` 后缀，替换为 `lens.google.com`、`gemini.google.com`、`chatgpt.livekit.cloud`、`sora.com` 与 `claudeusercontent.com` 等精准生产域名。
-15. **文件管理全能增强、APFS 零空间暂存舱、缓存极速清理与 `iOS 27.3` 分版本守卫（`v1.0.0`）**
+15. **文件管理全能增强、APFS 零空间暂存舱、缓存极速清理与 `iOS 27.3` / `LiveContainer` 环境守卫（`v1.0.0`）**
     - **APFS `clonefile()` 零空间应用换签 / 重装暂存舱 (`APFSStagingVault` / `APFSStagingSheet`)**：参考 `yangokok886 / WCMigrate`（GPLv3）思路重构内核级写时复制（CoW）暂存与五重防呆护栏：
       1. **签名证书到期门控**：解析 `embedded.mobileprovision` 剩余有效期，不足 24 小时或已过期时发出高优预警，提示先在 SideStore / AltStore 刷新签名后再暂存卸载；
       2. **10 秒活跃 SQLite WAL 写入锁检测**：暂存与还原前扫描 `Documents` / `Library`（深度 ≤ 4）中最近 10 秒写入的 `*-wal` / `*.sqlite-wal` / `*.db-wal` 文件并拦截提示先上滑关闭目标应用；
@@ -69,6 +74,69 @@
     - **文件夹深度递归搜索、最大 100 文件分析、最近访问与路径直达 (`FolderAnalysisSheet` / `FMNavigationStore`)**：支持可取消异步深层搜索（实时扫描计数、最多 500 条结果，支持点击打开详情或跳转父目录）、`fstatat` 极速统计 Top 100 最大常规文件、记录最近打开的 15 个非根目录（带一键清空）以及自动识别剪贴板 `/var/` / `/private/var/` 路径的「路径直达」。
     - **POSIX 文件权限编辑器 (`InfoViewer`)**：仅对用户应用容器内部子路径与 App Group 数据子路径（严格封锁容器根目录、`SystemGroup`、`Bundle`、`Daemon`、`System` 与非 `mobile` 属主路径）开放可视化 `chmod` 修改，提供一键「设为只读（0555/0444 锁死本地开屏缓存广告）」、一键「恢复默认读写（0755/0644）」与 `r/w/x` 独立开关及 `lstat` 写后核验。
     - **容器缓存清理提速与选择菜单升级 (`CacheCleanerView`)**：切换扫描队列至 `.userInitiated` QoS，加入单轮 `deniedContainers` 拒绝缓存、POSIX `opendir` / `readdir` / `fstatat` 无桥接高速字节统计、实时进度与「停止」按钮；全选栏升级为「选择」菜单（`全选当前` / `反选当前` / `清空已选`，其中清空覆盖搜索过滤隐藏项）。
-    - **`iOS 27.3 beta 2+` 漏洞封堵哨兵与 `27.3 beta 1` 国行策略提醒 (`DeviceInfoHelpers` / `ContentView` / `GestaltView`)**：保持应用正常启动不强退，精确识别 `iOS 27.3 beta 1`（`24C503*`）与已封堵 `worse_query` 的 `iOS 27.3 beta 2+`（`24C504*`+ / `26.7.3+`），在主页顶部与授权报错中给出中英双语提示（最高支持 `27.3 beta 1`，推荐 `27.2.1`），并在 `27.3 beta 1` 的 `MobileGestalt` 准入区新增 `eligibilityd` 国行策略本地拦截只读提醒。
+    - **`iOS 27.3 beta 2+` 漏洞封堵哨兵、`27.3 beta 1` 国行策略提醒与 `LiveContainer` 环境只读诊断 (`DeviceInfoHelpers` / `WorseQuerySwift` / `ContentView` / `ErosionApp` / `GestaltView`)**：
+      - 保持应用正常启动不强退，精确识别 `iOS 27.3 beta 1`（`24C503*`）与已封堵 `worse_query` 的 `iOS 27.3 beta 2+`（`24C504*`+ / `26.7.3+`），在主页顶部与授权报错中给出中英双语提示（最高支持 `27.3 beta 1`，推荐 `27.2.1`），并在 `27.3 beta 1` 的 `MobileGestalt` 准入区新增 `eligibilityd` 国行策略本地拦截只读提醒；
+      - 新增只读 `LiveContainer`（`LC_HOME_PATH` 环境变量）环境识别：当运行于 `LiveContainer` 内且遭遇容器授权失败时，在主页卡片、启动日志与授权错误中明确提示用户在 LiveContainer 应用设置中检查宿主 App Group 配置或改为独立侧载安装。
     - **开源致谢增补**：新增感谢 `kolbicz / WQFiles` 与 `yangokok886 / WCMigrate`（GPLv3）。
 
+---
+
+## English
+
+> Complete technical improvements and version history of **Erosion-CN** over upstream **[jailbreakdotparty/Erosion](https://github.com/jailbreakdotparty/Erosion)**:
+
+1. **Fixed Persistent Reboot Reversion (Tweaks Reverting to Stock After Reboot)**
+   - Upstream returned `false` by default for `mgWriteAtomically`, causing writes to go through temporary file replacement (`replaceItemAt`) that broke the system cache file's Inode and `_mobilegestalt` POSIX ownership; upstream also injected non-cached key `RegionInfo` (`zHeENZu+wbg7PUprwNwBWg`) on iOS 27, triggering full boot-time cache invalidation.
+   - This fork enforces atomic in-place writes, strictly follows the iOS 27 stock cache schema, and maps matching hardware `RegulatoryModelNumber` automatically so edits survive cold reboots.
+2. **Fixed Lossy Plist Serialization Causing Camera Black Screen**
+   - Upstream `PlistManager` misclassified `CFBoolean` (`<true/>` / `<false/>`) and integral floats (camera zoom factors `1.0`, `2.0`, `5.0`) as `<integer>`, breaking camera preview after editing `MobileGestalt`.
+   - Replaced with `CFBooleanGetTypeID()` and `CFNumberIsFloatType()` for exact CoreFoundation type fidelity and **100% lossless pass-through** of unmodified entries.
+3. **Zero-Byte-Window In-Place Write Protocol (`pwrite` + Tail `ftruncate` + `F_FULLFSYNC`)**
+   - Eliminates `ftruncate(fd, 0)` before writing; overwrites from offset `0` in-place, trims trailing bytes if shorter, and flushes APFS + NAND buffers via `fcntl(fd, F_FULLFSYNC)`.
+4. **Pre-Apply Diff Preview + Post-Write Readback Verification & Auto-Rollback**
+   - Previews every pending key/hex slot diff (`Before → After`) prior to commit, snapshots `PreApplyGestalt.plist`, reads back and validates binary plist integrity immediately after writing, and rolls back automatically on any mismatch.
+5. **Runtime `libMobileGestalt.dylib` Slot Resolution (Zero Hardcoded Offsets)**
+   - Scans the live in-memory `/usr/lib/libMobileGestalt.dylib` descriptor table on device to resolve `CacheUUID`, total slot count, and boolean `CacheData` offsets (`green-tea`, `not-green-tea`, `wapi`) dynamically.
+   - Enforces strict pre-write gates (`CacheUUID` match, exact `slotCount * 9` byte length, `validity == 1`, zeroed 8-byte padding, zero unrelated byte diffs), locking writes whenever verification fails.
+6. **Dual-Vault SHA-256 Factory Backup & One-Tap Factory Restore**
+   - Mirrors the unmodified `OriginalGestalt.plist` + `SHA-256` digest across both app sandbox and the system-level vault (`isExcludedFromBackup = true`) so factory backups survive app reinstallation/resigning, alongside external `.plist` import/export and dirty-state detection.
+   - **One-Tap Factory Restore** verifies `SHA-256`, `CacheVersion`, `CacheUUID`, `CacheData` length, and kernel `ProductType` while cleaning lock-screen text, asset tags, fake supervision plists, and keypad caches (with OTA Clean Cache Rebuild integration).
+7. **Automatic Resigned App Group Detection & High-Risk Soft-Brick Removal**
+   - Dynamically discovers resigned `group.*` entitlements via `SecTaskCopyValueForEntitlement` and pure-Swift Mach-O `LC_CODE_SIGNATURE` parsing, and removes/blocks bootloop-prone legacy toggles (regex-sliced iPadOS mode on iPhone, retail fake supervision, non-cached keys).
+8. **Hardware Model Tables, iOS 27 AI Guardrails & Browser Fixes**
+   - Completed regulatory model tables across iPhone 15 / 16 / 17 / Air / 18 / Duo and M-series iPads; fixed upstream `80%` Charge Limit vs Boot Chime hardware checks and hardcoded `true` custom writes; bundled Clean Up & Handwriting synthesis under Apple Intelligence while guarding `Personal Translator` / `Audio Intelligence` slot conflicts; added Liquid Glass low-power rendering and dynamic `stat()` max-Inode scanning.
+9. **App & Game Save Manager + Container Cache Cleaner (`v0.6.0`)**
+   - **`AppDataBackupView`**: Scans third-party containers to archive `Documents` and `Library/Preferences` into `.zip` backups, exports/imports via Share Sheet, restores to matching reinstalled Bundle IDs (new container UUIDs), and jumps straight into lossless Plist/text editing.
+   - **`CacheCleanerView`**: Reclaims bloated iOS "System Data" by scanning `Library/Caches` and `tmp` across containers for safe single or batch purging while strictly protecting `Documents`, chat databases, and login states.
+10. **Live `MGCopyAnswer` Inspector, Apple Intelligence 4-Factor Checkup, Camera/Health Slots & Security Audit (`v0.7.2`)**
+    - **`MGInspectorView`**: Read-only 3-way comparison (`MGCopyAnswer` live kernel state vs `OriginalGestalt.plist` vs staged edits) across all `720+` binary `CacheData` slots.
+    - **`AppleIntelligenceCheckupCard`**: 1-tap verification and auto-fix for `LL/LL/A` region, matching US regulatory model `Axxxx`, on-device AI eligibility, and live readback (locking conflicting `InternalInstall` toggles on native AI devices).
+    - **Binary `CacheData` Hardware Slots**: Added Audio Mix, Spatial Audio Recording, FaceTime Spatial Audio, Responsive Shutter, and Health Hypertension Notifications with native hardware downgrade locks.
+    - **24-File Sandbox & File-Handling Hardening**: Fixed `@Binding` mutation bug in `PlistManager`, added read-only `requireWrite: false` tokens, Zip Slip validation, symlink typing, and xattr verification.
+11. **Dual-Write Slot Promotion, 14 Hardware Experiments & 6 Cross-Container Modules (`v0.8.0`)**
+    - Promoted 14 existing features (Dynamic Island, AOD, Charge Limit, Boot Chime, Crash Detection, PWM, Camera Control, Action Button, Tap to Wake, Stage Manager, etc.) to dual `CacheData + CacheExtra` writes.
+    - Added 14 experimental `CacheData` hardware toggles (JP/KR 3-slot Shutter Silence, Dual-Mic Studio Audio, Photographic Styles/Tone Mapping, P3 Stereo Video, Camera Control Capacitance, Battery Cycle/Manufacture Info, Outdoor AOD Brightness, CarPlay Ultra, 120Hz Touch Delivery, AirPods Hearing Health/Aid, Sleep Apnea, Blood Oxygen, Extreme Sports/Daylight, Siri Hub guardrails).
+    - Added 6 read-only/cross-container modules: **`CSStore2`** `<50ms` app mapping (`CSStoreEngine`), APFS snapshot **Battery & Thermal Telemetry** (`PowerTelemetryView`), **Jetsam & Crash Log Diagnostics** (`CrashDiagnosticsView`), **Lock-Screen Asset Tag & Fake Supervision Scanner** (`ConfigView`), **AppGroup Routing Export** (`AppGroupHubView`), and **Voice Memos Lossless Extractor + On-Device AI Probe** (`VoiceMemosAIView`).
+12. **Region Mode Split (`LL+LL/A` vs `LL` Only), Dirty Baseline Stripping, `iOS 26.3.x` CSStore2 & Surge/Stash Sync (`v0.8.1 – v0.8.6`)**
+    - Split region unlock into **Full US (`LL + LL/A`)** vs **`RegionCode LL` Only (preserves `CH/A` & Dual Physical SIM compatibility)**; added clean stripping of leftover `InternalInstall` / `InternalBuild` keys, decoupled FaceTime Spatial Audio vs 4-mic Spatial Recording, fixed high-Inode (>200M) `pathleak` hangs + added TLV `CSStore2` fallback for `iOS 26.3.x`, and supported both Surge `.sgmodule` and Stash `.stoverride` exports.
+13. **Single-IPA Full EN/ZH Localization & `Personal Translator (#266)` Auto-Heal (`v0.9.0 – v0.9.1`)**
+    - Built complete English + Simplified Chinese localization into one IPA with instant switching in **Settings → App Language** (`Follow System` / `简体中文` / `English`).
+    - Fixed `v0.9.1` `#266 = true` / `#178 = false` factory baseline preservation and bidirectional auto-heal on native AI iPhones (iPhone 15 Pro – 18 Pro Max) preventing instant 0-second Clean Up & Camera Siri errors.
+14. **Settings Ecosystem Links & `AppleFlow v1.0.1` Routing Sync (`v0.9.2`)**
+    - Unified in-app Credits and added a **More Open-Source Projects (Kianuni)** section linking `AppleFlow`, `WQGuard`, `Camlo`, and `Enkard`.
+    - Synced built-in routing exports with `AppleFlow v1.0.1` (added `*.issuer.apple.com` and `ropes.apple.com` to prevent PCC `Code=32033`; narrowed broad Google suffixes to targeted production endpoints).
+15. **All-in-One File Manager Upgrade, APFS Zero-Space Swap Vault, Fast Cache Cleaner & `iOS 27.3` / `LiveContainer` Guards (`v1.0.0`)**
+    - **APFS `clonefile()` Zero-Space App Swap Vault (`APFSStagingVault` / `APFSStagingSheet`)**: Inspired by `yangokok886 / WCMigrate` (GPLv3), delivers CoW staging + 5-layer foolproofing:
+      1. `embedded.mobileprovision` signing expiry gate (< 24h/expired high-priority warning before uninstalling);
+      2. Active 10-second SQLite WAL lock scan across `Documents` and `Library` (`*-wal` / `*.sqlite-wal` / `*.db-wal`);
+      3. Copy-never-move `Darwin.clonefile()` staging for `Documents`, `Library/Application Support`, and `Library/Preferences` + WeChat 32-hex MD5 account folder count detection;
+      4. `manifest.json` file-count & byte-size integrity verification;
+      5. Atomic `.erosion_pre_restore_bak` swap with auto-rollback, cross-Bundle-ID `.plist` adaptation, Vault retention until verified, `isIdleTimerDisabled = true` while running, and persistent Home uninstall-warning banner.
+    - **Wi-Fi HTTP File Sharing (`WiFiShareServer` / `WiFiShareSheet`)**: `NWListener` LAN HTTP server (port `8080` with ephemeral fallback, `en0` IPv4 detection) featuring random 6-digit PIN Basic Auth (`erosion`), dark-mode Web UI, 64 KB chunked downloads, folder `.zip` downloads (2 GB cap), `PUT /api/upload` 64 KB chunked `.part` streaming uploads, collision auto-renaming (`name 2.ext`, never overwrites/deletes), and auto-stop on dismiss or background.
+    - **Deep Subfolder Search, Top 100 Largest Files, Recent & Go to Path (`FolderAnalysisSheet` / `FMNavigationStore`)**: Cancellable async recursive search (500-match cap), fast `fstatat` Top 100 regular-file analyzer, 15-entry `Recent` folder history with Clear, and `/var/` / `/private/var/` clipboard-aware `Go to Path…`.
+    - **POSIX File/Folder Permission Editor (`InfoViewer`)**: Safe scoped `chmod` UI for user app data and App Group subpaths (strictly blocks container roots, `SystemGroup`, `Bundle`, `Daemon`, `System`, symlinks, and non-`mobile` owners) with one-tap **Read-Only (`0555`/`0444`)**, **Restore Read-Write (`0755`/`0644`)**, custom `u/g/o` toggles, and `lstat` verification.
+    - **Fast Cache Cleaner & Selection Menu (`CacheCleanerView`)**: Switched to `.userInitiated` QoS, added per-scan `deniedContainers` skip cache, fast POSIX `opendir`/`readdir`/`fstatat` sizing, live scan progress + **Stop** button, and **Select (`Select All` / `Invert Selection` / `Select None`)** menu (clearing hidden search-filtered rows as well).
+    - **`iOS 27.3 beta 2+` Patched Sentinel, `27.3 beta 1` Notice & Read-Only `LiveContainer` Diagnostics (`DeviceInfoHelpers` / `WorseQuerySwift` / `ContentView` / `ErosionApp` / `GestaltView`)**:
+      - Distinguishes `27.3 beta 1` (`24C503*`) from `worse_query`-patched `27.3 beta 2+` (`24C504*+` / `26.7.3+`), surfaces clear EN/ZH Home & error diagnostics without force-quitting, and shows a read-only `eligibilityd` CH/A notice on `27.3 beta 1`;
+      - Detects read-only `LiveContainer` execution (`LC_HOME_PATH` env var) and displays clear EN/ZH guidance in startup logs, Home alert card, and container authorization failures advising users to check host App Group settings in LiveContainer or install standalone.
+    - **Additional Open-Source Credits**: Added GPLv3 acknowledgments for **[kolbicz / WQFiles](https://github.com/kolbicz/WQFiles)** and **[yangokok886 / WCMigrate](https://github.com/yangokok886/WCMigrate)**.

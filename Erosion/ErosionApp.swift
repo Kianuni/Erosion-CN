@@ -97,6 +97,11 @@ struct ErosionApp: App {
                 }
                 group = wq.getAppGroup()
                 print(L("(wq) 当前使用 App Group：\(group)"))
+                if isRunningInLiveContainer() {
+                    print(LocalizationManager.isEnglish
+                        ? "[!] (lc) Currently running inside LiveContainer: if container authorization fails, check host App Group settings in LiveContainer or install standalone."
+                        : "[!] (lc) 当前运行在 LiveContainer 内，若遇容器授权失败，请在 LiveContainer 应用设置中检查宿主 App Group 配置，或使用独立侧载安装。")
+                }
             }
             .overlay {
                 if mgr.shouldRespring {

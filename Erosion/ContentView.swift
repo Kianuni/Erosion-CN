@@ -34,6 +34,23 @@ struct ContentView: View {
                     }
                 }
 
+                if isRunningInLiveContainer() {
+                    Section {
+                        CompactAlert(
+                            title: LocalizationManager.isEnglish
+                                ? "Running Inside LiveContainer"
+                                : "检测到当前运行在 LiveContainer 内",
+                            symbol: "shippingbox.circle.fill",
+                            text: LocalizationManager.isEnglish
+                                ? "Currently running inside LiveContainer: if container authorization fails, please check host App Group configuration in LiveContainer's app settings, or install as a standalone sideloaded app."
+                                : "当前运行在 LiveContainer 内，若遇到容器授权失败，请在 LiveContainer 应用设置中检查宿主 App Group 配置，或使用独立侧载安装。",
+                            color: .orange
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 if stagingVault.activeStagedItemsCount > 0 {
                     Section {
                         CompactAlert(
