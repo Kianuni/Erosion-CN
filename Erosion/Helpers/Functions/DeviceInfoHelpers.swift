@@ -30,6 +30,46 @@ func isSupported() -> Bool {
 //    return false
 }
 
+/// Returns `true` if the current iOS version/build patches `worse_query` (26.7.3+, 27.3 beta 2+ / final, 27.4+, or 28+).
+func isWorseQueryPatchedOS() -> Bool {
+    return isPatchedWorseQueryOS(version: vrs, build: buildNumber())
+}
+
+/// Returns `true` specifically on iOS 27.3 beta 1 (`24C503*`), where `worse_query` remains unpatched.
+func isIOS27_3Beta1() -> Bool {
+    return vrs.majorVersion == 27 && vrs.minorVersion == 3 && !isWorseQueryPatchedOS()
+}
+
+/// Evaluates whether the supplied OS version and build string correspond to a build where `worse_query` is patched.
+func isPatchedWorseQueryOS(version: OperatingSystemVersion, build: String) -> Bool {
+    if version.majorVersion > 27 {
+        return true
+    }
+    if version.majorVersion == 27 {
+        if version.minorVersion > 3 {
+            return true
+        }
+        if version.minorVersion == 3 {
+            if version.patchVersion > 0 {
+                return true
+            }
+            let normalizedBuild = build.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if normalizedBuild.hasPrefix("24C503") {
+                return false
+            }
+            if normalizedBuild.hasPrefix("24C") {
+                return true
+            }
+            return false
+        }
+        return false
+    }
+    if version.majorVersion == 26 {
+        return version.minorVersion > 7 || (version.minorVersion == 7 && version.patchVersion >= 3)
+    }
+    return false
+}
+
 func doubleSysVrs() -> Double {
     let pieces = [String(vrs.majorVersion), String(vrs.minorVersion)]
     let combined = pieces.joined(separator: ".")
