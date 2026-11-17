@@ -20,6 +20,7 @@ struct FolderRow: View {
     @State private var folderType: FolderType = .normal
     
     @State private var showInfo = false
+    @State private var showWiFiShare = false
     
     var body: some View {
         NavigationLink(destination: FileBrowserView(path: file.destURL, shouldGrant: shouldGrant)) {
@@ -51,6 +52,9 @@ struct FolderRow: View {
         }
         .sheet(isPresented: $showInfo) {
             InfoViewer(file)
+        }
+        .sheet(isPresented: $showWiFiShare) {
+            WiFiShareSheet(rootURL: file.destURL)
         }
         .quickLookPreview($previewURL)
         .contextMenu {
@@ -88,6 +92,15 @@ struct FolderRow: View {
                     }
                 } label: {
                     Label("分享", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    showWiFiShare = true
+                } label: {
+                    Label(
+                        LocalizationManager.isEnglish ? "Wi-Fi File Sharing" : "Wi-Fi 无线传输",
+                        systemImage: "wifi"
+                    )
                 }
                 
                 Divider()

@@ -45,6 +45,10 @@ struct FileBrowserView: View {
     @AppStorage("useMonospaced") var useMonospaced = true
     
     @State private var showFileImporter = false
+    @State private var showWiFiShare = false
+    @State private var showFolderAnalysis = false
+    @State private var pendingAnalysisNavURL: URL?
+    @State private var analysisNavigateURL: URL?
     @State private var showFailure = false
     @State private var failMsg = ""
     @State private var isLoading = false
@@ -202,6 +206,24 @@ struct FileBrowserView: View {
                         } label: {
                             Label("导入文件", systemImage: "arrow.down.doc")
                         }
+
+                        Button {
+                            showFolderAnalysis = true
+                        } label: {
+                            Label(
+                                LocalizationManager.isEnglish ? "Deep Search & Large Files" : "深度搜索与大文件",
+                                systemImage: "magnifyingglass.circle"
+                            )
+                        }
+
+                        Button {
+                            showWiFiShare = true
+                        } label: {
+                            Label(
+                                LocalizationManager.isEnglish ? "Wi-Fi File Sharing" : "Wi-Fi 无线传输",
+                                systemImage: "wifi"
+                            )
+                        }
                         Divider()
                     }
                     NavigationLink {
@@ -260,6 +282,27 @@ struct FileBrowserView: View {
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             handleImport(result)
         }
+        .sheet(isPresented: $showWiFiShare) {
+            WiFiShareSheet(rootURL: path)
+        }
+        .sheet(isPresented: $showFolderAnalysis, onDismiss: {
+            if let target = pendingAnalysisNavURL {
+                pendingAnalysisNavURL = nil
+                analysisNavigateURL = target
+            }
+        }) {
+            FolderAnalysisSheet(rootURL: path) { targetURL in
+                let targetCanon = FMNavigationStore.canonicalPath(targetURL.path)
+                let currentCanon = FMNavigationStore.canonicalPath(path.path)
+                if targetCanon != currentCanon {
+                    pendingAnalysisNavURL = targetURL
+                }
+                showFolderAnalysis = false
+            }
+        }
+        .navigationDestination(item: $analysisNavigateURL) { targetURL in
+            FileBrowserView(path: targetURL, shouldGrant: true)
+        }
         .refreshable {
             mgr.refreshFiles.toggle()
         }
@@ -269,18 +312,27 @@ struct FileBrowserView: View {
                 let sorted = sortFiles(files: mgr.storedFiles)
                 unfilteredFiles = sorted
                 dirFiles = filterFiles(sorted, query: searchText)
+                if !isContainer {
+                    FMNavigationStore.shared.record(url: path)
+                }
             } else if isContainer && hasLoaded {
                 // do nothing as it's already being stored in the variable
             } else {
                 if shouldGrant {
                     let res = wq.grantAccess(path: path.path, requireWrite: false)
                     if res.0 {
+                        if !isContainer {
+                            FMNavigationStore.shared.record(url: path)
+                        }
                         loadFilesFromPath()
                     } else {
                         showFailure = true
                         failMsg = L("无权访问该目录。")
                     }
                 } else {
+                    if !isContainer {
+                        FMNavigationStore.shared.record(url: path)
+                    }
                     loadFilesFromPath()
                 }
             }
