@@ -5,7 +5,7 @@
   <h1>Erosion-CN (Bilingual Edition)</h1>
   <p>An iOS / iPadOS System Customization, Cross-Container &amp; Bootloop-Hardened MobileGestalt Research Toolkit powered by <a href="https://github.com/forcequitOS/worse_query">worse_query</a></p>
   <p>Supports iOS / iPadOS 27.0 – 27.2.1 &amp; 27.3 beta 1 (Full Support) and iOS / iPadOS 26.x (Partial Support).</p>
-  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow Routing &amp; Config Doctor</a></p>
+  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow Routing &amp; Config Doctor</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens macOS Inspector</a></p>
   <p>
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=Latest%20Release"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20Downloads"></a>
@@ -128,7 +128,7 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 - **iOS 27.3 beta on China (`CH/A`) hardware: all slots correct, network fine, still fails**:
   - iOS 27.3 beta 1 added a China-specific AI policy branch. If Photos' local eligibility check (`GenerativeFunctionsFoundation`) detects `CH` hardware from any source, it looks up a "CN region policy" that Apple hasn't published yet, so the request is blocked **before any network traffic**. Log signature: `Eligibility returned no CN region policy on a CH region code device`. The check does not read MobileGestalt's cached `RegionCode` (it triggers even when the Inspector shows `LL`), so **MobileGestalt edits cannot bypass it**. Do not inject uncached keys, which triggers a cache reset at boot. Confirmed in [#13](https://github.com/Kianuni/Erosion-CN/issues/13), [#22](https://github.com/Kianuni/Erosion-CN/issues/22), [#28](https://github.com/Kianuni/Erosion-CN/issues/28).
   - **Fix**: return to **iOS 27.2.x** if Apple still signs it (27.2.1 has no such check). Run **One-Tap Factory Restore** (or **Clean Cache Rebuild**) and back up to a computer first; a 27.3 backup cannot be restored onto 27.2.1. Or stay on 27.3 beta and wait for Apple to change it. Siri chat, Writing Tools, and Camera Control Visual Intelligence (OpenAI / Google) are unaffected.
-- **How to tell them apart**: on a Mac, reproduce the error once, run `sudo log collect --device --last 5m --output ~/Desktop/pcc.logarchive`, then `log show ~/Desktop/pcc.logarchive --style compact --predicate 'process == "privatecloudcomputed" OR process == "modelmanagerd" OR process == "Photos"' | grep -E "1009|Rate limited|region policy|InferenceError"`. `1009` means rate limit; `no CN region policy` means the 27.3 beta check.
+- **How to tell them apart**: on a Mac, reproduce the error once, run `sudo log collect --device --last 5m --output ~/Desktop/pcc.logarchive`, then `log show ~/Desktop/pcc.logarchive --style compact --predicate 'process == "privatecloudcomputed" OR process == "modelmanagerd" OR process == "Photos"' | grep -E "1009|Rate limited|region policy|InferenceError"`. `1009` means rate limit; `no CN region policy` means the 27.3 beta check. Or connect your iPhone over USB to **[AppleLens](https://github.com/Kianuni/AppleLens)** to translate `32033 / 1009 / 27.3 policy` logs automatically without `sudo`.
 
 ### 3. About shows `LL/A`, why haven't Apple Intelligence, Siri, or `Add eSIM` appeared yet?
 1. **Cold Reboot required**: Binary `CacheData` changes (`green-tea = false`) require a **full manual power-off and reboot** (Respring is not enough). Verify in **Live Inspector** that `green-tea` live value is `false (Bool)`.
@@ -142,13 +142,18 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 
 ---
 
-## Related Open-Source Projects (Kianuni Ecosystem)
+## Ecosystem
 
-If you find **Erosion-CN** helpful, check out our other open-source iOS tools:
+**Erosion-CN** (Device Enablement), **[AppleFlow](https://github.com/Kianuni/AppleFlow)** (Zero-MitM Routing), and **[AppleLens](https://github.com/Kianuni/AppleLens)** (macOS Observability & USB Diagnostics) form an integrated open-source stack for Apple Intelligence — alongside our other Apple privacy & customization tools:
+
+```text
+  [1. Erosion-CN] Device Enablement ──▶ [2. AppleFlow] Zero-MitM Routing ──▶ [3. AppleLens] macOS Observability · Probe · Report Lens
+```
 
 | Project | Description | Highlights |
 | :--- | :--- | :--- |
 | **[AppleFlow](https://github.com/Kianuni/AppleFlow)** | Zero-MitM routing for Apple Intelligence, PCC, and Siri, paired with a local **[Web Config Doctor & Probe](https://kianuni.github.io/AppleFlow/)** | Surge / Loon / Shadowrocket / Stash / Mihomo / QX / Sing-box |
+| **[AppleLens](https://github.com/Kianuni/AppleLens)** | Zero-MitM, read-only native macOS Tri-State AI Radar, USB iPhone log translator, 4-lane routing/QUIC probe & `Apple_Intelligence_Report.json` viewer | macOS 14.0+ App / CLI / USB iPhone Diagnostics |
 | **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% read-only iOS sandbox escape scanner, sideloaded IPA auditor & firmware CVE guard | iOS / iPadOS 26.2+ – 27.x security auditing |
 | **[Camlo](https://github.com/Kianuni/Camlo)** | Bring your iPhone lock screen to life: computer-free slide-to-unlock animations, glasses-free 3D & live wallpapers | iOS / iPadOS 26 – 27 lock screen customization |
 | **[Enkard](https://github.com/Kianuni/Enkard)** | Purely offline, zero-cloud encrypted iPhone card vault bound to Apple Secure Enclave hardware | Bank-grade local storage for sensitive cards & credentials |

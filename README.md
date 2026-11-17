@@ -5,7 +5,7 @@
   <h1>Erosion-CN</h1>
   <p>基于 <a href="https://github.com/forcequitOS/worse_query">worse_query</a> 的 iOS / iPadOS 系统配置与 MobileGestalt 研究工具箱（中英双语 · 防白苹果安全加固版）</p>
   <p>支持 iOS / iPadOS 27.0 – 27.2 / 27.3 beta 1（完整支持）以及 iOS / iPadOS 26.x（部分支持）。</p>
-  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow 配套分流与排雷台</a></p>
+  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow 配套分流与排雷台</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens 观测与排障台</a></p>
   <p>
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20%E4%B8%8B%E8%BD%BD%E9%87%8F"></a>
@@ -197,13 +197,18 @@ chmod +x ipabuild.sh
 
 ---
 
-## 更多开源项目推荐 (Kianuni Ecosystem)
+## 协同生态 (Ecosystem)
 
-如果你喜欢 **Erosion-CN**，欢迎关注同系列其他 iOS 开源工具（全部坚持开源透明、无暗桩）：
+**Erosion-CN**（底层准入）、**[AppleFlow](https://github.com/Kianuni/AppleFlow)**（零 MitM 分流）与 **[AppleLens](https://github.com/Kianuni/AppleLens)**（macOS 观测与 USB 排障）共同组成面向 Apple Intelligence 的完整开源工具链；此外，也欢迎搭配 Kianuni 旗下的其他安全、隐私与个性化开源工具（全部开源透明、无暗桩）：
+
+```text
+  [1. Erosion-CN] 底层准入 ──▶ [2. AppleFlow] 零 MitM 分流 ──▶ [3. AppleLens] macOS 观测 · 探针 · 报告解读
+```
 
 | 项目 | 定位与核心特性 | 适用系统 / 场景 |
 | :--- | :--- | :--- |
 | **[AppleFlow](https://github.com/Kianuni/AppleFlow)** | 零 MitM 的 Apple 智能、PCC 隐私云计算与中文 Siri 极简分流方案，附带 **[在线配置体检与出口探针台](https://kianuni.github.io/AppleFlow/)** | Surge / Loon / Shadowrocket / Stash / Mihomo / QX / Sing-box |
+| **[AppleLens](https://github.com/Kianuni/AppleLens)** | 零 MitM、纯只读的 macOS 原生 Apple 智能三态雷达、USB 真机日志翻译排障、四路分流探针与透明报告解读工作台 | macOS 14.0+ 桌面端 / CLI / USB 连线 iPhone 排障 |
 | **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% 只读开源的沙盒越权检测、侧载 IPA 安全审查与固件 CVE 防护工具 | iOS / iPadOS 26.2+ – 27.x 侧载排雷与设备自检 |
 | **[Camlo](https://github.com/Kianuni/Camlo)** | **Camlo · 开幕** — 免电脑一键换上滑动解锁变身、裸眼 3D 与动态锁屏壁纸，让 iPhone 锁屏活起来 | iOS / iPadOS 26 – 27 个性化锁屏美化 |
 | **[Enkard](https://github.com/Kianuni/Enkard)** | 纯离线、零云同步、绑定 Apple Secure Enclave 硬件安全芯片的 iPhone 银行级加密卡包 | 个人隐私卡券 / 敏感凭据本地加密收纳 |
