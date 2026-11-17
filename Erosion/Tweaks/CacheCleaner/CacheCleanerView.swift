@@ -6,8 +6,9 @@
 //
 
 import SwiftUI
+import Darwin
 
-struct ContainerCacheEntry: Identifiable {
+struct ContainerCacheEntry: Identifiable, Sendable {
     let id: String
     let bundleID: String
     let displayTitle: String
@@ -16,26 +17,67 @@ struct ContainerCacheEntry: Identifiable {
     var tmpBytes: Int64
     var isSelected: Bool
 
-    var totalCleanableBytes: Int64 {
+    nonisolated var totalCleanableBytes: Int64 {
         cachesBytes + tmpBytes
+    }
+}
+
+private final class ScanCancellationFlag: @unchecked Sendable {
+    nonisolated let id = UUID()
+    nonisolated private let lock = NSLock()
+    nonisolated(unsafe) private var cancelled = false
+
+    nonisolated init() {}
+
+    nonisolated func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    nonisolated var isCancelled: Bool {
+        lock.lock()
+        let value = cancelled
+        lock.unlock()
+        return value
     }
 }
 
 struct CacheCleanerView: View {
     @State private var isScanning = false
+    @State private var isStopping = false
     @State private var isCleaning = false
     @State private var entries: [ContainerCacheEntry] = []
     @State private var searchText = ""
     @State private var includeSystemContainers = false
+    @State private var scanCompletedCount = 0
+    @State private var scanTotalCount = 0
+    @State private var activeScanToken: ScanCancellationFlag?
     @AppStorage("totalFreedBytesHistory") private var totalFreedBytesHistory: Int = 0
 
-    private static let protectedBundleIDs: Set<String> = [
+    nonisolated private static let autoSelectThresholdBytes: Int64 = 1024 * 1024
+
+    nonisolated private static let protectedBundleIDs: Set<String> = [
         "com.jbdotparty.Erosion",
         "com.apple.PosterBoard",
         "com.apple.springboard",
         "com.apple.Preferences",
         "com.apple.mobilephone"
     ]
+
+    private var scanProgressText: String {
+        if scanTotalCount > 0 {
+            if isStopping {
+                return LocalizationManager.isEnglish
+                    ? "Stopping (\(scanCompletedCount) / \(scanTotalCount))..."
+                    : "正在停止 (\(scanCompletedCount) / \(scanTotalCount))..."
+            }
+            return LocalizationManager.isEnglish
+                ? "Scanning \(scanCompletedCount) / \(scanTotalCount)"
+                : "已扫描 \(scanCompletedCount) / \(scanTotalCount)"
+        }
+        return L("正在扫描各应用容器缓存体积...")
+    }
 
     private var filteredEntries: [ContainerCacheEntry] {
         let base = includeSystemContainers
@@ -131,13 +173,32 @@ struct CacheCleanerView: View {
                 if isScanning || isCleaning {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text(isCleaning ? L("正在安全清理所选容器缓存...") : L("正在扫描各应用容器缓存体积..."))
+                        Text(isCleaning ? L("正在安全清理所选容器缓存...") : scanProgressText)
                             .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        if isScanning {
+                            Spacer()
+                            Button(role: .destructive) {
+                                stopScan()
+                            } label: {
+                                Label(
+                                    LocalizationManager.isEnglish ? "Stop" : "停止",
+                                    systemImage: "stop.circle.fill"
+                                )
+                                .font(.subheadline.weight(.medium))
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isStopping)
+                        }
                     }
                     .padding(.vertical, 6)
-                } else if filteredEntries.isEmpty {
-                    Text("未发现可清理的应用缓存")
-                        .foregroundStyle(.secondary)
+                }
+
+                if filteredEntries.isEmpty {
+                    if !isScanning && !isCleaning {
+                        Text("未发现可清理的应用缓存")
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     ForEach(filteredEntries) { entry in
                         HStack(spacing: 12) {
@@ -149,6 +210,7 @@ struct CacheCleanerView: View {
                                     .imageScale(.large)
                             }
                             .buttonStyle(.plain)
+                            .disabled(isScanning || isCleaning)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(entry.displayTitle)
@@ -174,6 +236,7 @@ struct CacheCleanerView: View {
                                             .font(.caption2)
                                     }
                                     .buttonStyle(.borderless)
+                                    .disabled(isScanning || isCleaning)
 
                                     Button(role: .destructive) {
                                         cleanSingleEntry(entry)
@@ -182,6 +245,7 @@ struct CacheCleanerView: View {
                                             .font(.caption2.weight(.semibold))
                                     }
                                     .buttonStyle(.borderless)
+                                    .disabled(isScanning || isCleaning)
                                 }
                             }
                         }
@@ -192,16 +256,48 @@ struct CacheCleanerView: View {
                 HStack {
                     HeaderLabel(L("容器缓存体积排行 (\(filteredEntries.count))"), symbol: "trash.slash.fill")
                     Spacer()
-                    if !filteredEntries.isEmpty {
-                        Button(filteredEntries.allSatisfy(\.isSelected) ? L("取消全选") : L("全选")) {
-                            let target = !filteredEntries.allSatisfy(\.isSelected)
-                            let visibleIDs = Set(filteredEntries.map(\.id))
-                            for idx in entries.indices where visibleIDs.contains(entries[idx].id) {
-                                entries[idx].isSelected = target
-                            }
+                    Menu {
+                        Button {
+                            selectAllVisible()
+                        } label: {
+                            Label(
+                                LocalizationManager.isEnglish ? "Select All" : "全选当前",
+                                systemImage: "checkmark.circle"
+                            )
                         }
-                        .font(.caption)
+                        .disabled(filteredEntries.isEmpty)
+
+                        Button {
+                            invertVisibleSelection()
+                        } label: {
+                            Label(
+                                LocalizationManager.isEnglish ? "Invert Selection" : "反选当前",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
+                        }
+                        .disabled(filteredEntries.isEmpty)
+
+                        Divider()
+
+                        Button {
+                            clearAllSelections()
+                        } label: {
+                            Label(
+                                LocalizationManager.isEnglish ? "Select None" : "清空已选",
+                                systemImage: "xmark.circle"
+                            )
+                        }
+                        .disabled(entries.isEmpty)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(LocalizationManager.isEnglish ? "Select" : "选择")
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                        }
+                        .font(.caption.weight(.medium))
+                        .textCase(nil)
                     }
+                    .disabled(isScanning || isCleaning || entries.isEmpty)
                 }
             }
         }
@@ -209,12 +305,12 @@ struct CacheCleanerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "搜索应用名称或 Bundle ID")
         .onChange(of: includeSystemContainers) {
-            if includeSystemContainers && !entries.contains(where: { $0.bundleID.hasPrefix("com.apple.") && $0.bundleID != "com.apple.mobilesafari" }) && !isScanning {
+            if includeSystemContainers && !entries.contains(where: { $0.bundleID.hasPrefix("com.apple.") && $0.bundleID != "com.apple.mobilesafari" }) && !isScanning && !isCleaning {
                 scanCaches()
             }
         }
         .onAppear {
-            if entries.isEmpty && !isScanning {
+            if entries.isEmpty && !isScanning && !isCleaning {
                 scanCaches()
             }
         }
@@ -226,74 +322,354 @@ struct CacheCleanerView: View {
         }
     }
 
+    private func selectAllVisible() {
+        let visibleIDs = Set(filteredEntries.map(\.id))
+        for idx in entries.indices where visibleIDs.contains(entries[idx].id) {
+            entries[idx].isSelected = true
+        }
+    }
+
+    private func invertVisibleSelection() {
+        let visibleIDs = Set(filteredEntries.map(\.id))
+        for idx in entries.indices where visibleIDs.contains(entries[idx].id) {
+            entries[idx].isSelected.toggle()
+        }
+    }
+
+    private func clearAllSelections() {
+        for idx in entries.indices {
+            entries[idx].isSelected = false
+        }
+    }
+
+    private func stopScan() {
+        guard isScanning, !isStopping else { return }
+        isStopping = true
+        activeScanToken?.cancel()
+    }
+
     private func scanCaches() {
+        guard !isScanning && !isCleaning else { return }
         let wantSystem = includeSystemContainers
+        let token = ScanCancellationFlag()
+        activeScanToken = token
         isScanning = true
-        DispatchQueue.global(qos: .utility).async {
+        isStopping = false
+        scanCompletedCount = 0
+        scanTotalCount = 0
+        entries = []
+
+        DispatchQueue.global(qos: .userInitiated).async {
             let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
-            var result: [ContainerCacheEntry] = []
-            let selfBID = Bundle.main.bundleIdentifier ?? "com.jbdotparty.Erosion"
-
+            var seenPaths = Set<String>()
+            var uniquePaths: [String] = []
+            uniquePaths.reserveCapacity(rawPaths.count)
             for rawPath in rawPaths {
-                let url = URL(fileURLWithPath: rawPath)
-
-                // Fast pre-filter via CSStore2 without touching containermanagerd IPC!
-                if let knownBID = CSStoreEngine.shared.bundleID(forContainerPath: url.path, allowDiscovery: false) {
-                    if knownBID == selfBID || Self.protectedBundleIDs.contains(knownBID) {
-                        continue
-                    }
-                    if !wantSystem && knownBID.hasPrefix("com.apple.") && knownBID != "com.apple.mobilesafari" {
-                        continue
-                    }
+                let norm = CSStoreEngine.normalizeVarPath(rawPath)
+                if seenPaths.insert(norm).inserted {
+                    uniquePaths.append(rawPath)
                 }
-
-                guard let bid = getBIDFromXattr(url),
-                      !bid.isEmpty,
-                      bid != selfBID,
-                      !Self.protectedBundleIDs.contains(bid) else { continue }
-
-                if !wantSystem && bid.hasPrefix("com.apple.") && bid != "com.apple.mobilesafari" {
-                    continue
-                }
-
-                let wasActive = wq.hasActiveAccess(path: url.path)
-                guard wq.grantAccess(path: url.path, requireWrite: false).0 else { continue }
-                defer {
-                    if !wasActive {
-                        wq.releaseAccess(path: url.path)
-                    }
-                }
-
-                let cachesURL = url.appendingPathComponent("Library/Caches")
-                let tmpURL = url.appendingPathComponent("tmp")
-
-                let cBytes = AppContainerDirectoryHelper.directorySize(at: cachesURL, maxDepth: 5)
-                let tBytes = AppContainerDirectoryHelper.directorySize(at: tmpURL, maxDepth: 4)
-
-                let total = cBytes + tBytes
-                guard total > 4096 else { continue }
-
-                result.append(ContainerCacheEntry(
-                    id: url.lastPathComponent,
-                    bundleID: bid,
-                    displayTitle: AppContainerDirectoryHelper.displayName(for: bid),
-                    containerURL: url,
-                    cachesBytes: cBytes,
-                    tmpBytes: tBytes,
-                    isSelected: !bid.hasPrefix("com.apple.") && total >= 1024 * 1024
-                ))
             }
 
-            result.sort { $0.totalCleanableBytes > $1.totalCleanableBytes }
+            let totalCount = uniquePaths.count
+            DispatchQueue.main.async {
+                guard self.activeScanToken?.id == token.id else { return }
+                self.scanTotalCount = totalCount
+            }
+
+            var deniedContainers: Set<String> = []
+            var result: [ContainerCacheEntry] = []
+            let selfBID = Bundle.main.bundleIdentifier ?? "com.jbdotparty.Erosion"
+            var completedCount = 0
+            var lastUIUpdate = CFAbsoluteTimeGetCurrent()
+
+            for rawPath in uniquePaths {
+                if token.isCancelled { break }
+                let entry = Self.scanSingleContainer(
+                    rawPath: rawPath,
+                    wantSystem: wantSystem,
+                    selfBID: selfBID,
+                    deniedContainers: &deniedContainers,
+                    cancelFlag: token
+                )
+                if token.isCancelled { break }
+                completedCount += 1
+                if let entry {
+                    result.append(entry)
+                }
+
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastUIUpdate >= 0.08 || completedCount == totalCount {
+                    lastUIUpdate = now
+                    let progressSnapshot = completedCount
+                    let sortedSnapshot = Self.sortedEntries(result)
+                    DispatchQueue.main.async {
+                        guard self.activeScanToken?.id == token.id else { return }
+                        self.scanCompletedCount = progressSnapshot
+                        self.entries = sortedSnapshot
+                    }
+                }
+            }
+
+            let finalEntries = Self.finalizeEntries(result)
+            let finalCompleted = completedCount
 
             DispatchQueue.main.async {
-                self.entries = result
+                guard self.activeScanToken?.id == token.id else { return }
+                self.entries = finalEntries
+                self.scanCompletedCount = finalCompleted
                 self.isScanning = false
+                self.isStopping = false
+                self.activeScanToken = nil
             }
         }
     }
 
+    nonisolated private static func sortedEntries(_ items: [ContainerCacheEntry]) -> [ContainerCacheEntry] {
+        items.sorted {
+            if $0.totalCleanableBytes != $1.totalCleanableBytes {
+                return $0.totalCleanableBytes > $1.totalCleanableBytes
+            }
+            return $0.bundleID < $1.bundleID
+        }
+    }
+
+    nonisolated private static func finalizeEntries(_ items: [ContainerCacheEntry]) -> [ContainerCacheEntry] {
+        sortedEntries(items).map { item in
+            var copy = item
+            copy.isSelected = shouldAutoSelect(bundleID: item.bundleID, totalBytes: item.totalCleanableBytes)
+            return copy
+        }
+    }
+
+    nonisolated private static func shouldAutoSelect(bundleID: String, totalBytes: Int64) -> Bool {
+        !bundleID.hasPrefix("com.apple.") && totalBytes >= autoSelectThresholdBytes
+    }
+
+    private static func scanSingleContainer(
+        rawPath: String,
+        wantSystem: Bool,
+        selfBID: String,
+        deniedContainers: inout Set<String>,
+        cancelFlag: ScanCancellationFlag
+    ) -> ContainerCacheEntry? {
+        let url = URL(fileURLWithPath: rawPath)
+        let normPath = CSStoreEngine.normalizeVarPath(url.path)
+        if deniedContainers.contains(normPath) {
+            return nil
+        }
+
+        // Fast pre-filter via CSStore2 without touching containermanagerd IPC!
+        let knownBID = CSStoreEngine.shared.bundleID(forContainerPath: normPath, allowDiscovery: false)
+        if let knownBID, !knownBID.isEmpty {
+            if knownBID == selfBID || protectedBundleIDs.contains(knownBID) {
+                return nil
+            }
+            if !wantSystem && knownBID.hasPrefix("com.apple.") && knownBID != "com.apple.mobilesafari" {
+                return nil
+            }
+        }
+
+        // Grant read access once per container and cache failures in deniedContainers
+        let wasActive = wq.hasActiveAccess(path: url.path)
+        guard wq.grantAccess(path: url.path, requireWrite: false).0 else {
+            deniedContainers.insert(normPath)
+            return nil
+        }
+        defer {
+            if !wasActive {
+                wq.releaseAccess(path: url.path)
+            }
+        }
+
+        let resolvedBID: String?
+        if let knownBID, !knownBID.isEmpty {
+            resolvedBID = knownBID
+        } else {
+            resolvedBID = getBIDFromXattr(url)
+        }
+
+        guard let bid = resolvedBID,
+              !bid.isEmpty,
+              bid != selfBID,
+              !protectedBundleIDs.contains(bid) else {
+            if resolvedBID == nil {
+                deniedContainers.insert(normPath)
+            }
+            return nil
+        }
+
+        if !wantSystem && bid.hasPrefix("com.apple.") && bid != "com.apple.mobilesafari" {
+            return nil
+        }
+
+        let cachesPath = url.appendingPathComponent("Library/Caches").path
+        let tmpPath = url.appendingPathComponent("tmp").path
+
+        let cBytes = fastDirectorySize(atPath: cachesPath, maxDepth: 5, cancelFlag: cancelFlag)
+        if cancelFlag.isCancelled { return nil }
+        let tBytes = fastDirectorySize(atPath: tmpPath, maxDepth: 4, cancelFlag: cancelFlag)
+        if cancelFlag.isCancelled { return nil }
+
+        let total = cBytes + tBytes
+        guard total > 4096 else { return nil }
+
+        return ContainerCacheEntry(
+            id: url.lastPathComponent,
+            bundleID: bid,
+            displayTitle: AppContainerDirectoryHelper.displayName(for: bid),
+            containerURL: url,
+            cachesBytes: cBytes,
+            tmpBytes: tBytes,
+            isSelected: shouldAutoSelect(bundleID: bid, totalBytes: total)
+        )
+    }
+
+    nonisolated private static func fastDirectorySize(
+        atPath path: String,
+        maxDepth: Int,
+        cancelFlag: ScanCancellationFlag? = nil
+    ) -> Int64 {
+        var rootSt = stat()
+        guard lstat(path, &rootSt) == 0, (rootSt.st_mode & S_IFMT) == S_IFDIR else {
+            return 0
+        }
+        var pathBuf = Array(path.utf8CString)
+        var len = pathBuf.count - 1
+        while len > 1 && pathBuf[len - 1] == 0x2F { // '/'
+            len -= 1
+        }
+        pathBuf[len] = 0
+        pathBuf.reserveCapacity(max(Int(PATH_MAX), len + 256))
+        return fastDirectorySizeRecursive(
+            pathBuf: &pathBuf,
+            pathLen: len,
+            maxDepth: maxDepth,
+            currentDepth: 0,
+            cancelFlag: cancelFlag
+        )
+    }
+
+    nonisolated private static func fastDirectorySizeRecursive(
+        pathBuf: inout [CChar],
+        pathLen: Int,
+        maxDepth: Int,
+        currentDepth: Int,
+        cancelFlag: ScanCancellationFlag?
+    ) -> Int64 {
+        guard currentDepth <= maxDepth else { return 0 }
+        if cancelFlag?.isCancelled == true { return 0 }
+
+        let dir: UnsafeMutablePointer<DIR>? = pathBuf.withUnsafeBufferPointer { buf in
+            guard let base = buf.baseAddress else { return nil }
+            return opendir(base)
+        }
+        guard let dir else { return 0 }
+        defer { closedir(dir) }
+
+        let fd = dirfd(dir)
+        guard fd >= 0,
+              let nameOffset = MemoryLayout<dirent>.offset(of: \dirent.d_name) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        var seenEntries = 0
+
+        while let entryPtr = readdir(dir) {
+            seenEntries += 1
+            if (seenEntries & 0xFF) == 0, cancelFlag?.isCancelled == true {
+                break
+            }
+
+            let nameLen = Int(entryPtr.pointee.d_namlen)
+            guard nameLen > 0, nameLen < Int(MAXPATHLEN) else { continue }
+            let namePtr = UnsafeRawPointer(entryPtr).advanced(by: nameOffset).assumingMemoryBound(to: CChar.self)
+
+            if namePtr[0] == 0x2E { // '.'
+                if nameLen == 1 { continue }
+                if nameLen == 2 && namePtr[1] == 0x2E { continue }
+            }
+
+            let dType = Int32(entryPtr.pointee.d_type)
+            if dType == DT_LNK || dType == DT_FIFO || dType == DT_SOCK || dType == DT_CHR || dType == DT_BLK {
+                continue
+            }
+
+            if dType == DT_DIR {
+                if currentDepth < maxDepth {
+                    total += descendSubdirectory(
+                        namePtr: namePtr,
+                        nameLen: nameLen,
+                        pathBuf: &pathBuf,
+                        pathLen: pathLen,
+                        maxDepth: maxDepth,
+                        currentDepth: currentDepth,
+                        cancelFlag: cancelFlag
+                    )
+                }
+                continue
+            }
+
+            var st = stat()
+            guard fstatat(fd, namePtr, &st, AT_SYMLINK_NOFOLLOW) == 0 else { continue }
+            let mode = st.st_mode & S_IFMT
+            if mode == S_IFREG {
+                if st.st_size > 0 {
+                    total += Int64(st.st_size)
+                }
+            } else if mode == S_IFDIR && currentDepth < maxDepth {
+                total += descendSubdirectory(
+                    namePtr: namePtr,
+                    nameLen: nameLen,
+                    pathBuf: &pathBuf,
+                    pathLen: pathLen,
+                    maxDepth: maxDepth,
+                    currentDepth: currentDepth,
+                    cancelFlag: cancelFlag
+                )
+            }
+        }
+
+        return total
+    }
+
+    nonisolated private static func descendSubdirectory(
+        namePtr: UnsafePointer<CChar>,
+        nameLen: Int,
+        pathBuf: inout [CChar],
+        pathLen: Int,
+        maxDepth: Int,
+        currentDepth: Int,
+        cancelFlag: ScanCancellationFlag?
+    ) -> Int64 {
+        let sepLen = (pathLen == 1 && pathBuf[0] == 0x2F) ? 0 : 1
+        let subLen = pathLen + sepLen + nameLen
+        let needed = subLen + 1
+        if pathBuf.count < needed {
+            pathBuf.append(contentsOf: repeatElement(0, count: needed - pathBuf.count))
+        }
+        if sepLen == 1 {
+            pathBuf[pathLen] = 0x2F // '/'
+        }
+        pathBuf.withUnsafeMutableBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            memcpy(base.advanced(by: pathLen + sepLen), namePtr, nameLen)
+            base[subLen] = 0
+        }
+        let bytes = fastDirectorySizeRecursive(
+            pathBuf: &pathBuf,
+            pathLen: subLen,
+            maxDepth: maxDepth,
+            currentDepth: currentDepth + 1,
+            cancelFlag: cancelFlag
+        )
+        pathBuf[pathLen] = 0
+        return bytes
+    }
+
     private func cleanSingleEntry(_ entry: ContainerCacheEntry) {
+        guard !isScanning && !isCleaning else { return }
         isCleaning = true
         DispatchQueue.global(qos: .userInitiated).async {
             let freed = Self.purgeCacheContents(for: entry)
@@ -313,6 +689,7 @@ struct CacheCleanerView: View {
     }
 
     private func cleanSelectedEntries() {
+        guard !isScanning && !isCleaning else { return }
         let targets = filteredEntries.filter(\.isSelected)
         guard !targets.isEmpty else { return }
         isCleaning = true
@@ -362,7 +739,7 @@ struct CacheCleanerView: View {
                     wq.releaseAccess(path: dir.path)
                 }
             }
-            let before = AppContainerDirectoryHelper.directorySize(at: dir, maxDepth: 5)
+            let before = fastDirectorySize(atPath: dir.path, maxDepth: 5)
             guard let children = try? fm.contentsOfDirectory(atPath: dir.path) else { continue }
             for child in children {
                 guard !child.contains("/"), child != ".", child != ".." else { continue }
@@ -378,7 +755,7 @@ struct CacheCleanerView: View {
                     try? fm.removeItem(at: childURL)
                 }
             }
-            let after = AppContainerDirectoryHelper.directorySize(at: dir, maxDepth: 5)
+            let after = fastDirectorySize(atPath: dir.path, maxDepth: 5)
             totalFreed += max(0, before - after)
         }
         return totalFreed
