@@ -87,6 +87,11 @@
     - **Wi-Fi 无线互传认证兼容、浏览器排查指引与按钮排版修复 (`WiFiShareServer` / `WiFiShareSheet`)**：
       - `WiFiShareEngine.isAuthorized` 放宽用户名校验为大小写不敏感的 `erosion` 或直接留空（仍严格要求 6 位随机 PIN 恒定时间校验），解决浏览器输完密码仍反复弹窗的问题；
       - 优化 `WiFiShareSheet` 中「复制 / 复制密码」按钮为紧凑胶囊排版（不再拉伸过长，并新增用户名一键复制），同时加入 **「浏览器打开说明」** 卡片，推荐优先使用 **Safari**、说明 Mac 上 Chrome/Edge/Arc **「本地网络」** 权限开启步骤、`http://` 协议提醒及前台保活规则。
+18. **开屏广告锁死能力全面加固、AppGroup/配置文件扫描、自定义收藏与边界指引（`v1.0.3`）**
+    - **防重建占位锁 (`.erosion_adlock` `0444` + 目录 `0555`)**：锁死广告目录清空物料后，自动在目录内写入 0 字节 `0444` 只读占位文件 `.erosion_adlock` 再将目录锁死为 `0555`，防止部分 SDK 在可写父目录下通过 `removeItem` 删空目录并重建；恢复读写 (`0755`) 时自动清除占位文件，且兼容识别旧版空 `0555` 目录一键 **「加固防重建」**；
+    - **`AppGroup` 共享容器扫描与单文件广告配置锁死**：拓展扫描 `/var/mobile/Containers/Shared/AppGroup`（自动屏蔽系统组与代理工具共享组），同时精准匹配 `splash_ad.json`、`splash_ad.plist`、`launch_ad.*` 等常见广告配置文件，支持页面内直连 `PlistViewer`/`TextViewer` **预览内容**，并支持原地写入最小合法空 JSON/Plist 后锁定为 `0444`；
+    - **自定义广告路径收藏 (`AdCustomWatchStore`)**：支持在「开屏广告缓存精准锁死」右上角 **`+`** 手动校验添加路径，或在 `文件浏览` 长按任意合规目录/配置文件点击 **「加入广告锁死列表」**（严格拦截系统目录、容器根目录、`Downloads`、符号链接与主偏好 plist）；
+    - **新增「生效边界与搭配建议」独立卡片**：在去广告页面明确提示本地锁死只拦截素材落盘而广告网络请求仍在，推荐搭配代理工具（Surge / Quantumult X / Loon / Stash / Shadowrocket 等）去广告规则屏蔽网络请求，双管齐下实现精准拦截。
 
 ---
 
@@ -158,3 +163,8 @@
     - **Wi-Fi File Sharing Auth Flexibility, Browser Guide & Compact Buttons (`WiFiShareServer` / `WiFiShareSheet`)**:
       - Updated `WiFiShareEngine.isAuthorized` to accept case-insensitive `'erosion'` or a blank username when the 6-digit random PIN matches in constant time, eliminating browser password-prompt loops;
       - Replaced stretched Copy / Copy PIN row buttons with compact `.small` pill buttons (plus a Copy Username button) and added a bilingual **Browser & Connection Tips** section recommending **Safari** first, detailing macOS **Privacy & Security → Local Network** steps for Chrome/Edge/Arc, `http://` usage, and foreground keep-awake behavior.
+18. **Splash Ad Blocker Anti-Recreate Hardening, AppGroup & Config File Scan, Custom Watch List & Boundary Guide (`v1.0.3`)**
+    - **Anti-Recreate Sentinel Lock (`0555` + `0444` `.erosion_adlock`)**: Locking an ad folder now wipes cached assets, places a 0-byte `0444` sentinel file (`.erosion_adlock`) inside, and sets `0555` on the directory so SDKs cannot wipe and recreate an empty `0555` folder under a writable parent; unlocking cleanly removes the sentinel, and legacy weak `0555` folders show a one-tap **Harden** action;
+    - **`Shared/AppGroup` Scanning & Single-File Config Wipe (`0444`) + Inline Preview**: Extends scanning to `/var/mobile/Containers/Shared/AppGroup` (excluding system/proxy tool groups) and recognizes standalone splash ad config files (`splash_ad.json`, `splash_ad.plist`, `launch_ad.*`, etc.) with inline `PlistViewer` / `TextViewer` **Preview** and safe in-place minimal empty overwrite + `0444` locking;
+    - **Custom Watch List (`AdCustomWatchStore`)**: Add custom folders/files via the top-right **`+`** button or by long-pressing any eligible item in File Browser → **Add to Ad Blocker** (enforcing strict safety checks against system paths, container roots, `Downloads`, symlinks, and core app preference plists);
+    - **In-App Boundary & Network Pairing Card**: Clearly explains that local locking stops disk caching while live ad requests still fire, recommending pairing with proxy ad-blocking rules (Surge / Quantumult X / Loon / Stash / Shadowrocket, etc.) for complete ad blocking.

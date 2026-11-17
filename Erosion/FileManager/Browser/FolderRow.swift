@@ -102,6 +102,33 @@ struct FolderRow: View {
                         systemImage: "wifi"
                     )
                 }
+
+                if AdCustomWatchStore.shared.canAddAsCustomTarget(url: file.fileURL, owner: file.owner) {
+                    let isWatched = AdCustomWatchStore.shared.contains(url: file.fileURL)
+                    Button {
+                        if isWatched {
+                            AdCustomWatchStore.shared.remove(fullPath: file.fileURL.path)
+                            Haptic.shared.play(.soft)
+                        } else {
+                            let canon = AdCustomWatchStore.canonicalVarPath(file.fileURL.standardizedFileURL.path)
+                            AdCustomWatchStore.shared.addValidatedRule(canonicalPath: canon)
+                            Haptic.shared.notify(.success)
+                            Alertinator.shared.alert(
+                                title: LocalizationManager.isEnglish ? "Added to Ad Blocker" : "已加入广告锁死列表",
+                                body: LocalizationManager.isEnglish
+                                    ? "Manage or lock \"\(file.name)\" anytime in Splash Ad Blocker."
+                                    : "已收藏目录「\(file.name)」，可在「开屏广告缓存精准锁死」页直接管理或一键锁死。"
+                            )
+                        }
+                    } label: {
+                        Label(
+                            isWatched
+                                ? (LocalizationManager.isEnglish ? "Remove from Ad Blocker" : "移出广告锁死列表")
+                                : (LocalizationManager.isEnglish ? "Add to Ad Blocker" : "加入广告锁死列表"),
+                            systemImage: isWatched ? "lock.slash" : "lock.shield"
+                        )
+                    }
+                }
                 
                 Divider()
                 

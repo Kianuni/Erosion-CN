@@ -2,55 +2,218 @@
 //  AdCacheBlockerView.swift
 //  Erosion
 //
-//  Accurate per-app splash & ad-SDK cache folder detector, one-tap locator,
-//  and read-only POSIX chmod (0555 / 0755) blocker.
+//  Accurate per-app & AppGroup splash/ad-SDK cache detector, custom watch list,
+//  one-tap locator/preview, and anti-recreate read-only POSIX chmod (0555 + 0444 sentinel / 0444 file).
 //
 
 import SwiftUI
 import Darwin
+import UIKit
 
-struct AdCacheFolderItem: Identifiable, Hashable, Sendable {
+nonisolated struct CustomAdWatchRule: Codable, Identifiable, Hashable, Sendable {
+    var id: String { fullPath }
+    let fullPath: String
+    let note: String
+    let addedAt: Date
+}
+
+/// Thread-safe persistent store for user-selected custom ad folders and ad config files.
+nonisolated final class AdCustomWatchStore: @unchecked Sendable {
+    static let shared = AdCustomWatchStore()
+    static let didChangeNotification = Notification.Name("erosion.adCustomWatchDidChange")
+
+    private static let defaultsKey = "erosion.adBlocker.customPaths.v1"
+    private let lock = NSLock()
+    private var cachedRules: [CustomAdWatchRule]
+
+    private static let forbiddenCustomNames: Set<String> = [
+        "documents", "library", "caches", "tmp", "preferences", "application support",
+        "splashboard", "webkit", "fscacheddata", "com.apple.nsurlsessiond",
+        "cookies", "httpstorages", "saved application state", "cloudkit",
+        "snapshots", "flutter_assets", "downloads", "download",
+        "uploads", "upload", "databases", "database", "system", "bundle"
+    ]
+
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+           let decoded = try? JSONDecoder().decode([CustomAdWatchRule].self, from: data) {
+            self.cachedRules = decoded
+        } else {
+            self.cachedRules = []
+        }
+    }
+
+    static func canonicalVarPath(_ rawPath: String) -> String {
+        var p = (rawPath as NSString).standardizingPath
+        if p.hasPrefix("/private/var/") {
+            p = String(p.dropFirst("/private".count))
+        } else if p == "/private/var" {
+            p = "/var"
+        }
+        while p.count > 1 && p.hasSuffix("/") {
+            p.removeLast()
+        }
+        return p
+    }
+
+    static func containerRootPath(forCanonicalPath path: String) -> String? {
+        for base in [
+            "/var/mobile/Containers/Data/Application/",
+            "/var/mobile/Containers/Shared/AppGroup/"
+        ] where path.hasPrefix(base) {
+            let rel = String(path.dropFirst(base.count))
+            let parts = rel.split(separator: "/", omittingEmptySubsequences: true)
+            guard parts.count >= 2, !parts[0].isEmpty else { return nil }
+            return base + String(parts[0])
+        }
+        return nil
+    }
+
+    func canAddAsCustomTarget(url: URL, owner: String) -> Bool {
+        guard canSafelyModifyPermissions(url: url, owner: owner) else {
+            return false
+        }
+        let canon = Self.canonicalVarPath(url.standardizedFileURL.path)
+        var st = stat()
+        guard lstat(canon, &st) == 0 else { return false }
+        let fmt = st.st_mode & S_IFMT
+        guard fmt == S_IFDIR || fmt == S_IFREG else { return false }
+
+        let nameLower = URL(fileURLWithPath: canon).lastPathComponent.lowercased()
+        if Self.forbiddenCustomNames.contains(nameLower) || nameLower.hasPrefix(".com.apple.") {
+            return false
+        }
+
+        // Protect main App NSUserDefaults / system preferences inside Library/Preferences
+        let parentLower = URL(fileURLWithPath: canon).deletingLastPathComponent().lastPathComponent.lowercased()
+        if fmt == S_IFREG && parentLower == "preferences" {
+            let looksAdRelated = nameLower.contains("ad") || nameLower.contains("splash") || nameLower.contains("launch")
+            if !looksAdRelated {
+                return false
+            }
+        }
+        return true
+    }
+
+    func rulesSnapshot() -> [CustomAdWatchRule] {
+        lock.lock()
+        let copy = cachedRules
+        lock.unlock()
+        return copy
+    }
+
+    func contains(url: URL) -> Bool {
+        let canon = Self.canonicalVarPath(url.standardizedFileURL.path)
+        lock.lock()
+        let hit = cachedRules.contains { $0.fullPath == canon }
+        lock.unlock()
+        return hit
+    }
+
+    @discardableResult
+    func addValidatedRule(canonicalPath: String, note: String = "") -> CustomAdWatchRule {
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rule = CustomAdWatchRule(fullPath: canonicalPath, note: cleanNote, addedAt: Date())
+
+        lock.lock()
+        if let idx = cachedRules.firstIndex(where: { $0.fullPath == canonicalPath }) {
+            cachedRules[idx] = rule
+        } else {
+            cachedRules.insert(rule, at: 0)
+        }
+        persistLocked()
+        lock.unlock()
+
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+        }
+        return rule
+    }
+
+    func remove(fullPath: String) {
+        let canon = Self.canonicalVarPath(fullPath)
+        lock.lock()
+        let oldCount = cachedRules.count
+        cachedRules.removeAll { $0.fullPath == canon }
+        let changed = cachedRules.count != oldCount
+        if changed {
+            persistLocked()
+        }
+        lock.unlock()
+
+        if changed {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+            }
+        }
+    }
+
+    private func persistLocked() {
+        if let data = try? JSONEncoder().encode(cachedRules) {
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+}
+
+nonisolated struct AdCacheFolderItem: Identifiable, Hashable, Sendable {
     let id: String
     let fullPath: String
     let relativePath: String
     let sdkNameZH: String
     let sdkNameEN: String
+    let isDirectory: Bool
+    var isCustomRule: Bool
     var cachedBytes: Int64
     var posixMode: Int
+    var hasSentinelLock: Bool
 
-    nonisolated var url: URL { URL(fileURLWithPath: fullPath) }
-    nonisolated var parentURL: URL { url.deletingLastPathComponent() }
-    nonisolated var folderName: String { url.lastPathComponent }
-    nonisolated var isLockedReadOnly: Bool { (posixMode & 0o222) == 0 }
+    var url: URL { URL(fileURLWithPath: fullPath) }
+    var parentURL: URL { url.deletingLastPathComponent() }
+    var folderName: String { url.lastPathComponent }
+    var isLockedReadOnly: Bool { (posixMode & 0o222) == 0 }
+    var needsActionToLock: Bool { !isLockedReadOnly || (isDirectory && !hasSentinelLock) }
 }
 
-struct AppAdCacheEntry: Identifiable, Sendable {
+nonisolated struct AppAdCacheEntry: Identifiable, Sendable {
     let id: String
     let bundleID: String
     let displayTitle: String
     let containerURL: URL
+    let isAppGroup: Bool
     var items: [AdCacheFolderItem]
 }
 
-private final class AdScanCancellationFlag: @unchecked Sendable {
-    nonisolated let id = UUID()
-    nonisolated private let lock = NSLock()
-    nonisolated(unsafe) private var cancelled = false
+private nonisolated final class AdScanCancellationFlag: @unchecked Sendable {
+    let id = UUID()
+    private let lock = NSLock()
+    private var cancelled = false
 
-    nonisolated init() {}
+    init() {}
 
-    nonisolated func cancel() {
+    func cancel() {
         lock.lock()
         cancelled = true
         lock.unlock()
     }
 
-    nonisolated var isCancelled: Bool {
+    var isCancelled: Bool {
         lock.lock()
         let val = cancelled
         lock.unlock()
         return val
     }
+}
+
+private struct LocateAdTarget: Identifiable, Hashable {
+    let id = UUID()
+    let containerURL: URL
+    let folderURL: URL?
+}
+
+private struct AdFilePreviewTarget: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+    let isPlist: Bool
 }
 
 struct AdFolderLocateBrowserView: View {
@@ -70,13 +233,13 @@ struct AdFolderLocateBrowserView: View {
                                 .foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(LocalizationManager.isEnglish
-                                     ? "Target Ad Folder: \(targetFolderURL.lastPathComponent)"
-                                     : "已定位广告目录所在位置：\(targetFolderURL.lastPathComponent)")
+                                     ? "Target Ad Item: \(targetFolderURL.lastPathComponent)"
+                                     : "已定位目标广告位置：\(targetFolderURL.lastPathComponent)")
                                     .font(.caption.weight(.semibold))
                                     .lineLimit(1)
                                 Text(LocalizationManager.isEnglish
                                      ? "Find \"\(targetFolderURL.lastPathComponent)\" below, tap (i) for chmod info or long-press for actions."
-                                     : "在下方列表找到「\(targetFolderURL.lastPathComponent)」，点右侧 ⓘ 可看权限详情，或点进查看内部缓存。")
+                                     : "在下方列表找到「\(targetFolderURL.lastPathComponent)」，点右侧 ⓘ 可看权限详情，或长按加入收藏。")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -93,7 +256,7 @@ struct AdFolderLocateBrowserView: View {
             } else if let errorMsg {
                 List {
                     CompactAlert(
-                        title: LocalizationManager.isEnglish ? "Unable to Locate Folder" : "无法定位广告目录",
+                        title: LocalizationManager.isEnglish ? "Unable to Locate Path" : "无法定位广告位置",
                         symbol: "folder.badge.questionmark",
                         text: errorMsg,
                         color: .orange
@@ -104,7 +267,7 @@ struct AdFolderLocateBrowserView: View {
             } else {
                 VStack(spacing: 8) {
                     ProgressView()
-                    Text(LocalizationManager.isEnglish ? "Authorizing & locating folder..." : "正在授权并定位目录...")
+                    Text(LocalizationManager.isEnglish ? "Authorizing & locating path..." : "正在授权并定位位置...")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -132,10 +295,130 @@ struct AdFolderLocateBrowserView: View {
     }
 }
 
-private struct LocateAdTarget: Identifiable, Hashable {
-    let id = UUID()
-    let containerURL: URL
-    let folderURL: URL?
+private struct AddCustomAdPathSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var onAdded: () -> Void
+
+    @State private var rawPath = ""
+    @State private var note = ""
+    @State private var errorMsg: String?
+
+    private static var isEn: Bool { LocalizationManager.isEnglish }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(Self.isEn ? "Target Folder or File Path" : "目标文件夹或配置文件路径")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField("/var/mobile/Containers/.../SplashAd", text: $rawPath, axis: .vertical)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .lineLimit(2...5)
+                    }
+                    .padding(.vertical, 2)
+
+                    TextField(
+                        Self.isEn ? "Optional label (e.g. Custom Splash Folder)" : "可选备注（例如：某某开屏广告缓存）",
+                        text: $note
+                    )
+                    .font(.subheadline)
+
+                    if let errorMsg {
+                        Label(errorMsg, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    HeaderLabel(Self.isEn ? "Custom Ad Watch Rule" : "添加自定义广告目录 / 文件", symbol: "plus.circle")
+                } footer: {
+                    Text(Self.isEn
+                         ? "Tip: You can also long-press any folder or file inside File Browser and choose 'Add to Ad Blocker'. System containers, container roots, Downloads, symlinks, and main app preference plists are blocked for safety."
+                         : "提示：除了手动粘贴 `/var/mobile/...` 路径，你也可以直接在「文件浏览」中长按任意应用内文件夹或配置文件 →「加入广告锁死列表」。系统容器、容器根目录、Downloads、符号链接与主偏好配置已受安全拦截。")
+                }
+
+                Section {
+                    Button {
+                        if let clip = UIPasteboard.general.string {
+                            rawPath = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    } label: {
+                        Label(Self.isEn ? "Paste from Clipboard" : "从剪贴板粘贴路径", systemImage: "doc.on.clipboard")
+                    }
+
+                    Button {
+                        validateAndSave()
+                    } label: {
+                        Label(Self.isEn ? "Verify & Add to Watch List" : "校验并加入锁死列表", systemImage: "checkmark.shield.fill")
+                            .fontWeight(.semibold)
+                    }
+                    .disabled(rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(Self.isEn ? "Add Custom Path" : "添加自定义路径")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        ToolbarLabel("关闭", symbol: "xmark")
+                    }
+                }
+            }
+            .onAppear {
+                if rawPath.isEmpty,
+                   let clip = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   clip.hasPrefix("/var/") || clip.hasPrefix("/private/var/") {
+                    rawPath = clip
+                }
+            }
+        }
+    }
+
+    private func validateAndSave() {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let canon = AdCustomWatchStore.canonicalVarPath(trimmed)
+
+        if let containerRoot = AdCustomWatchStore.containerRootPath(forCanonicalPath: canon) {
+            _ = wq.grantAccess(path: containerRoot, requireWrite: false)
+        }
+        _ = wq.grantAccess(path: canon, requireWrite: false)
+
+        let url = URL(fileURLWithPath: canon)
+        var st = stat()
+        guard lstat(canon, &st) == 0 else {
+            errorMsg = Self.isEn
+                ? "Path does not exist or cannot be accessed: \(canon)"
+                : "路径不存在或暂无法读取：\(canon)"
+            return
+        }
+        let fmt = st.st_mode & S_IFMT
+        guard fmt == S_IFDIR || fmt == S_IFREG else {
+            errorMsg = Self.isEn
+                ? "Only regular folders or files are supported (symlinks rejected)."
+                : "仅支持常规文件夹或文件（不支持符号链接或特殊设备文件）。"
+            return
+        }
+
+        let ownerName = (try? fm.attributesOfItem(atPath: canon)[.ownerAccountName] as? String) ?? ""
+        guard AdCustomWatchStore.shared.canAddAsCustomTarget(url: url, owner: ownerName) else {
+            errorMsg = Self.isEn
+                ? "Blocked by safety policy (protected directory, container root, or core app plist)."
+                : "已被安全策略拦截（属于受保护系统路径、容器根目录或核心偏好配置）。"
+            return
+        }
+
+        AdCustomWatchStore.shared.addValidatedRule(canonicalPath: canon, note: note)
+        Haptic.shared.notify(.success)
+        onAdded()
+        dismiss()
+    }
 }
 
 struct AdCacheBlockerView: View {
@@ -150,8 +433,11 @@ struct AdCacheBlockerView: View {
     @State private var activeScanToken: AdScanCancellationFlag?
     @State private var busyFolderID: String?
     @State private var locateTarget: LocateAdTarget?
+    @State private var previewTarget: AdFilePreviewTarget?
+    @State private var showAddCustomSheet = false
 
     private static var isEn: Bool { LocalizationManager.isEnglish }
+    nonisolated private static let sentinelFileName = ".erosion_adlock"
 
     nonisolated private static let protectedBundleIDs: Set<String> = [
         "com.jbdotparty.Erosion",
@@ -159,6 +445,17 @@ struct AdCacheBlockerView: View {
         "com.apple.springboard",
         "com.apple.Preferences",
         "com.apple.mobilephone"
+    ]
+
+    nonisolated private static let ignoredAppGroupPrefixes: [String] = [
+        "group.com.apple.",
+        "systemgroup.",
+        "group.com.jbdotparty.",
+        "group.com.nssurge.",
+        "group.com.liguangming.",
+        "group.com.luo.",
+        "group.com.loon",
+        "group.ws.stash."
     ]
 
     // Curated per-app splash & ad cache candidate subpaths (only reported when verified present on disk)
@@ -281,13 +578,11 @@ struct AdCacheBlockerView: View {
 
     // Curated lowercased folder names of mainstream iOS Splash & Ad SDKs
     nonisolated private static let exactAdSDKMap: [String: (zh: String, en: String)] = [
-        // Kwai / 快手联盟
         "ksadsdk": ("快手广告 SDK (KSAdSDK)", "Kwai Ad SDK (KSAdSDK)"),
         "ksadcache": ("快手广告缓存", "Kwai Ad Cache"),
         "ksad_cache": ("快手广告缓存", "Kwai Ad Cache"),
         "com.kwad.sdk": ("快手联盟 (Kwad)", "Kwai Ad SDK"),
         "kwadsdk": ("快手联盟 SDK", "Kwad SDK"),
-        // ByteDance CSJ / Pangle / 穿山甲 / GroMore
         "buadsdk": ("穿山甲广告 (BUAdSDK)", "Pangle / CSJ (BUAdSDK)"),
         "csjadsdk": ("穿山甲广告 SDK", "CSJ Ad SDK"),
         "csjadcache": ("穿山甲广告缓存", "CSJ Ad Cache"),
@@ -297,7 +592,6 @@ struct AdCacheBlockerView: View {
         "ttadsdk": ("字节穿山甲 (TTAdSDK)", "ByteDance TTAdSDK"),
         "pangolinad": ("穿山甲广告 (Pangolin)", "Pangolin Ad Cache"),
         "gromoread": ("GroMore 聚合广告", "GroMore Ad SDK"),
-        // Tencent YLH / GDT / 优量汇 (广点通)
         "gdtmobsdk": ("腾讯优量汇 (GDTMobSDK)", "Tencent YLH (GDTMobSDK)"),
         "gdt_splash": ("优量汇开屏缓存", "GDT Splash Cache"),
         "gdtsplash": ("优量汇开屏缓存", "GDT Splash Cache"),
@@ -307,12 +601,10 @@ struct AdCacheBlockerView: View {
         "tencentad": ("腾讯广告缓存", "Tencent Ad Cache"),
         "qq_ad_cache": ("腾讯广告缓存", "QQ Ad Cache"),
         "ylhadsdk": ("优量汇广告 SDK", "YLH Ad SDK"),
-        // Baidu / 百青藤
         "baidumobad": ("百度百青藤广告", "Baidu MobAd SDK"),
         "bd_ad_cache": ("百度广告缓存", "Baidu Ad Cache"),
         "baidusplashad": ("百度开屏广告", "Baidu Splash Ad"),
         "bdsplashad": ("开屏广告缓存 (BDSplashAd)", "Splash Ad Cache (BDSplashAd)"),
-        // Other common CN / Global Ad SDKs
         "beizisdk": ("倍孜开屏广告 (BeiZi)", "BeiZi Ad SDK"),
         "beiziad": ("倍孜广告缓存 (BeiZi)", "BeiZi Ad Cache"),
         "octopusad": ("章鱼广告 (OctopusAd)", "Octopus Ad SDK"),
@@ -341,7 +633,6 @@ struct AdCacheBlockerView: View {
         "chartboost": ("Chartboost 广告缓存", "Chartboost Ad Cache"),
         "inmobicache": ("InMobi 广告缓存", "InMobi Ad Cache"),
         "ironsource": ("ironSource 广告缓存", "ironSource Ad Cache"),
-        // Generic splash / launch ad folders
         "splashad": ("开屏广告缓存", "Splash Ad Cache"),
         "splashads": ("开屏广告缓存", "Splash Ads Cache"),
         "splashadcache": ("开屏广告缓存", "Splash Ad Cache"),
@@ -374,6 +665,25 @@ struct AdCacheBlockerView: View {
         "xmlyadcache": ("喜马拉雅广告缓存", "Ximalaya Ad Cache")
     ]
 
+    // Curated lowercased single splash/ad config filenames
+    nonisolated private static let exactAdConfigFiles: [String: (zh: String, en: String)] = [
+        "splash_ad.json": ("开屏广告配置 (JSON)", "Splash Ad Config (JSON)"),
+        "splashad.json": ("开屏广告配置 (JSON)", "Splash Ad Config (JSON)"),
+        "splash_ads.json": ("开屏广告配置 (JSON)", "Splash Ads Config (JSON)"),
+        "splash_cache.json": ("开屏广告索引 (JSON)", "Splash Cache Index (JSON)"),
+        "launch_ad.json": ("启动广告配置 (JSON)", "Launch Ad Config (JSON)"),
+        "launchad.json": ("启动广告配置 (JSON)", "Launch Ad Config (JSON)"),
+        "open_screen_ad.json": ("开屏广告配置 (JSON)", "Open Screen Ad Config (JSON)"),
+        "ad_splash.json": ("开屏广告配置 (JSON)", "Ad Splash Config (JSON)"),
+        "wb_splash_ad.json": ("微博开屏配置 (JSON)", "Weibo Splash Config (JSON)"),
+        "splash_ad.plist": ("开屏广告配置 (Plist)", "Splash Ad Config (Plist)"),
+        "splashad.plist": ("开屏广告配置 (Plist)", "Splash Ad Config (Plist)"),
+        "launch_ad.plist": ("启动广告配置 (Plist)", "Launch Ad Config (Plist)"),
+        "xhlaunchad.plist": ("XHLaunchAd 配置 (Plist)", "XHLaunchAd Config (Plist)"),
+        "ad_splash.plist": ("开屏广告配置 (Plist)", "Ad Splash Config (Plist)"),
+        "wb_ad_cache.plist": ("微博广告配置 (Plist)", "Weibo Ad Config (Plist)")
+    ]
+
     private var detectedEntries: [AppAdCacheEntry] {
         allEntries.filter { !$0.items.isEmpty }
     }
@@ -397,9 +707,19 @@ struct AdCacheBlockerView: View {
         detectedEntries.reduce(0) { $0 + $1.items.count }
     }
 
-    private var lockedFoldersCount: Int {
+    private var fullyLockedCount: Int {
         detectedEntries.reduce(0) { acc, entry in
-            acc + entry.items.filter(\.isLockedReadOnly).count
+            acc + entry.items.filter { !$0.needsActionToLock }.count
+        }
+    }
+
+    private var pendingLockOrHardenCount: Int {
+        totalAdFoldersCount - fullyLockedCount
+    }
+
+    private var unlockedOnlyCount: Int {
+        detectedEntries.reduce(0) { acc, entry in
+            acc + entry.items.filter { $0.isLockedReadOnly }.count
         }
     }
 
@@ -407,10 +727,6 @@ struct AdCacheBlockerView: View {
         detectedEntries.reduce(0) { acc, entry in
             acc + entry.items.filter { !$0.isLockedReadOnly }.reduce(0) { $0 + $1.cachedBytes }
         }
-    }
-
-    private var unlockedFolderCount: Int {
-        totalAdFoldersCount - lockedFoldersCount
     }
 
     private var scanProgressText: String {
@@ -421,10 +737,10 @@ struct AdCacheBlockerView: View {
                     : "正在停止 (\(scanCompletedCount) / \(scanTotalCount))..."
             }
             return Self.isEn
-                ? "Scanning \(scanCompletedCount) / \(scanTotalCount) apps..."
-                : "正在检索开屏广告目录 (\(scanCompletedCount) / \(scanTotalCount))..."
+                ? "Scanning \(scanCompletedCount) / \(scanTotalCount) containers..."
+                : "正在检索应用与共享组 (\(scanCompletedCount) / \(scanTotalCount))..."
         }
-        return Self.isEn ? "Scanning app containers for ad caches..." : "正在扫描各应用开屏广告缓存目录..."
+        return Self.isEn ? "Scanning app & AppGroup containers..." : "正在扫描应用与 AppGroup 广告目录/配置..."
     }
 
     var body: some View {
@@ -433,7 +749,7 @@ struct AdCacheBlockerView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(Self.isEn ? "Detected Ad Cache Folders" : "已精准定位开屏与广告目录")
+                            Text(Self.isEn ? "Detected Ad Caches & Configs" : "已定位开屏广告目录与配置")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -441,8 +757,8 @@ struct AdCacheBlockerView: View {
                                     .font(.system(size: 30, weight: .bold, design: .rounded))
                                     .foregroundStyle(totalAdFoldersCount > 0 ? Color.accentColor : Color.secondary)
                                 Text(Self.isEn
-                                     ? "folders across \(detectedEntries.count) apps"
-                                     : "个目录 · 涉及 \(detectedEntries.count) 个应用")
+                                     ? "targets across \(detectedEntries.count) containers"
+                                     : "项目标 · 涉及 \(detectedEntries.count) 个容器")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -451,19 +767,19 @@ struct AdCacheBlockerView: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text(Self.isEn ? "Locked Read-Only" : "已锁死只读")
+                            Text(Self.isEn ? "Sentinel Protected" : "防重建锁就绪")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(lockedFoldersCount) / \(totalAdFoldersCount)")
+                            Text("\(fullyLockedCount) / \(totalAdFoldersCount)")
                                 .font(.subheadline.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(lockedFoldersCount > 0 ? .green : .secondary)
+                                .foregroundStyle(fullyLockedCount > 0 ? .green : .secondary)
                         }
                     }
 
                     if totalReclaimableAdBytes > 0 {
                         Text(Self.isEn
                              ? "Pending ad cache to wipe & lock: \(AppContainerDirectoryHelper.formatBytes(totalReclaimableAdBytes))"
-                             : "未锁目录待清空广告体积：\(AppContainerDirectoryHelper.formatBytes(totalReclaimableAdBytes))")
+                             : "未锁目标待清空广告体积：\(AppContainerDirectoryHelper.formatBytes(totalReclaimableAdBytes))")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -491,21 +807,21 @@ struct AdCacheBlockerView: View {
                                     confirmBatchLockAll()
                                 } label: {
                                     Label(
-                                        Self.isEn ? "Lock All Detected (0555)" : "一键锁死全部检出项 (0555)",
+                                        Self.isEn ? "Lock / Harden All (Sentinel)" : "一键锁死 / 加固全部",
                                         systemImage: "lock.fill"
                                     )
                                 }
-                                .disabled(unlockedFolderCount == 0)
+                                .disabled(pendingLockOrHardenCount == 0)
 
                                 Button {
                                     batchUnlockAll()
                                 } label: {
                                     Label(
-                                        Self.isEn ? "Restore All Read-Write (0755)" : "全部恢复默认读写 (0755)",
+                                        Self.isEn ? "Restore All Read-Write" : "全部恢复默认读写",
                                         systemImage: "lock.open.fill"
                                     )
                                 }
-                                .disabled(lockedFoldersCount == 0)
+                                .disabled(unlockedOnlyCount == 0)
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "ellipsis.circle")
@@ -517,13 +833,13 @@ struct AdCacheBlockerView: View {
                             .disabled(isScanning || isOperating)
                         }
 
-                        if unlockedFolderCount > 0 {
+                        if pendingLockOrHardenCount > 0 {
                             Button {
                                 confirmBatchLockAll()
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "lock.shield.fill")
-                                    Text(Self.isEn ? "Lock All (\(unlockedFolderCount))" : "一键全锁 (\(unlockedFolderCount))")
+                                    Text(Self.isEn ? "Lock All (\(pendingLockOrHardenCount))" : "一键全锁 (\(pendingLockOrHardenCount))")
                                 }
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.white)
@@ -540,18 +856,49 @@ struct AdCacheBlockerView: View {
                 .padding(.vertical, 4)
 
                 PlainToggle(
-                    Self.isEn ? "Show Apps Without Detected Ad Folders" : "显示暂未检出广告目录的应用",
+                    Self.isEn ? "Show Containers Without Hits" : "显示暂未检出广告目录的容器",
                     subtitle: Self.isEn
-                        ? "Turn on to manually browse any third-party app container"
-                        : "开启后可查看所有扫描到的第三方应用，手动点进容器排查",
+                        ? "Includes third-party Apps & AppGroups for manual container inspection"
+                        : "开启后可查看所有第三方应用与共享组，手动浏览排查或长按加入收藏",
                     isOn: $showEmptyApps
                 )
             } header: {
-                HeaderLabel(Self.isEn ? "Ad Cache Lock Overview" : "精准定位与一键锁死概览", symbol: "lock.shield")
+                HeaderLabel(Self.isEn ? "Anti-Recreate Lock & Coverage" : "防重建精准锁死概览", symbol: "lock.shield")
             } footer: {
                 Text(Self.isEn
-                     ? "Wipes existing assets inside each matched ad cache folder and locks it to POSIX 0555 read-only without needing Filza. System paths, container roots, and user Downloads are strictly excluded. Note: server-streamed or in-memory ads cannot be blocked via disk chmod."
-                     : "「一键锁死」会先清空该广告目录内已下载的物料，再将目录锁死为 0555 只读权限（免装 Filza），防止 SDK 反复拉取开屏广告。内置系统白名单与严格命名过滤，绝不误伤 Downloads 等正常目录；点击「定位目录」可直达文件管理器人工确认。\n提示：仅拦截写入本地磁盘的开屏广告，纯服务端实时下发或内存直出广告无效。")
+                     ? "Directory lock wipes cached ad files, drops a 0-byte 0444 sentinel (.erosion_adlock) inside, and sets POSIX 0555 to resist removeItem() directory recreation. Config files are emptied to valid empty JSON/Plist and locked to 0444. Covers Apps, AppGroups & your custom watch rules."
+                     : "「一键锁死」对文件夹会先清空物料、写入 0 字节 0444 防重建占位符 (.erosion_adlock) 并锁死 0555，防 SDK 删空目录重建；对广告配置文件会清空为合法空 JSON/Plist 并锁死 0444。已涵盖第三方应用、AppGroup 共享组及你收藏的自定义路径。")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label {
+                        Text(Self.isEn
+                             ? "Local Lock Boundary: Locking local ad folders & configs (0555 sentinel / 0444 read-only) stops ads from caching to disk, but live ad network requests still fire and real-time in-memory ads may still appear."
+                             : "本地锁死边界：本功能仅清空并锁死本地广告缓存目录与配置文件（0555 防重建锁 / 0444 只读），阻止广告素材落盘，但应用自身的广告网络请求依然存在，纯联网实时加载的广告仍可能出现。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
+
+                    Label {
+                        Text(Self.isEn
+                             ? "Recommended Pairing: Combine with ad-blocking rules in your proxy client (Surge / Quantumult X / Loon / Stash / Shadowrocket, etc.) to block ad network requests alongside local cache locking for complete ad blocking."
+                             : "最佳搭配建议：建议配合代理工具（如 Surge / Quantumult X / Loon / Stash / Shadowrocket 等）的去广告规则屏蔽广告网络请求，「网络拦截请求 + 本地锁死残留缓存」双管齐下即可实现精准屏蔽。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                            .foregroundStyle(Color.accentColor)
+                            .font(.caption)
+                    }
+                }
+                .padding(.vertical, 2)
+            } header: {
+                HeaderLabel(Self.isEn ? "Boundary & Network Pairing Tip" : "生效边界与搭配建议", symbol: "network.badge.shield.half.filled")
             }
 
             if isScanning || isOperating {
@@ -559,7 +906,7 @@ struct AdCacheBlockerView: View {
                     HStack(spacing: 10) {
                         ProgressView()
                         Text(isOperating
-                             ? (Self.isEn ? "Applying chmod permissions..." : "正在安全清理并修改目录权限...")
+                             ? (Self.isEn ? "Updating permissions & sentinel..." : "正在安全清理并写入防重建权限锁...")
                              : scanProgressText)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -584,12 +931,12 @@ struct AdCacheBlockerView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(Self.isEn
-                             ? "No matching splash ad cache folders found."
-                             : "暂未检出符合特征的开屏广告缓存目录")
+                             ? "No matching ad caches or config files found."
+                             : "暂未检出符合特征的开屏广告目录或配置文件")
                             .font(.subheadline.weight(.medium))
                         Text(Self.isEn
-                             ? "Some apps store splash ads in custom folders or haven't generated ad caches yet. Turn on 'Show Apps Without Detected Ad Folders' above to browse containers manually."
-                             : "部分应用刚安装还未生成广告缓存，或使用了非常规自定义目录；可打开上方「显示暂未检出广告目录的应用」开关后直接浏览其容器目录。")
+                             ? "Tap '+' in the top right to paste a path, or turn on 'Show Containers Without Hits' above and long-press any folder/file in File Browser -> 'Add to Ad Blocker'."
+                             : "可点击右上角「+」手动添加路径，或在「文件浏览」中进入目标应用/AppGroup 长按任意目录或配置文件 ➔「加入广告锁死列表」。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -598,7 +945,6 @@ struct AdCacheBlockerView: View {
             } else {
                 ForEach(displayedEntries) { entry in
                     Section {
-                        // App summary & per-app quick controls
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(entry.displayTitle)
@@ -616,7 +962,7 @@ struct AdCacheBlockerView: View {
                             } label: {
                                 HStack(spacing: 3) {
                                     Image(systemName: "folder")
-                                    Text(Self.isEn ? "Container" : "看容器")
+                                    Text(Self.isEn ? "Browse" : "看容器")
                                 }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -626,28 +972,27 @@ struct AdCacheBlockerView: View {
                             .fixedSize()
 
                             if !entry.items.isEmpty {
-                                let hasUnlocked = entry.items.contains { !$0.isLockedReadOnly }
+                                let hasPending = entry.items.contains { $0.needsActionToLock }
                                 Button {
-                                    toggleAllForApp(entry, lock: hasUnlocked)
+                                    toggleAllForApp(entry, lock: hasPending)
                                 } label: {
                                     HStack(spacing: 3) {
-                                        Image(systemName: hasUnlocked ? "lock.fill" : "lock.open.fill")
-                                        Text(hasUnlocked
-                                             ? (Self.isEn ? "Lock App" : "全锁该应用")
-                                             : (Self.isEn ? "Unlock App" : "全部恢复"))
+                                        Image(systemName: hasPending ? "lock.fill" : "lock.open.fill")
+                                        Text(hasPending
+                                             ? (Self.isEn ? "Lock All" : "全锁该组")
+                                             : (Self.isEn ? "Unlock All" : "全部恢复"))
                                     }
                                     .font(.caption.weight(.semibold))
                                     .fixedSize()
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .tint(hasUnlocked ? .orange : .green)
+                                .tint(hasPending ? .orange : .green)
                                 .fixedSize()
                                 .disabled(isScanning || isOperating)
                             }
                         }
 
-                        // Detected ad folders list
                         ForEach(entry.items) { item in
                             AdFolderRowView(
                                 item: item,
@@ -655,9 +1000,15 @@ struct AdCacheBlockerView: View {
                                 onLocate: {
                                     locateTarget = LocateAdTarget(containerURL: entry.containerURL, folderURL: item.url)
                                 },
+                                onPreview: canPreviewItem(item) ? {
+                                    openPreview(for: item)
+                                } : nil,
                                 onToggleLock: {
                                     toggleSingleFolder(item, in: entry)
-                                }
+                                },
+                                onRemoveCustom: item.isCustomRule ? {
+                                    removeCustomItem(item, in: entry)
+                                } : nil
                             )
                         }
                     }
@@ -667,6 +1018,20 @@ struct AdCacheBlockerView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(Self.isEn ? "Splash Ad Blocker" : "开屏广告缓存精准锁死")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: $searchText,
+            prompt: Self.isEn ? "Search app, AppGroup, Bundle ID or SDK" : "搜索应用名、AppGroup 或广告特征"
+        )
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAddCustomSheet = true
+                } label: {
+                    ToolbarLabel(Self.isEn ? "Add Custom" : "添加", symbol: "plus")
+                }
+                .disabled(isOperating)
+            }
+        }
         .navigationDestination(item: $locateTarget) { target in
             if let folderURL = target.folderURL {
                 AdFolderLocateBrowserView(
@@ -677,10 +1042,24 @@ struct AdCacheBlockerView: View {
                 ContainerSubdirBrowserView(containerURL: target.containerURL, relativeSubpath: nil)
             }
         }
-        .searchable(
-            text: $searchText,
-            prompt: Self.isEn ? "Search app, Bundle ID or SDK" : "搜索应用名、Bundle ID 或广告 SDK"
-        )
+        .sheet(item: $previewTarget) { target in
+            if target.isPlist {
+                PlistViewer(target.fileURL)
+            } else {
+                TextViewer(target.fileURL)
+                    .environmentObject(ErosionManager.shared)
+            }
+        }
+        .sheet(isPresented: $showAddCustomSheet) {
+            AddCustomAdPathSheet {
+                scanAdFolders()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AdCustomWatchStore.didChangeNotification)) { _ in
+            if !isScanning && !isOperating {
+                scanAdFolders()
+            }
+        }
         .onAppear {
             if allEntries.isEmpty && !isScanning && !isOperating {
                 scanAdFolders()
@@ -688,28 +1067,41 @@ struct AdCacheBlockerView: View {
         }
     }
 
+    private func canPreviewItem(_ item: AdCacheFolderItem) -> Bool {
+        guard !item.isDirectory else { return false }
+        let ext = item.url.pathExtension.lowercased()
+        return ["plist", "json", "txt", "xml", "cfg", "conf", "log", "yaml", "yml"].contains(ext)
+    }
+
+    private func openPreview(for item: AdCacheFolderItem) {
+        _ = wq.grantAccess(path: item.parentURL.path, requireWrite: false)
+        _ = wq.grantAccess(path: item.fullPath, requireWrite: false)
+        let isPlist = item.url.pathExtension.lowercased() == "plist" && conformsToPlistViewer(item.url)
+        previewTarget = AdFilePreviewTarget(fileURL: item.url, isPlist: isPlist)
+    }
+
     private func appStatusSubtitle(for entry: AppAdCacheEntry) -> String {
         if entry.items.isEmpty {
             return Self.isEn
-                ? "0 known ad folders · tap Container to inspect"
-                : "未匹配已知广告目录 · 可点「看容器」手动排查"
+                ? "0 auto-matched · tap Browse to inspect"
+                : "未匹配已知目录 · 可点「看容器」长按添加"
         }
-        let locked = entry.items.filter(\.isLockedReadOnly).count
+        let fullyProtected = entry.items.filter { !$0.needsActionToLock }.count
         let total = entry.items.count
-        if locked == total {
+        if fullyProtected == total {
             return Self.isEn
-                ? "All \(total) ad folders locked (0555)"
-                : "已全部锁死只读 (\(locked)/\(total))"
+                ? "All \(total) protected (sentinel / 0444)"
+                : "已全防重建锁死 (\(fullyProtected)/\(total))"
         }
         return Self.isEn
-            ? "\(total - locked) unlocked · \(locked) locked"
-            : "发现 \(total) 个目录（\(total - locked) 个待锁 · \(locked) 个已锁）"
+            ? "\(total - fullyProtected) need lock/harden · \(fullyProtected) locked"
+            : "发现 \(total) 项（\(total - fullyProtected) 项待锁/可加固 · \(fullyProtected) 项已全锁）"
     }
 
     private func appStatusColor(for entry: AppAdCacheEntry) -> Color {
         if entry.items.isEmpty { return .secondary }
-        let locked = entry.items.filter(\.isLockedReadOnly).count
-        return locked == entry.items.count ? .green : .orange
+        let fullyProtected = entry.items.filter { !$0.needsActionToLock }.count
+        return fullyProtected == entry.items.count ? .green : .orange
     }
 
     private func stopScan() {
@@ -728,19 +1120,30 @@ struct AdCacheBlockerView: View {
         scanTotalCount = 0
         allEntries = []
 
+        let customRules = AdCustomWatchStore.shared.rulesSnapshot()
+
         DispatchQueue.global(qos: .userInitiated).async {
-            let rawPaths = fsHandlers.getDirPaths(FSURL.appContainers.path)
-            var seenPaths = Set<String>()
-            var uniquePaths: [String] = []
-            uniquePaths.reserveCapacity(rawPaths.count)
-            for rawPath in rawPaths {
+            let appRaw = fsHandlers.getDirPaths(FSURL.appContainers.path)
+            let groupRaw = fsHandlers.getDirPaths(FSURL.appGroup.path)
+
+            var seenContainerPaths = Set<String>()
+            var containerTargets: [(rawPath: String, isGroup: Bool)] = []
+            containerTargets.reserveCapacity(appRaw.count + groupRaw.count)
+
+            for rawPath in appRaw {
                 let norm = CSStoreEngine.normalizeVarPath(rawPath)
-                if seenPaths.insert(norm).inserted {
-                    uniquePaths.append(rawPath)
+                if seenContainerPaths.insert(norm).inserted {
+                    containerTargets.append((rawPath, false))
+                }
+            }
+            for rawPath in groupRaw {
+                let norm = CSStoreEngine.normalizeVarPath(rawPath)
+                if seenContainerPaths.insert(norm).inserted {
+                    containerTargets.append((rawPath, true))
                 }
             }
 
-            let totalCount = uniquePaths.count
+            let totalCount = containerTargets.count
             DispatchQueue.main.async {
                 guard self.activeScanToken?.id == token.id else { return }
                 self.scanTotalCount = totalCount
@@ -752,10 +1155,11 @@ struct AdCacheBlockerView: View {
             var completed = 0
             var lastUIUpdate = CFAbsoluteTimeGetCurrent()
 
-            for rawPath in uniquePaths {
+            for target in containerTargets {
                 if token.isCancelled { break }
-                let entry = Self.scanContainerForAdFolders(
-                    rawPath: rawPath,
+                let entry = Self.scanContainerForAdTargets(
+                    rawPath: target.rawPath,
+                    isAppGroup: target.isGroup,
                     selfBID: selfBID,
                     deniedContainers: &deniedContainers,
                     cancelFlag: token
@@ -770,7 +1174,9 @@ struct AdCacheBlockerView: View {
                 if now - lastUIUpdate >= 0.08 || completed == totalCount {
                     lastUIUpdate = now
                     let prog = completed
-                    let snap = Self.sortedEntries(collected)
+                    var interim = collected
+                    Self.mergeCustomRules(customRules, into: &interim, cancelFlag: token)
+                    let snap = Self.sortedEntries(interim)
                     DispatchQueue.main.async {
                         guard self.activeScanToken?.id == token.id else { return }
                         self.scanCompletedCount = prog
@@ -779,6 +1185,7 @@ struct AdCacheBlockerView: View {
                 }
             }
 
+            Self.mergeCustomRules(customRules, into: &collected, cancelFlag: token)
             let finalEntries = Self.sortedEntries(collected)
             let finalCompleted = completed
             DispatchQueue.main.async {
@@ -793,17 +1200,23 @@ struct AdCacheBlockerView: View {
 
     private func toggleSingleFolder(_ item: AdCacheFolderItem, in entry: AppAdCacheEntry) {
         guard !isScanning && !isOperating else { return }
-        let lockTarget = !item.isLockedReadOnly
+        let lockTarget = item.needsActionToLock
         busyFolderID = item.id
         isOperating = true
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome = Self.setAdFolderLocked(item: item, containerURL: entry.containerURL, locked: lockTarget)
+            let outcome = Self.setAdTargetLocked(item: item, containerURL: entry.containerURL, locked: lockTarget)
             DispatchQueue.main.async {
                 busyFolderID = nil
                 isOperating = false
                 if outcome.ok {
-                    updateFolderState(appID: entry.id, folderID: item.id, mode: outcome.mode, bytes: outcome.bytes)
+                    updateFolderState(
+                        appID: entry.id,
+                        folderID: item.id,
+                        mode: outcome.mode,
+                        bytes: outcome.bytes,
+                        hasSentinel: outcome.hasSentinel
+                    )
                     Haptic.shared.notify(.success)
                     ErosionManager.shared.refreshFiles.toggle()
                 } else {
@@ -817,18 +1230,39 @@ struct AdCacheBlockerView: View {
         }
     }
 
+    private func removeCustomItem(_ item: AdCacheFolderItem, in entry: AppAdCacheEntry) {
+        guard !isScanning && !isOperating else { return }
+        if item.isLockedReadOnly {
+            isOperating = true
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = Self.setAdTargetLocked(item: item, containerURL: entry.containerURL, locked: false)
+                AdCustomWatchStore.shared.remove(fullPath: item.fullPath)
+                DispatchQueue.main.async {
+                    isOperating = false
+                    Haptic.shared.notify(.success)
+                    scanAdFolders()
+                }
+            }
+        } else {
+            AdCustomWatchStore.shared.remove(fullPath: item.fullPath)
+            Haptic.shared.play(.soft)
+        }
+    }
+
     private func toggleAllForApp(_ entry: AppAdCacheEntry, lock: Bool) {
         guard !isScanning && !isOperating else { return }
-        let targets = entry.items.filter { $0.isLockedReadOnly != lock }
+        let targets = lock
+            ? entry.items.filter { $0.needsActionToLock }
+            : entry.items.filter { $0.isLockedReadOnly }
         guard !targets.isEmpty else { return }
 
         if lock {
-            let totalBytes = targets.reduce(0) { $0 + $1.cachedBytes }
+            let totalBytes = targets.reduce(Int64(0)) { $0 + $1.cachedBytes }
             Alertinator.shared.alert(
-                title: Self.isEn ? "Lock App Ad Folders?" : "确认锁死该应用广告目录？",
+                title: Self.isEn ? "Lock & Harden Container?" : "确认锁死并加固该容器广告项？",
                 body: Self.isEn
-                    ? "Will wipe \(targets.count) detected ad folders in \(entry.displayTitle) (\(AppContainerDirectoryHelper.formatBytes(totalBytes))) and lock them read-only (0555). Restorable anytime."
-                    : "将清空「\(entry.displayTitle)」中检出的 \(targets.count) 个广告缓存目录（当前占用 \(AppContainerDirectoryHelper.formatBytes(totalBytes))）并设为 0555 只读锁死，可随时恢复读写。",
+                    ? "Will clear \(targets.count) ad folders/configs in \(entry.displayTitle) (\(AppContainerDirectoryHelper.formatBytes(totalBytes))) and apply anti-recreate 0555/0444 locks."
+                    : "将处理「\(entry.displayTitle)」中 \(targets.count) 个广告目录/配置（约 \(AppContainerDirectoryHelper.formatBytes(totalBytes))），写入防重建占位符并锁定为 0555 / 0444 只读状态。",
                 actionLabel: Self.isEn ? "Lock Now" : "立即锁死",
                 action: {
                     executeBatch(pairs: targets.map { (entry, $0) }, lock: true)
@@ -841,15 +1275,15 @@ struct AdCacheBlockerView: View {
 
     private func confirmBatchLockAll() {
         let targets: [(AppAdCacheEntry, AdCacheFolderItem)] = displayedEntries.flatMap { entry in
-            entry.items.filter { !$0.isLockedReadOnly }.map { (entry, $0) }
+            entry.items.filter { $0.needsActionToLock }.map { (entry, $0) }
         }
         guard !targets.isEmpty else { return }
         let bytes = targets.reduce(Int64(0)) { $0 + $1.1.cachedBytes }
         Alertinator.shared.alert(
-            title: Self.isEn ? "Lock All Detected Ad Folders?" : "确认一键锁死全部检出广告目录？",
+            title: Self.isEn ? "Lock & Harden All Targets?" : "确认一键锁死/加固全部目标？",
             body: Self.isEn
-                ? "Will clear \(targets.count) ad cache folders (\(AppContainerDirectoryHelper.formatBytes(bytes))) and set them read-only (0555). Restorable anytime."
-                : "将清空共 \(targets.count) 个检出的开屏/广告缓存目录（约 \(AppContainerDirectoryHelper.formatBytes(bytes))）并锁定为 0555 只读状态。需要时可一键恢复默认读写权限。",
+                ? "Will clear \(targets.count) detected ad folders/configs (\(AppContainerDirectoryHelper.formatBytes(bytes))) and apply anti-recreate 0555+sentinel / 0444 locks. Restorable anytime."
+                : "将处理共 \(targets.count) 个广告目录与配置（约 \(AppContainerDirectoryHelper.formatBytes(bytes))），写入防重建占位符并锁死为只读状态。随时可一键恢复读写。",
             actionLabel: Self.isEn ? "Lock All" : "立即锁死",
             action: {
                 executeBatch(pairs: targets, lock: true)
@@ -873,13 +1307,13 @@ struct AdCacheBlockerView: View {
             var successCount = 0
             var failCount = 0
             var lastError: String?
-            var updates: [(appID: String, folderID: String, mode: Int, bytes: Int64)] = []
+            var updates: [(appID: String, folderID: String, mode: Int, bytes: Int64, hasSentinel: Bool)] = []
 
             for (entry, item) in pairs {
-                let res = Self.setAdFolderLocked(item: item, containerURL: entry.containerURL, locked: lock)
+                let res = Self.setAdTargetLocked(item: item, containerURL: entry.containerURL, locked: lock)
                 if res.ok {
                     successCount += 1
-                    updates.append((entry.id, item.id, res.mode, res.bytes))
+                    updates.append((entry.id, item.id, res.mode, res.bytes, res.hasSentinel))
                 } else {
                     failCount += 1
                     lastError = res.error
@@ -889,7 +1323,13 @@ struct AdCacheBlockerView: View {
             DispatchQueue.main.async {
                 isOperating = false
                 for u in updates {
-                    updateFolderState(appID: u.appID, folderID: u.folderID, mode: u.mode, bytes: u.bytes)
+                    updateFolderState(
+                        appID: u.appID,
+                        folderID: u.folderID,
+                        mode: u.mode,
+                        bytes: u.bytes,
+                        hasSentinel: u.hasSentinel
+                    )
                 }
                 if successCount > 0 {
                     ErosionManager.shared.refreshFiles.toggle()
@@ -898,19 +1338,19 @@ struct AdCacheBlockerView: View {
                     Haptic.shared.notify(.success)
                     Alertinator.shared.alert(
                         title: lock
-                            ? (Self.isEn ? "Locked Read-Only" : "已成功锁死只读")
+                            ? (Self.isEn ? "Locked with Sentinel" : "已成功锁死并加固")
                             : (Self.isEn ? "Restored Read-Write" : "已恢复默认读写"),
                         body: lock
-                            ? (Self.isEn ? "Locked \(successCount) ad cache folders to 0555." : "已成功清理并锁死 \(successCount) 个广告缓存目录 (0555)。")
-                            : (Self.isEn ? "Restored \(successCount) ad folders to 0755." : "已将 \(successCount) 个目录恢复为默认 0755 可读写权限。")
+                            ? (Self.isEn ? "Protected \(successCount) ad targets against recreation." : "已成功锁死并防重建加固 \(successCount) 项广告目录/配置。")
+                            : (Self.isEn ? "Restored \(successCount) targets to writable permissions." : "已将 \(successCount) 项恢复为默认可读写权限并清除占位符。")
                     )
                 } else {
                     Haptic.shared.notify(.warning)
                     Alertinator.shared.alert(
-                        title: Self.isEn ? "Completed with Errors" : "部分目录处理失败",
+                        title: Self.isEn ? "Completed with Errors" : "部分目标处理失败",
                         body: (Self.isEn
                                ? "Succeeded: \(successCount), Failed: \(failCount)."
-                               : "成功 \(successCount) 个，失败 \(failCount) 个。")
+                               : "成功 \(successCount) 项，失败 \(failCount) 项。")
                             + (lastError.map { "\n\($0)" } ?? "")
                     )
                 }
@@ -918,13 +1358,14 @@ struct AdCacheBlockerView: View {
         }
     }
 
-    private func updateFolderState(appID: String, folderID: String, mode: Int, bytes: Int64) {
+    private func updateFolderState(appID: String, folderID: String, mode: Int, bytes: Int64, hasSentinel: Bool) {
         guard let appIdx = allEntries.firstIndex(where: { $0.id == appID }),
               let itemIdx = allEntries[appIdx].items.firstIndex(where: { $0.id == folderID }) else {
             return
         }
         allEntries[appIdx].items[itemIdx].posixMode = mode
         allEntries[appIdx].items[itemIdx].cachedBytes = bytes
+        allEntries[appIdx].items[itemIdx].hasSentinelLock = hasSentinel
     }
 
     // MARK: - Container Scan Helpers
@@ -934,15 +1375,46 @@ struct AdCacheBlockerView: View {
             if lhs.items.isEmpty != rhs.items.isEmpty {
                 return !lhs.items.isEmpty
             }
+            let lhsHasCustom = lhs.items.contains { $0.isCustomRule }
+            let rhsHasCustom = rhs.items.contains { $0.isCustomRule }
+            if lhsHasCustom != rhsHasCustom {
+                return lhsHasCustom
+            }
             if lhs.items.count != rhs.items.count {
                 return lhs.items.count > rhs.items.count
+            }
+            if lhs.isAppGroup != rhs.isAppGroup {
+                return !lhs.isAppGroup
             }
             return lhs.displayTitle < rhs.displayTitle
         }
     }
 
-    private static func scanContainerForAdFolders(
+    private static func formatGroupDisplayTitle(groupID: String) -> String {
+        let candidateBID = groupID.hasPrefix("group.") ? String(groupID.dropFirst("group.".count)) : groupID
+        let appDisplay = AppContainerDirectoryHelper.displayName(for: candidateBID)
+        let prefix = isEn ? "[AppGroup]" : "[共享组]"
+        if appDisplay != candidateBID {
+            let shortApp = appDisplay.components(separatedBy: " (").first ?? appDisplay
+            return "\(prefix) \(shortApp) (\(groupID))"
+        }
+        return "\(prefix) \(groupID)"
+    }
+
+    private static func shouldIgnoreContainerID(_ id: String, isAppGroup: Bool, selfBID: String) -> Bool {
+        guard !id.isEmpty, id != selfBID, !protectedBundleIDs.contains(id) else {
+            return true
+        }
+        let lower = id.lowercased()
+        if isAppGroup {
+            return ignoredAppGroupPrefixes.contains { lower.hasPrefix($0) }
+        }
+        return lower.hasPrefix("com.apple.")
+    }
+
+    private static func scanContainerForAdTargets(
         rawPath: String,
+        isAppGroup: Bool,
         selfBID: String,
         deniedContainers: inout Set<String>,
         cancelFlag: AdScanCancellationFlag
@@ -951,11 +1423,9 @@ struct AdCacheBlockerView: View {
         let normPath = CSStoreEngine.normalizeVarPath(url.path)
         if deniedContainers.contains(normPath) { return nil }
 
-        let knownBID = CSStoreEngine.shared.bundleID(forContainerPath: normPath, allowDiscovery: false)
-        if let knownBID, !knownBID.isEmpty {
-            if knownBID == selfBID || protectedBundleIDs.contains(knownBID) || knownBID.hasPrefix("com.apple.") {
-                return nil
-            }
+        let knownID = CSStoreEngine.shared.bundleID(forContainerPath: normPath, allowDiscovery: false)
+        if let knownID, !knownID.isEmpty, shouldIgnoreContainerID(knownID, isAppGroup: isAppGroup, selfBID: selfBID) {
+            return nil
         }
 
         let wasActive = wq.hasActiveAccess(path: url.path)
@@ -969,50 +1439,63 @@ struct AdCacheBlockerView: View {
             }
         }
 
-        let resolvedBID: String?
-        if let knownBID, !knownBID.isEmpty {
-            resolvedBID = knownBID
+        let resolvedID: String?
+        if let knownID, !knownID.isEmpty {
+            resolvedID = knownID
         } else {
-            resolvedBID = getBIDFromXattr(url)
+            resolvedID = getBIDFromXattr(url)
         }
 
-        guard let bid = resolvedBID,
-              !bid.isEmpty,
-              bid != selfBID,
-              !protectedBundleIDs.contains(bid),
-              !bid.hasPrefix("com.apple.") else {
-            if resolvedBID == nil {
+        guard let bid = resolvedID, !shouldIgnoreContainerID(bid, isAppGroup: isAppGroup, selfBID: selfBID) else {
+            if resolvedID == nil {
                 deniedContainers.insert(normPath)
             }
             return nil
         }
 
         var items: [AdCacheFolderItem] = []
-        var seenCanonicalFolders: Set<String> = []
+        var seenCanonicalItems: Set<String> = []
         let stdContainerRoot = CSStoreEngine.normalizeVarPath(url.standardizedFileURL.path)
 
-        // Pass A: Curated per-app known ad paths
-        if let specificSpecs = appSpecificAdPaths[bid] {
+        // Pass A: Curated per-app known ad paths (Data/Application)
+        if !isAppGroup, let specificSpecs = appSpecificAdPaths[bid] {
             for spec in specificSpecs {
                 if cancelFlag.isCancelled { return nil }
                 let candidateURL = url.appendingPathComponent(spec.relPath)
                 let canon = CSStoreEngine.normalizeVarPath(candidateURL.standardizedFileURL.path)
-                guard !seenCanonicalFolders.contains(canon),
-                      let item = inspectMatchedAdDirectory(
-                        dirURL: candidateURL,
+                guard !seenCanonicalItems.contains(canon),
+                      let item = inspectMatchedAdTarget(
+                        targetURL: candidateURL,
                         containerRootStd: stdContainerRoot,
                         sdkZH: spec.zh,
                         sdkEN: spec.en,
+                        isCustomRule: false,
                         cancelFlag: cancelFlag
                       ) else {
                     continue
                 }
-                seenCanonicalFolders.insert(canon)
+                seenCanonicalItems.insert(canon)
                 items.append(item)
             }
         }
 
-        // Pass B: Shallow scan (depth 1...3) across standard app data subdirectories
+        // Pass B: Shallow POSIX scan across standard subdirectories (+ container root shallow scan for AppGroup)
+        if isAppGroup {
+            var rootSt = stat()
+            if lstat(url.path, &rootSt) == 0 && (rootSt.st_mode & S_IFMT) == S_IFDIR {
+                scanDirectoryShallow(
+                    dirURL: url,
+                    containerRootStd: stdContainerRoot,
+                    currentDepth: 1,
+                    maxDepth: 2,
+                    skipStandardTopSubdirs: true,
+                    seenCanonicalItems: &seenCanonicalItems,
+                    results: &items,
+                    cancelFlag: cancelFlag
+                )
+            }
+        }
+
         let rootsToScan = ["Documents", "Library/Caches", "Library/Application Support", "tmp"]
         for rootRel in rootsToScan {
             if cancelFlag.isCancelled { return nil }
@@ -1028,29 +1511,97 @@ struct AdCacheBlockerView: View {
                 containerRootStd: stdContainerRoot,
                 currentDepth: 1,
                 maxDepth: 3,
-                seenCanonicalFolders: &seenCanonicalFolders,
+                skipStandardTopSubdirs: false,
+                seenCanonicalItems: &seenCanonicalItems,
                 results: &items,
                 cancelFlag: cancelFlag
             )
         }
 
         items.sort {
-            if $0.isLockedReadOnly != $1.isLockedReadOnly {
-                return !$0.isLockedReadOnly
-            }
-            if $0.cachedBytes != $1.cachedBytes {
-                return $0.cachedBytes > $1.cachedBytes
-            }
+            if $0.isCustomRule != $1.isCustomRule { return $0.isCustomRule }
+            if $0.needsActionToLock != $1.needsActionToLock { return $0.needsActionToLock }
+            if $0.cachedBytes != $1.cachedBytes { return $0.cachedBytes > $1.cachedBytes }
             return $0.relativePath < $1.relativePath
         }
 
+        let title = isAppGroup ? formatGroupDisplayTitle(groupID: bid) : AppContainerDirectoryHelper.displayName(for: bid)
         return AppAdCacheEntry(
             id: url.lastPathComponent,
             bundleID: bid,
-            displayTitle: AppContainerDirectoryHelper.displayName(for: bid),
+            displayTitle: title,
             containerURL: url,
+            isAppGroup: isAppGroup,
             items: items
         )
+    }
+
+    private static func mergeCustomRules(
+        _ rules: [CustomAdWatchRule],
+        into entries: inout [AppAdCacheEntry],
+        cancelFlag: AdScanCancellationFlag
+    ) {
+        for rule in rules {
+            if cancelFlag.isCancelled { return }
+            let canonPath = AdCustomWatchStore.canonicalVarPath(rule.fullPath)
+            guard let containerRoot = AdCustomWatchStore.containerRootPath(forCanonicalPath: canonPath) else {
+                continue
+            }
+            let containerURL = URL(fileURLWithPath: containerRoot)
+            let isGroup = containerRoot.hasPrefix("/var/mobile/Containers/Shared/AppGroup/")
+
+            let wasContainerActive = wq.hasActiveAccess(path: containerRoot)
+            guard wq.grantAccess(path: containerRoot, requireWrite: false).0 else { continue }
+            defer {
+                if !wasContainerActive {
+                    wq.releaseAccess(path: containerRoot)
+                }
+            }
+
+            let targetURL = URL(fileURLWithPath: canonPath)
+            let noteZH = rule.note.isEmpty ? "自定义广告路径" : rule.note
+            let noteEN = rule.note.isEmpty ? "Custom Ad Watch Rule" : rule.note
+
+            let containerID = containerURL.lastPathComponent
+            if let entryIdx = entries.firstIndex(where: { $0.id == containerID }) {
+                if let existingIdx = entries[entryIdx].items.firstIndex(where: { $0.id == canonPath }) {
+                    entries[entryIdx].items[existingIdx].isCustomRule = true
+                    continue
+                }
+                if let item = inspectMatchedAdTarget(
+                    targetURL: targetURL,
+                    containerRootStd: containerRoot,
+                    sdkZH: noteZH,
+                    sdkEN: noteEN,
+                    isCustomRule: true,
+                    cancelFlag: cancelFlag
+                ) {
+                    entries[entryIdx].items.insert(item, at: 0)
+                }
+            } else {
+                let bid = CSStoreEngine.shared.bundleID(forContainerPath: containerRoot, allowDiscovery: false)
+                    ?? getBIDFromXattr(containerURL)
+                    ?? containerID
+                if let item = inspectMatchedAdTarget(
+                    targetURL: targetURL,
+                    containerRootStd: containerRoot,
+                    sdkZH: noteZH,
+                    sdkEN: noteEN,
+                    isCustomRule: true,
+                    cancelFlag: cancelFlag
+                ) {
+                    let title = isGroup ? formatGroupDisplayTitle(groupID: bid) : AppContainerDirectoryHelper.displayName(for: bid)
+                    entries.append(AppAdCacheEntry(
+                        id: containerID,
+                        bundleID: bid,
+                        displayTitle: title,
+                        containerURL: containerURL,
+                        isAppGroup: isGroup,
+                        items: [item]
+                    ))
+                }
+            }
+        }
     }
 
     private static func scanDirectoryShallow(
@@ -1058,7 +1609,8 @@ struct AdCacheBlockerView: View {
         containerRootStd: String,
         currentDepth: Int,
         maxDepth: Int,
-        seenCanonicalFolders: inout Set<String>,
+        skipStandardTopSubdirs: Bool,
+        seenCanonicalItems: inout Set<String>,
         results: inout [AdCacheFolderItem],
         cancelFlag: AdScanCancellationFlag
     ) {
@@ -1070,48 +1622,67 @@ struct AdCacheBlockerView: View {
         while let entryPtr = readdir(dir) {
             if cancelFlag.isCancelled { return }
             let nameLen = Int(entryPtr.pointee.d_namlen)
-            guard nameLen > 0 else { continue }
-
-            guard let nameOffset = MemoryLayout<dirent>.offset(of: \dirent.d_name) else { return }
+            guard nameLen > 0,
+                  let nameOffset = MemoryLayout<dirent>.offset(of: \dirent.d_name) else {
+                continue
+            }
             let namePtr = UnsafeRawPointer(entryPtr).advanced(by: nameOffset).assumingMemoryBound(to: CChar.self)
-            if namePtr[0] == 0x2E { // skip ., .., and hidden dotfiles like .com.apple.*
+            if namePtr[0] == 0x2E { // skip ., .., and hidden dotfiles
                 continue
             }
             let dType = Int32(entryPtr.pointee.d_type)
-            if dType != DT_DIR && dType != DT_UNKNOWN {
+            guard dType == DT_DIR || dType == DT_REG || dType == DT_UNKNOWN else {
                 continue
             }
 
             let childName = String(cString: namePtr)
             let lower = childName.lowercased()
+            if skipStandardTopSubdirs && currentDepth == 1 &&
+                ["library", "documents", "tmp", "systemdata"].contains(lower) {
+                continue
+            }
             if neverTouchOrDescend.contains(lower) {
                 continue
             }
 
             let childURL = dirURL.appendingPathComponent(childName)
             var st = stat()
-            guard lstat(childURL.path, &st) == 0,
-                  (st.st_mode & S_IFMT) == S_IFDIR else {
-                continue
-            }
+            guard lstat(childURL.path, &st) == 0 else { continue }
+            let fmt = st.st_mode & S_IFMT
 
             let canon = CSStoreEngine.normalizeVarPath(childURL.standardizedFileURL.path)
-            if seenCanonicalFolders.contains(canon) {
+            if seenCanonicalItems.contains(canon) { continue }
+
+            if fmt == S_IFREG {
+                if let fileMatch = exactAdConfigFiles[lower],
+                   let item = inspectMatchedAdTarget(
+                    targetURL: childURL,
+                    containerRootStd: containerRootStd,
+                    sdkZH: fileMatch.zh,
+                    sdkEN: fileMatch.en,
+                    isCustomRule: false,
+                    cancelFlag: cancelFlag
+                   ) {
+                    seenCanonicalItems.insert(canon)
+                    results.append(item)
+                }
                 continue
             }
 
+            guard fmt == S_IFDIR else { continue }
+
             if let match = classifyAdFolder(name: childName) {
-                if let item = inspectMatchedAdDirectory(
-                    dirURL: childURL,
+                if let item = inspectMatchedAdTarget(
+                    targetURL: childURL,
                     containerRootStd: containerRootStd,
                     sdkZH: match.zh,
                     sdkEN: match.en,
+                    isCustomRule: false,
                     cancelFlag: cancelFlag
                 ) {
-                    seenCanonicalFolders.insert(canon)
+                    seenCanonicalItems.insert(canon)
                     results.append(item)
                 }
-                // Do not descend into an already-matched ad SDK directory
                 continue
             }
 
@@ -1121,7 +1692,8 @@ struct AdCacheBlockerView: View {
                     containerRootStd: containerRootStd,
                     currentDepth: currentDepth + 1,
                     maxDepth: maxDepth,
-                    seenCanonicalFolders: &seenCanonicalFolders,
+                    skipStandardTopSubdirs: false,
+                    seenCanonicalItems: &seenCanonicalItems,
                     results: &results,
                     cancelFlag: cancelFlag
                 )
@@ -1129,39 +1701,58 @@ struct AdCacheBlockerView: View {
         }
     }
 
-    private static func inspectMatchedAdDirectory(
-        dirURL: URL,
+    private static func inspectMatchedAdTarget(
+        targetURL: URL,
         containerRootStd: String,
         sdkZH: String,
         sdkEN: String,
+        isCustomRule: Bool,
         cancelFlag: AdScanCancellationFlag
     ) -> AdCacheFolderItem? {
         var st = stat()
-        guard lstat(dirURL.path, &st) == 0,
-              (st.st_mode & S_IFMT) == S_IFDIR else {
+        guard lstat(targetURL.path, &st) == 0 else {
+            return nil
+        }
+        let fmt = st.st_mode & S_IFMT
+        guard fmt == S_IFDIR || fmt == S_IFREG else {
             return nil
         }
 
-        let ownerName = (try? fm.attributesOfItem(atPath: dirURL.path)[.ownerAccountName] as? String) ?? ""
+        let ownerName = (try? fm.attributesOfItem(atPath: targetURL.path)[.ownerAccountName] as? String) ?? ""
         guard ownerName == "mobile",
-              canSafelyModifyPermissions(url: dirURL, owner: ownerName) else {
+              canSafelyModifyPermissions(url: targetURL, owner: ownerName) else {
             return nil
         }
 
+        let isDir = (fmt == S_IFDIR)
         let mode = Int(st.st_mode) & 0o777
-        let dirStd = CSStoreEngine.normalizeVarPath(dirURL.standardizedFileURL.path)
+        let targetStd = CSStoreEngine.normalizeVarPath(targetURL.standardizedFileURL.path)
         let prefix = containerRootStd + "/"
-        let relPath = dirStd.hasPrefix(prefix) ? String(dirStd.dropFirst(prefix.count)) : dirURL.lastPathComponent
-        let sizeBytes = fastAdFolderSize(atPath: dirURL.path, maxDepth: 6, cancelFlag: cancelFlag)
+        let relPath = targetStd.hasPrefix(prefix) ? String(targetStd.dropFirst(prefix.count)) : targetURL.lastPathComponent
+
+        let sizeBytes: Int64
+        let hasSentinel: Bool
+        if isDir {
+            sizeBytes = fastAdFolderSize(atPath: targetURL.path, maxDepth: 6, cancelFlag: cancelFlag)
+            var sSt = stat()
+            let sentinelPath = (targetURL.path as NSString).appendingPathComponent(sentinelFileName)
+            hasSentinel = (lstat(sentinelPath, &sSt) == 0) && ((sSt.st_mode & S_IFMT) == S_IFREG)
+        } else {
+            sizeBytes = max(0, Int64(st.st_size))
+            hasSentinel = false
+        }
 
         return AdCacheFolderItem(
-            id: dirStd,
-            fullPath: dirURL.path,
+            id: targetStd,
+            fullPath: targetURL.path,
             relativePath: relPath,
             sdkNameZH: sdkZH,
             sdkNameEN: sdkEN,
+            isDirectory: isDir,
+            isCustomRule: isCustomRule,
             cachedBytes: sizeBytes,
-            posixMode: mode
+            posixMode: mode,
+            hasSentinelLock: hasSentinel
         )
     }
 
@@ -1222,25 +1813,31 @@ struct AdCacheBlockerView: View {
         return tokens
     }
 
-    // MARK: - Wipe + Lock (0555) & Unlock (0755)
+    // MARK: - Anti-Recreate Lock (0555 + 0444 Sentinel / 0444 File) & Unlock
 
-    private static func setAdFolderLocked(
+    private static func setAdTargetLocked(
         item: AdCacheFolderItem,
         containerURL: URL,
         locked: Bool
-    ) -> (ok: Bool, mode: Int, bytes: Int64, error: String?) {
+    ) -> (ok: Bool, mode: Int, bytes: Int64, hasSentinel: Bool, error: String?) {
         let targetURL = item.url
         let targetPath = targetURL.path
 
         var st = stat()
-        guard lstat(targetPath, &st) == 0, (st.st_mode & S_IFMT) == S_IFDIR else {
-            return (false, item.posixMode, item.cachedBytes,
-                    isEn ? "Directory no longer exists or is not a folder." : "目标广告目录已不存在。")
+        guard lstat(targetPath, &st) == 0 else {
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
+                    isEn ? "Target no longer exists." : "目标目录或文件已不存在。")
         }
+        let fmt = st.st_mode & S_IFMT
+        guard fmt == S_IFDIR || fmt == S_IFREG else {
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
+                    isEn ? "Unsupported file type (symlinks blocked)." : "不支持的条目类型（已拦截符号链接）。")
+        }
+        let isDir = (fmt == S_IFDIR)
 
         let ownerName = (try? fm.attributesOfItem(atPath: targetPath)[.ownerAccountName] as? String) ?? ""
         guard canSafelyModifyPermissions(url: targetURL, owner: ownerName) else {
-            return (false, item.posixMode, item.cachedBytes,
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
                     isEn ? "Blocked by system container safety policy." : "已被系统安全策略拦截，禁止修改该路径。")
         }
 
@@ -1261,44 +1858,156 @@ struct AdCacheBlockerView: View {
         }
 
         guard tGrant.0 || tGrant.1 >= 0 || cGrant.0 || cGrant.1 >= 0 else {
-            return (false, item.posixMode, item.cachedBytes,
+            return (false, item.posixMode, item.cachedBytes, item.hasSentinelLock,
                     isEn ? "Sandbox grant failed: \(tGrant.2)" : "沙盒写权限授权失败：\(tGrant.2)")
         }
 
+        if isDir {
+            return applyDirectorySentinelLock(targetPath: targetPath, locked: locked, fallbackItem: item)
+        } else {
+            return applySingleFileReadOnlyLock(targetURL: targetURL, locked: locked, fallbackItem: item)
+        }
+    }
+
+    nonisolated private static func applyDirectorySentinelLock(
+        targetPath: String,
+        locked: Bool,
+        fallbackItem: AdCacheFolderItem
+    ) -> (ok: Bool, mode: Int, bytes: Int64, hasSentinel: Bool, error: String?) {
+        let sentinelPath = (targetPath as NSString).appendingPathComponent(sentinelFileName)
+
         if locked {
-            // Temporarily ensure 0755 so existing ad assets can be wiped cleanly before locking to 0555
-            if Darwin.chmod(targetPath, 0o755) != 0 {
+            guard Darwin.chmod(targetPath, 0o755) == 0 else {
                 let err = String(cString: strerror(errno))
-                return (false, item.posixMode, item.cachedBytes,
-                        isEn ? "chmod 0755 failed: \(err)" : "准备清理目录权限失败：\(err)")
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, fallbackItem.hasSentinelLock,
+                        LocalizationManager.isEnglish ? "chmod 0755 failed: \(err)" : "准备清理目录权限失败：\(err)")
             }
             purgeDirectoryContentsSafely(atPath: targetPath)
-        }
 
-        let desiredMode: mode_t = locked ? 0o555 : 0o755
-        guard Darwin.chmod(targetPath, desiredMode) == 0 else {
-            let err = String(cString: strerror(errno))
-            return (false, item.posixMode, item.cachedBytes,
-                    isEn ? "chmod failed: \(err)" : "修改权限失败：\(err)")
-        }
+            // Create 0-byte 0444 sentinel file inside directory so parent-level rmdir/removeItem fails with ENOTEMPTY/EACCES
+            let fd = Darwin.open(sentinelPath, O_CREAT | O_TRUNC | O_WRONLY | O_NOFOLLOW, mode_t(0o644))
+            var sentinelCreated = false
+            if fd >= 0 {
+                Darwin.close(fd)
+                _ = Darwin.chmod(sentinelPath, 0o444)
+                var sSt = stat()
+                sentinelCreated = (lstat(sentinelPath, &sSt) == 0) && ((sSt.st_mode & S_IFMT) == S_IFREG)
+            }
 
-        var verifySt = stat()
-        guard lstat(targetPath, &verifySt) == 0 else {
-            return (false, item.posixMode, item.cachedBytes,
-                    isEn ? "Failed to verify permissions with lstat." : "lstat 校验权限失败。")
-        }
+            guard Darwin.chmod(targetPath, 0o555) == 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, sentinelCreated,
+                        LocalizationManager.isEnglish ? "chmod 0555 failed: \(err)" : "锁定 0555 失败：\(err)")
+            }
 
-        let verifiedMode = Int(verifySt.st_mode) & 0o777
-        let expectedMode = Int(desiredMode)
-        guard verifiedMode == expectedMode else {
-            return (false, verifiedMode, item.cachedBytes,
-                    isEn
-                        ? "Mode mismatch: expected \(String(format: "%04o", expectedMode)), got \(String(format: "%04o", verifiedMode))."
-                        : "权限校验不一致：预期 \(String(format: "%04o", expectedMode))，实际 \(String(format: "%04o", verifiedMode))。")
-        }
+            var verifySt = stat()
+            guard lstat(targetPath, &verifySt) == 0 else {
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, sentinelCreated,
+                        LocalizationManager.isEnglish ? "Failed to verify permissions via lstat." : "lstat 校验权限失败。")
+            }
+            let verifiedMode = Int(verifySt.st_mode) & 0o777
+            guard verifiedMode == 0o555 else {
+                return (false, verifiedMode, fallbackItem.cachedBytes, sentinelCreated,
+                        LocalizationManager.isEnglish
+                            ? "Mode mismatch: got \(String(format: "%04o", verifiedMode))."
+                            : "权限校验不一致：实际为 \(String(format: "%04o", verifiedMode))。")
+            }
+            let remaining = fastAdFolderSize(atPath: targetPath, maxDepth: 6, cancelFlag: nil)
+            return (true, verifiedMode, remaining, sentinelCreated, nil)
+        } else {
+            guard Darwin.chmod(targetPath, 0o755) == 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, fallbackItem.hasSentinelLock,
+                        LocalizationManager.isEnglish ? "chmod 0755 failed: \(err)" : "恢复读写 0755 失败：\(err)")
+            }
 
-        let remainingBytes = fastAdFolderSize(atPath: targetPath, maxDepth: 6, cancelFlag: nil)
-        return (true, verifiedMode, remainingBytes, nil)
+            var sSt = stat()
+            if lstat(sentinelPath, &sSt) == 0 && (sSt.st_mode & S_IFMT) == S_IFREG {
+                _ = Darwin.chmod(sentinelPath, 0o644)
+                _ = Darwin.unlink(sentinelPath)
+            }
+
+            var verifySt = stat()
+            guard lstat(targetPath, &verifySt) == 0 else {
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "Failed to verify permissions via lstat." : "lstat 校验权限失败。")
+            }
+            let verifiedMode = Int(verifySt.st_mode) & 0o777
+            let remaining = fastAdFolderSize(atPath: targetPath, maxDepth: 6, cancelFlag: nil)
+            return (true, verifiedMode, remaining, false, nil)
+        }
+    }
+
+    nonisolated private static func applySingleFileReadOnlyLock(
+        targetURL: URL,
+        locked: Bool,
+        fallbackItem: AdCacheFolderItem
+    ) -> (ok: Bool, mode: Int, bytes: Int64, hasSentinel: Bool, error: String?) {
+        let targetPath = targetURL.path
+
+        if locked {
+            guard Darwin.chmod(targetPath, 0o644) == 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "chmod 0644 failed: \(err)" : "准备修改文件权限失败：\(err)")
+            }
+
+            // Overwrite in-place with minimal valid empty payload (0444 afterward)
+            let emptyData = emptyPayloadData(for: targetURL)
+            let fd = Darwin.open(targetPath, O_WRONLY | O_TRUNC | O_NOFOLLOW)
+            guard fd >= 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "Failed to truncate config file: \(err)" : "打开配置文件清空失败：\(err)")
+            }
+            if !emptyData.isEmpty {
+                _ = emptyData.withUnsafeBytes { ptr -> Int in
+                    guard let base = ptr.baseAddress else { return 0 }
+                    return Darwin.write(fd, base, emptyData.count)
+                }
+            }
+            _ = Darwin.fcntl(fd, F_FULLFSYNC)
+            Darwin.close(fd)
+
+            guard Darwin.chmod(targetPath, 0o444) == 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "chmod 0444 failed: \(err)" : "锁定 0444 失败：\(err)")
+            }
+
+            var verifySt = stat()
+            guard lstat(targetPath, &verifySt) == 0 else {
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "Failed to verify permissions via lstat." : "lstat 校验权限失败。")
+            }
+            let verifiedMode = Int(verifySt.st_mode) & 0o777
+            return (verifiedMode == 0o444, verifiedMode, max(0, Int64(verifySt.st_size)), false,
+                    verifiedMode == 0o444 ? nil : (LocalizationManager.isEnglish ? "Mode verification mismatch." : "权限校验不一致。"))
+        } else {
+            guard Darwin.chmod(targetPath, 0o644) == 0 else {
+                let err = String(cString: strerror(errno))
+                return (false, fallbackItem.posixMode, fallbackItem.cachedBytes, false,
+                        LocalizationManager.isEnglish ? "chmod 0644 failed: \(err)" : "恢复 0644 失败：\(err)")
+            }
+            var verifySt = stat()
+            let verifiedMode = (lstat(targetPath, &verifySt) == 0) ? (Int(verifySt.st_mode) & 0o777) : 0o644
+            let fileBytes = (lstat(targetPath, &verifySt) == 0) ? max(0, Int64(verifySt.st_size)) : fallbackItem.cachedBytes
+            return (true, verifiedMode, fileBytes, false, nil)
+        }
+    }
+
+    nonisolated private static func emptyPayloadData(for url: URL) -> Data {
+        switch url.pathExtension.lowercased() {
+        case "json":
+            return Data("{}".utf8)
+        case "plist":
+            if let data = try? PropertyListSerialization.data(fromPropertyList: [String: Any](), format: .xml, options: 0) {
+                return data
+            }
+            return Data()
+        default:
+            return Data()
+        }
     }
 
     /// Empties all entries inside `dirPath` via POSIX lstat/unlink/rmdir without removing `dirPath` itself or following symlinks.
@@ -1330,7 +2039,9 @@ struct AdCacheBlockerView: View {
                 purgeDirectoryContentsSafely(atPath: childPath)
                 _ = Darwin.rmdir(childPath)
             } else {
-                // Unlink symlinks, regular files, sockets, FIFOs directly (never follows symlinks)
+                if name == sentinelFileName {
+                    _ = Darwin.chmod(childPath, 0o644)
+                }
                 _ = Darwin.unlink(childPath)
             }
         }
@@ -1476,13 +2187,47 @@ private struct AdFolderRowView: View {
     let item: AdCacheFolderItem
     let isBusy: Bool
     let onLocate: () -> Void
+    let onPreview: (() -> Void)?
     let onToggleLock: () -> Void
+    let onRemoveCustom: (() -> Void)?
 
     private static var isEn: Bool { LocalizationManager.isEnglish }
 
+    private var statusBadgeText: String {
+        if item.isDirectory {
+            if item.isLockedReadOnly {
+                if item.hasSentinelLock {
+                    return Self.isEn
+                        ? String(format: "%04o Sentinel", item.posixMode)
+                        : String(format: "%04o 防重建已锁", item.posixMode)
+                }
+                return Self.isEn
+                    ? String(format: "%04o Weak Lock", item.posixMode)
+                    : String(format: "%04o 只读(可加固)", item.posixMode)
+            }
+            return Self.isEn
+                ? String(format: "%04o Writable", item.posixMode)
+                : String(format: "%04o 可写", item.posixMode)
+        } else {
+            return item.isLockedReadOnly
+                ? (Self.isEn ? String(format: "%04o File Locked", item.posixMode) : String(format: "%04o 文件已锁", item.posixMode))
+                : (Self.isEn ? String(format: "%04o Writable", item.posixMode) : String(format: "%04o 可写", item.posixMode))
+        }
+    }
+
+    private var statusBadgeColor: Color {
+        if !item.needsActionToLock { return .green }
+        if item.isLockedReadOnly && item.isDirectory && !item.hasSentinelLock { return .yellow }
+        return .orange
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: item.isDirectory ? "folder.fill" : "doc.text.fill")
+                    .font(.caption2)
+                    .foregroundStyle(item.isDirectory ? Color.accentColor : .blue)
+
                 Text(item.relativePath)
                     .font(.system(.caption, design: .monospaced).weight(.medium))
                     .lineLimit(1)
@@ -1496,34 +2241,35 @@ private struct AdFolderRowView: View {
             }
 
             HStack(spacing: 6) {
+                if item.isCustomRule {
+                    Text(Self.isEn ? "Custom" : "自定义")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.blue)
+                        .fixedSize()
+                }
+
                 Text(Self.isEn ? item.sdkNameEN : item.sdkNameZH)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
-                Text(item.isLockedReadOnly
-                     ? (Self.isEn
-                        ? String(format: "%04o Read-Only", item.posixMode)
-                        : String(format: "%04o 只读已锁", item.posixMode))
-                     : (Self.isEn
-                        ? String(format: "%04o Writable", item.posixMode)
-                        : String(format: "%04o 可写", item.posixMode)))
+                Text(statusBadgeText)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(
-                        (item.isLockedReadOnly ? Color.green : Color.orange).opacity(0.16),
-                        in: Capsule()
-                    )
-                    .foregroundStyle(item.isLockedReadOnly ? Color.green : Color.orange)
+                    .background(statusBadgeColor.opacity(0.16), in: Capsule())
+                    .foregroundStyle(statusBadgeColor == .yellow ? .orange : statusBadgeColor)
                     .fixedSize()
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button(action: onLocate) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "scope")
-                        Text(Self.isEn ? "Locate" : "定位目录")
+                        Text(Self.isEn ? "Locate" : "定位")
                     }
                     .font(.caption.weight(.medium))
                     .fixedSize()
@@ -1532,13 +2278,40 @@ private struct AdFolderRowView: View {
                 .controlSize(.small)
                 .fixedSize()
 
-                Spacer(minLength: 8)
+                if let onPreview {
+                    Button(action: onPreview) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "eye")
+                            Text(Self.isEn ? "Preview" : "预览")
+                        }
+                        .font(.caption.weight(.medium))
+                        .fixedSize()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .fixedSize()
+                }
 
-                if item.isLockedReadOnly {
+                if let onRemoveCustom {
+                    Button(role: .destructive, action: onRemoveCustom) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .disabled(isBusy)
+                }
+
+                Spacer(minLength: 4)
+
+                if !item.needsActionToLock {
                     Button(action: onToggleLock) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Image(systemName: "lock.open.fill")
-                            Text(Self.isEn ? "Unlock 0755" : "恢复读写")
+                            Text(Self.isEn
+                                 ? (item.isDirectory ? "Unlock 0755" : "Unlock 0644")
+                                 : "恢复读写")
                         }
                         .font(.caption.weight(.semibold))
                         .fixedSize()
@@ -1549,10 +2322,15 @@ private struct AdFolderRowView: View {
                     .fixedSize()
                     .disabled(isBusy)
                 } else {
+                    let isHardenOnly = item.isDirectory && item.isLockedReadOnly && !item.hasSentinelLock
                     Button(action: onToggleLock) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             Image(systemName: "lock.fill")
-                            Text(Self.isEn ? "Lock 0555" : "一键锁死")
+                            Text(isHardenOnly
+                                 ? (Self.isEn ? "Harden" : "加固防重建")
+                                 : (Self.isEn
+                                    ? (item.isDirectory ? "Lock 0555" : "Lock 0444")
+                                    : "一键锁死"))
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
