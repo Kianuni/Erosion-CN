@@ -16,7 +16,7 @@
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square"></a>
   </p>
   <p>
-    <a href="https://trendshift.io/repositories/347713" target="_blank"><img src="https://trendshift.io/api/badge/trendshift/repositories/347713/daily?language=Swift" alt="Kianuni/Erosion-CN | #2 Swift Repository Of The Day" width="250" height="55"></a>&nbsp;&nbsp;<a href="https://trendshift.io/repositories/347713" target="_blank"><img src="https://trendshift.io/api/badge/trendshift/repositories/347713/daily" alt="Kianuni/Erosion-CN | #18 Repository Of The Day" width="250" height="55"></a>
+    <a href="https://trendshift.io/repositories/347713" target="_blank"><img src="https://trendshift.io/api/badge/trendshift/repositories/347713/weekly?language=Swift" alt="Kianuni/Erosion-CN | #2 Swift Repository Of The Week" width="250" height="55"></a>&nbsp;&nbsp;<a href="https://trendshift.io/repositories/347713" target="_blank"><img src="https://trendshift.io/api/badge/trendshift/repositories/347713/daily?language=Swift" alt="Kianuni/Erosion-CN | #2 Swift Repository Of The Day" width="250" height="55"></a>&nbsp;&nbsp;<a href="https://trendshift.io/repositories/347713" target="_blank"><img src="https://trendshift.io/api/badge/trendshift/repositories/347713/daily" alt="Kianuni/Erosion-CN | #18 Repository Of The Day" width="250" height="55"></a>
   </p>
 </div>
 
