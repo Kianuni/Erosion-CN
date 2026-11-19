@@ -129,6 +129,33 @@ struct FolderRow: View {
                         )
                     }
                 }
+
+                if AdWhitelistStore.shared.canWhitelistPath(url: file.fileURL, owner: file.owner) {
+                    let isWhitelisted = AdWhitelistStore.shared.containsExactPath(file.fileURL)
+                    Button {
+                        if isWhitelisted {
+                            AdWhitelistStore.shared.removeExactPath(file.fileURL.path)
+                            Haptic.shared.play(.soft)
+                        } else {
+                            let canon = AdCustomWatchStore.canonicalVarPath(file.fileURL.standardizedFileURL.path)
+                            AdWhitelistStore.shared.addPathRule(rawPath: canon)
+                            Haptic.shared.notify(.success)
+                            Alertinator.shared.alert(
+                                title: LocalizationManager.isEnglish ? "Added to Ad Whitelist" : "已加入广告白名单",
+                                body: LocalizationManager.isEnglish
+                                    ? "\"\(file.name)\" will be skipped by global Lock All in Splash Ad Blocker."
+                                    : "目录「\(file.name)」已加入广告锁定白名单，执行一键全锁时会自动跳过。"
+                            )
+                        }
+                    } label: {
+                        Label(
+                            isWhitelisted
+                                ? (LocalizationManager.isEnglish ? "Remove from Ad Whitelist" : "移出广告白名单")
+                                : (LocalizationManager.isEnglish ? "Add to Ad Whitelist" : "加入广告白名单"),
+                            systemImage: isWhitelisted ? "shield.slash" : "checkmark.shield"
+                        )
+                    }
+                }
                 
                 Divider()
                 

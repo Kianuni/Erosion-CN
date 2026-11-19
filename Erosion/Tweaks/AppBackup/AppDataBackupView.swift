@@ -26,6 +26,7 @@ enum AppContainerDirectoryHelper {
         "com.sina.weibo": "微博",
         "com.baidu.BaiduMobile": "百度",
         "com.autonavi.amap": "高德地图",
+        "com.smzdm.client.ios": "什么值得买",
         "com.tencent.smoba": "王者荣耀",
         "com.tencent.tmgp.pubgmhd": "和平精英",
         "com.tencent.jkchess": "金铲铲之战",

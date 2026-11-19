@@ -515,16 +515,48 @@ struct GestaltView: View {
                         ]
                     )
 
-                    experimentalSlotRuleRow(
-                        title: L("[测试特性] 旧机型显示电池循环次数与生产日期"),
-                        subtitle: L("在旧款机型“关于本机 / 电池健康”中展示循环计数与首次使用日期"),
-                        infoTitle: L("旧机型电池健康详情（测试特性）"),
-                        infoMessage: MGMsg.expLegacyBatteryInfo,
-                        rules: [
-                            MGSlotRule(key: MGKey.legacyBatteryInfo, targetValue: true, required: true),
-                            MGSlotRule(key: MGKey.legacyDynamicEndOfCharge, targetValue: true, required: false)
-                        ]
-                    )
+                    let legacyBatteryRules = [
+                        MGSlotRule(key: MGKey.legacyBatteryInfo, targetValue: true, required: true),
+                        MGSlotRule(key: MGKey.legacyDynamicEndOfCharge, targetValue: true, required: false)
+                    ]
+                    let legacyBatteryExtendedInfo = MGMsg.expLegacyBatteryInfo + (LocalizationManager.isEnglish
+                        ? "\n\nNote: iPhone 15 series and newer models (and modern M2/M4+ iPads) natively show Battery Cycle Count, Manufacture Date, and First Use Date in Settings → Battery → Battery Health since iOS 17.4+, so this legacy-hardware flag is unnecessary on those devices."
+                        : "\n\n提示：iPhone 15 全系列及更新机型（以及新款 M2/M4+ iPad）自 iOS 17.4 起已在系统「设置 → 电池 → 电池健康」原生内置循环计数与生产日期，无需开启此旧机型实验开关。")
+                    if isNativeBatteryCycleInfoHD() && !mgOverrideGates {
+                        let legacyBatteryBinding = store.mgSlotRulesBinding(legacyBatteryRules)
+                        if legacyBatteryBinding.wrappedValue {
+                            PlainToggle(
+                                L("[测试特性] 旧机型显示电池循环次数与生产日期"),
+                                subtitle: LocalizationManager.isEnglish
+                                    ? "⚠️ Native on your device (Settings → Battery → Battery Health); turn off this legacy flag and tap Apply"
+                                    : "⚠️ 当前机型系统「电池健康」已原生内置循环与日期显示，建议关闭此旧机型开关并应用",
+                                infoType: .info,
+                                infoTitle: L("旧机型电池健康详情（测试特性）"),
+                                infoMessage: legacyBatteryExtendedInfo,
+                                isOn: legacyBatteryBinding
+                            )
+                        } else {
+                            PlainToggle(
+                                L("[测试特性] 旧机型显示电池循环次数与生产日期"),
+                                subtitle: LocalizationManager.isEnglish
+                                    ? "✅ Native on iPhone 15+ / modern iPad (Settings → Battery → Battery Health); no tweak needed (locked)"
+                                    : "✅ 当前机型（iPhone 15 系列及更新机型 / 新款 iPad）系统「设置 → 电池」已原生内置，无需开启（已自动锁定）",
+                                infoType: .info,
+                                infoTitle: L("旧机型电池健康详情（测试特性）"),
+                                infoMessage: legacyBatteryExtendedInfo,
+                                isOn: .constant(false)
+                            )
+                            .disabled(true)
+                        }
+                    } else {
+                        experimentalSlotRuleRow(
+                            title: L("[测试特性] 旧机型显示电池循环次数与生产日期"),
+                            subtitle: L("在旧款机型“关于本机 / 电池健康”中展示循环计数与首次使用日期"),
+                            infoTitle: L("旧机型电池健康详情（测试特性）"),
+                            infoMessage: legacyBatteryExtendedInfo,
+                            rules: legacyBatteryRules
+                        )
+                    }
 
                     experimentalSlotRuleRow(
                         title: L("[测试特性] 户外高亮全天候显示与翻页帧缓冲"),

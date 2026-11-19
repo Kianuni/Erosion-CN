@@ -155,6 +155,241 @@ nonisolated final class AdCustomWatchStore: @unchecked Sendable {
     }
 }
 
+nonisolated enum AdWhitelistKind: String, Codable, Hashable, Sendable {
+    case bundleID
+    case exactPath
+}
+
+nonisolated struct AdWhitelistRule: Codable, Identifiable, Hashable, Sendable {
+    var id: String { "\(kind.rawValue):\(target.lowercased())" }
+    let kind: AdWhitelistKind
+    let target: String
+    let note: String
+    let addedAt: Date
+}
+
+/// Thread-safe persistent store for App/AppGroup and exact-path whitelists skipped by batch ad locking.
+nonisolated final class AdWhitelistStore: @unchecked Sendable {
+    static let shared = AdWhitelistStore()
+    static let didChangeNotification = Notification.Name("erosion.adWhitelistDidChange")
+
+    private static let defaultsKey = "erosion.adBlocker.whitelistRules.v1"
+    private static let seededKey = "erosion.adBlocker.whitelistSeeded.v1"
+    private let lock = NSLock()
+    private var cachedRules: [AdWhitelistRule]
+
+    private init() {
+        var loaded: [AdWhitelistRule] = []
+        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+           let decoded = try? JSONDecoder().decode([AdWhitelistRule].self, from: data) {
+            loaded = decoded
+        }
+        if !UserDefaults.standard.bool(forKey: Self.seededKey) {
+            UserDefaults.standard.set(true, forKey: Self.seededKey)
+            if !loaded.contains(where: { $0.kind == .bundleID && $0.target.caseInsensitiveCompare("com.smzdm.client.ios") == .orderedSame }) {
+                loaded.append(
+                    AdWhitelistRule(
+                        kind: .bundleID,
+                        target: "com.smzdm.client.ios",
+                        note: "已知锁死开屏目录会触发启动闪退 / Known splash lock crash",
+                        addedAt: Date()
+                    )
+                )
+                if let data = try? JSONEncoder().encode(loaded) {
+                    UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+                }
+            }
+        }
+        self.cachedRules = loaded
+    }
+
+    func rulesSnapshot() -> [AdWhitelistRule] {
+        lock.lock()
+        let copy = cachedRules
+        lock.unlock()
+        return copy
+    }
+
+    func isContainerWhitelisted(id: String, isAppGroup: Bool) -> Bool {
+        let idLower = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !idLower.isEmpty else { return false }
+        lock.lock()
+        let hit = cachedRules.contains { rule in
+            guard rule.kind == .bundleID else { return false }
+            let ruleLower = rule.target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !ruleLower.isEmpty else { return false }
+            if ruleLower == idLower {
+                return true
+            }
+            if isAppGroup && (idLower == "group." + ruleLower || idLower.hasPrefix("group." + ruleLower + ".")) {
+                return true
+            }
+            return false
+        }
+        lock.unlock()
+        return hit
+    }
+
+    func containsExactBundleRule(_ rawID: String) -> Bool {
+        let idLower = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !idLower.isEmpty else { return false }
+        lock.lock()
+        let hit = cachedRules.contains { $0.kind == .bundleID && $0.target.lowercased() == idLower }
+        lock.unlock()
+        return hit
+    }
+
+    func isPathWhitelisted(_ rawPath: String) -> Bool {
+        let canon = AdCustomWatchStore.canonicalVarPath(rawPath)
+        guard !canon.isEmpty else { return false }
+        lock.lock()
+        let hit = cachedRules.contains { rule in
+            guard rule.kind == .exactPath else { return false }
+            let ruleCanon = AdCustomWatchStore.canonicalVarPath(rule.target)
+            return canon == ruleCanon || canon.hasPrefix(ruleCanon + "/")
+        }
+        lock.unlock()
+        return hit
+    }
+
+    func containsExactPath(_ url: URL) -> Bool {
+        isPathWhitelisted(url.standardizedFileURL.path)
+    }
+
+    func canWhitelistPath(url: URL, owner: String) -> Bool {
+        guard canSafelyModifyPermissions(url: url, owner: owner) else {
+            return false
+        }
+        let canon = AdCustomWatchStore.canonicalVarPath(url.standardizedFileURL.path)
+        var st = stat()
+        guard lstat(canon, &st) == 0 else { return false }
+        let fmt = st.st_mode & S_IFMT
+        return fmt == S_IFDIR || fmt == S_IFREG
+    }
+
+    @discardableResult
+    func addBundleRule(bundleOrGroupID: String, note: String = "") -> AdWhitelistRule? {
+        let cleanID = bundleOrGroupID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty,
+              !cleanID.contains("/"),
+              cleanID.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else {
+            return nil
+        }
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rule = AdWhitelistRule(kind: .bundleID, target: cleanID, note: cleanNote, addedAt: Date())
+
+        lock.lock()
+        if let idx = cachedRules.firstIndex(where: { $0.id == rule.id }) {
+            cachedRules[idx] = rule
+        } else {
+            cachedRules.insert(rule, at: 0)
+        }
+        persistLocked()
+        lock.unlock()
+
+        notifyChanged()
+        return rule
+    }
+
+    @discardableResult
+    func addPathRule(rawPath: String, note: String = "") -> AdWhitelistRule? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let canon = AdCustomWatchStore.canonicalVarPath(trimmed)
+        guard AdCustomWatchStore.containerRootPath(forCanonicalPath: canon) != nil else {
+            return nil
+        }
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rule = AdWhitelistRule(kind: .exactPath, target: canon, note: cleanNote, addedAt: Date())
+
+        lock.lock()
+        if let idx = cachedRules.firstIndex(where: { $0.id == rule.id }) {
+            cachedRules[idx] = rule
+        } else {
+            cachedRules.insert(rule, at: 0)
+        }
+        persistLocked()
+        lock.unlock()
+
+        notifyChanged()
+        return rule
+    }
+
+    func remove(ruleID: String) {
+        lock.lock()
+        let oldCount = cachedRules.count
+        cachedRules.removeAll { $0.id == ruleID }
+        let changed = cachedRules.count != oldCount
+        if changed {
+            persistLocked()
+        }
+        lock.unlock()
+
+        if changed {
+            notifyChanged()
+        }
+    }
+
+    func removeMatchingContainer(id: String, isAppGroup: Bool) {
+        let idLower = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !idLower.isEmpty else { return }
+        lock.lock()
+        let oldCount = cachedRules.count
+        cachedRules.removeAll { rule in
+            guard rule.kind == .bundleID else { return false }
+            let ruleLower = rule.target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ruleLower == idLower {
+                return true
+            }
+            if isAppGroup && (idLower == "group." + ruleLower || idLower.hasPrefix("group." + ruleLower + ".")) {
+                return true
+            }
+            return false
+        }
+        let changed = cachedRules.count != oldCount
+        if changed {
+            persistLocked()
+        }
+        lock.unlock()
+
+        if changed {
+            notifyChanged()
+        }
+    }
+
+    func removeExactPath(_ rawPath: String) {
+        let canon = AdCustomWatchStore.canonicalVarPath(rawPath)
+        lock.lock()
+        let oldCount = cachedRules.count
+        cachedRules.removeAll { rule in
+            guard rule.kind == .exactPath else { return false }
+            let ruleCanon = AdCustomWatchStore.canonicalVarPath(rule.target)
+            return canon == ruleCanon || canon.hasPrefix(ruleCanon + "/")
+        }
+        let changed = cachedRules.count != oldCount
+        if changed {
+            persistLocked()
+        }
+        lock.unlock()
+
+        if changed {
+            notifyChanged()
+        }
+    }
+
+    private func persistLocked() {
+        if let data = try? JSONEncoder().encode(cachedRules) {
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    private func notifyChanged() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+        }
+    }
+}
+
 nonisolated struct AdCacheFolderItem: Identifiable, Hashable, Sendable {
     let id: String
     let fullPath: String
@@ -163,6 +398,8 @@ nonisolated struct AdCacheFolderItem: Identifiable, Hashable, Sendable {
     let sdkNameEN: String
     let isDirectory: Bool
     var isCustomRule: Bool
+    var isContainerWhitelisted: Bool
+    var isPathWhitelisted: Bool
     var cachedBytes: Int64
     var posixMode: Int
     var hasSentinelLock: Bool
@@ -170,8 +407,9 @@ nonisolated struct AdCacheFolderItem: Identifiable, Hashable, Sendable {
     var url: URL { URL(fileURLWithPath: fullPath) }
     var parentURL: URL { url.deletingLastPathComponent() }
     var folderName: String { url.lastPathComponent }
+    var isWhitelisted: Bool { isContainerWhitelisted || isPathWhitelisted }
     var isLockedReadOnly: Bool { (posixMode & 0o222) == 0 }
-    var needsActionToLock: Bool { !isLockedReadOnly || (isDirectory && !hasSentinelLock) }
+    var needsActionToLock: Bool { !isWhitelisted && (!isLockedReadOnly || (isDirectory && !hasSentinelLock)) }
 }
 
 nonisolated struct AppAdCacheEntry: Identifiable, Sendable {
@@ -180,6 +418,7 @@ nonisolated struct AppAdCacheEntry: Identifiable, Sendable {
     let displayTitle: String
     let containerURL: URL
     let isAppGroup: Bool
+    var isAppWhitelisted: Bool
     var items: [AdCacheFolderItem]
 }
 
@@ -421,6 +660,396 @@ private struct AddCustomAdPathSheet: View {
     }
 }
 
+fileprivate struct AdWhitelistContainerOption: Identifiable, Hashable {
+    var id: String { "\(isAppGroup ? "g" : "a"):\(bundleID.lowercased())" }
+    let bundleID: String
+    let displayTitle: String
+    let isAppGroup: Bool
+}
+
+private struct AdWhitelistManagerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let initialContainers: [AdWhitelistContainerOption]
+
+    @State private var rules: [AdWhitelistRule] = AdWhitelistStore.shared.rulesSnapshot()
+    @State private var addMode: AdWhitelistKind = .bundleID
+    @State private var inputTarget = ""
+    @State private var inputNote = ""
+    @State private var errorMsg: String?
+    @State private var containerOptions: [AdWhitelistContainerOption] = []
+    @State private var containerSearch = ""
+    @State private var showContainerPicker = false
+    @State private var isLoadingContainers = false
+
+    private static var isEn: Bool { LocalizationManager.isEnglish }
+
+    private var filteredContainerOptions: [AdWhitelistContainerOption] {
+        let q = containerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return containerOptions }
+        return containerOptions.filter {
+            $0.displayTitle.localizedCaseInsensitiveContains(q) ||
+            $0.bundleID.localizedCaseInsensitiveContains(q)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Picker("", selection: $addMode) {
+                        Text(Self.isEn ? "App / AppGroup" : "按应用 / 共享组")
+                            .tag(AdWhitelistKind.bundleID)
+                        Text(Self.isEn ? "Folder / File Path" : "按指定目录 / 文件")
+                            .tag(AdWhitelistKind.exactPath)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: addMode) { _, _ in
+                        inputTarget = ""
+                        errorMsg = nil
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(addMode == .bundleID
+                             ? (Self.isEn ? "Bundle ID or AppGroup ID" : "应用 Bundle ID 或 AppGroup ID")
+                             : (Self.isEn ? "Container Subpath (/var/mobile/Containers/...)" : "容器内路径（/var/mobile/Containers/...）"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField(
+                            addMode == .bundleID
+                                ? "com.smzdm.client.ios / group.com.example"
+                                : "/var/mobile/Containers/.../SplashAd",
+                            text: $inputTarget,
+                            axis: addMode == .exactPath ? .vertical : .horizontal
+                        )
+                        .font(.system(.footnote, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .lineLimit(addMode == .exactPath ? 2...4 : 1...1)
+                    }
+                    .padding(.vertical, 2)
+
+                    TextField(
+                        Self.isEn ? "Optional note (e.g. Crashes on splash lock)" : "可选备注（例如：锁死会闪退 / 保留广告配置）",
+                        text: $inputNote
+                    )
+                    .font(.subheadline)
+
+                    if let errorMsg {
+                        Label(errorMsg, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button {
+                            if let clip = UIPasteboard.general.string {
+                                inputTarget = clip.trimmingCharacters(in: .whitespacesAndNewlines)
+                                errorMsg = nil
+                            }
+                        } label: {
+                            Label(Self.isEn ? "Paste" : "粘贴", systemImage: "doc.on.clipboard")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.borderless)
+
+                        Spacer(minLength: 8)
+
+                        Button {
+                            submitManualRule()
+                        } label: {
+                            Label(Self.isEn ? "Add to Whitelist" : "加入白名单", systemImage: "checkmark.shield.fill")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(.teal)
+                        .disabled(inputTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    if addMode == .bundleID {
+                        DisclosureGroup(isExpanded: $showContainerPicker) {
+                            TextField(
+                                Self.isEn ? "Filter by app name or Bundle ID" : "筛选应用名或 Bundle ID",
+                                text: $containerSearch
+                            )
+                            .font(.subheadline)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+
+                            if isLoadingContainers && containerOptions.isEmpty {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text(Self.isEn ? "Loading installed containers..." : "正在读取本机已装容器...")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else if filteredContainerOptions.isEmpty {
+                                Text(Self.isEn ? "No matching installed containers." : "未找到匹配的第三方应用或共享组。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                let slice = Array(filteredContainerOptions.prefix(80))
+                                ForEach(slice) { opt in
+                                    let isAdded = AdWhitelistStore.shared.isContainerWhitelisted(id: opt.bundleID, isAppGroup: opt.isAppGroup)
+                                    HStack(spacing: 8) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(opt.displayTitle)
+                                                .font(.caption.weight(.semibold))
+                                                .lineLimit(1)
+                                            Text(opt.bundleID)
+                                                .font(.system(.caption2, design: .monospaced))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        Button {
+                                            if isAdded {
+                                                AdWhitelistStore.shared.removeMatchingContainer(id: opt.bundleID, isAppGroup: opt.isAppGroup)
+                                                Haptic.shared.play(.soft)
+                                            } else {
+                                                AdWhitelistStore.shared.addBundleRule(bundleOrGroupID: opt.bundleID, note: opt.displayTitle)
+                                                Haptic.shared.notify(.success)
+                                            }
+                                            rules = AdWhitelistStore.shared.rulesSnapshot()
+                                        } label: {
+                                            Label(
+                                                isAdded ? (Self.isEn ? "Added" : "已加白") : (Self.isEn ? "Whitelist" : "加白"),
+                                                systemImage: isAdded ? "checkmark" : "plus"
+                                            )
+                                            .font(.caption2.weight(.semibold))
+                                            .lineLimit(1)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                        .tint(isAdded ? .teal : .accentColor)
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                                if filteredContainerOptions.count > 80 {
+                                    Text(Self.isEn
+                                         ? "Showing first 80 of \(filteredContainerOptions.count) matches; filter above to narrow down."
+                                         : "仅展示前 80 项（共 \(filteredContainerOptions.count) 项），请输入关键词精准筛选。")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } label: {
+                            Label(
+                                Self.isEn
+                                    ? "Quick-Pick Installed App / AppGroup (\(containerOptions.count))"
+                                    : "从本机应用 / 共享组列表快速点选 (\(containerOptions.count))",
+                                systemImage: "square.grid.2x2"
+                            )
+                            .font(.subheadline)
+                        }
+                    }
+                } header: {
+                    HeaderLabel(Self.isEn ? "Manually Add Whitelist" : "手动添加白名单", symbol: "plus.circle")
+                } footer: {
+                    Text(Self.isEn
+                         ? "Whitelisting an App Bundle ID also covers its matching group.<bundleID> AppGroups. Whitelisted targets automatically skip 'Lock All' and restore writable permissions if previously locked."
+                         : "按 Bundle ID 加白会同时跳过对应的 `group.<Bundle ID>` 共享组；按路径加白仅跳过该目录/文件及子项。新加白目标若此前已锁死，会自动恢复默认可读写权限。")
+                }
+
+                Section {
+                    if rules.isEmpty {
+                        Text(Self.isEn
+                             ? "No active whitelist rules yet."
+                             : "当前暂无生效中的白名单规则。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(rules) { rule in
+                            HStack(alignment: .center, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(rule.kind == .bundleID
+                                             ? (Self.isEn ? "App/Group" : "应用/组")
+                                             : (Self.isEn ? "Path" : "路径"))
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background((rule.kind == .bundleID ? Color.teal : Color.blue).opacity(0.15), in: Capsule())
+                                            .foregroundStyle(rule.kind == .bundleID ? .teal : .blue)
+                                            .fixedSize()
+
+                                        Text(displayRuleTitle(for: rule))
+                                            .font(.subheadline.weight(.medium))
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+
+                                    Text(rule.target)
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                        .truncationMode(.middle)
+
+                                    if !rule.note.isEmpty {
+                                        Text(rule.note)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Button(role: .destructive) {
+                                    AdWhitelistStore.shared.remove(ruleID: rule.id)
+                                    rules = AdWhitelistStore.shared.rulesSnapshot()
+                                    Haptic.shared.play(.soft)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                } header: {
+                    HeaderLabel(
+                        Self.isEn ? "Active Whitelist Rules (\(rules.count))" : "已生效白名单规则 (\(rules.count))",
+                        symbol: "checkmark.shield"
+                    )
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(Self.isEn ? "Ad Blocker Whitelist" : "去广告锁定白名单")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        ToolbarLabel("关闭", symbol: "xmark")
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AdWhitelistStore.didChangeNotification)) { _ in
+                rules = AdWhitelistStore.shared.rulesSnapshot()
+            }
+            .onAppear {
+                rules = AdWhitelistStore.shared.rulesSnapshot()
+                if containerOptions.isEmpty {
+                    containerOptions = initialContainers
+                }
+                loadAllInstalledContainers()
+            }
+        }
+    }
+
+    private func displayRuleTitle(for rule: AdWhitelistRule) -> String {
+        switch rule.kind {
+        case .bundleID:
+            if rule.target.lowercased().hasPrefix("group.") {
+                return AdCacheBlockerView.formatGroupDisplayTitle(groupID: rule.target)
+            }
+            return AppContainerDirectoryHelper.displayName(for: rule.target)
+        case .exactPath:
+            return URL(fileURLWithPath: rule.target).lastPathComponent
+        }
+    }
+
+    private func submitManualRule() {
+        let trimmed = inputTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        switch addMode {
+        case .bundleID:
+            guard !trimmed.contains("/"),
+                  trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else {
+                errorMsg = Self.isEn
+                    ? "Enter a valid Bundle ID or AppGroup ID (no spaces or slashes)."
+                    : "请输入合法的应用 Bundle ID 或 AppGroup ID（不能包含空格或斜杠）。"
+                return
+            }
+            if AdWhitelistStore.shared.addBundleRule(bundleOrGroupID: trimmed, note: inputNote) != nil {
+                errorMsg = nil
+                inputTarget = ""
+                inputNote = ""
+                rules = AdWhitelistStore.shared.rulesSnapshot()
+                Haptic.shared.notify(.success)
+            }
+        case .exactPath:
+            let canon = AdCustomWatchStore.canonicalVarPath(trimmed)
+            guard AdCustomWatchStore.containerRootPath(forCanonicalPath: canon) != nil else {
+                errorMsg = Self.isEn
+                    ? "Path must be a subfolder or file inside /var/mobile/Containers/Data/Application/ or /Shared/AppGroup/ (not the container root)."
+                    : "路径必须位于 `/var/mobile/Containers/Data/Application/` 或 `/Shared/AppGroup/` 内部（不能是容器根目录）。"
+                return
+            }
+            if AdWhitelistStore.shared.addPathRule(rawPath: canon, note: inputNote) != nil {
+                errorMsg = nil
+                inputTarget = ""
+                inputNote = ""
+                rules = AdWhitelistStore.shared.rulesSnapshot()
+                Haptic.shared.notify(.success)
+            }
+        }
+    }
+
+    private func loadAllInstalledContainers() {
+        guard !isLoadingContainers else { return }
+        isLoadingContainers = true
+        let seed = initialContainers
+        let selfBID = Bundle.main.bundleIdentifier ?? "com.jbdotparty.Erosion"
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let appRaw = fsHandlers.getDirPaths(FSURL.appContainers.path)
+            let groupRaw = fsHandlers.getDirPaths(FSURL.appGroup.path)
+            var discovered: [(bundleID: String, isGroup: Bool)] = []
+            var seenKeys = Set<String>()
+
+            for raw in appRaw {
+                let norm = CSStoreEngine.normalizeVarPath(raw)
+                if let bid = CSStoreEngine.shared.bundleID(forContainerPath: norm, allowDiscovery: false),
+                   !AdCacheBlockerView.shouldIgnoreContainerID(bid, isAppGroup: false, selfBID: selfBID) {
+                    let key = "a:\(bid.lowercased())"
+                    if seenKeys.insert(key).inserted {
+                        discovered.append((bid, false))
+                    }
+                }
+            }
+            for raw in groupRaw {
+                let norm = CSStoreEngine.normalizeVarPath(raw)
+                if let bid = CSStoreEngine.shared.bundleID(forContainerPath: norm, allowDiscovery: false),
+                   !AdCacheBlockerView.shouldIgnoreContainerID(bid, isAppGroup: true, selfBID: selfBID) {
+                    let key = "g:\(bid.lowercased())"
+                    if seenKeys.insert(key).inserted {
+                        discovered.append((bid, true))
+                    }
+                }
+            }
+
+            DispatchQueue.main.async {
+                var mergedByID: [String: AdWhitelistContainerOption] = [:]
+                for opt in seed {
+                    mergedByID[opt.id] = opt
+                }
+                for item in discovered {
+                    let title = item.isGroup
+                        ? AdCacheBlockerView.formatGroupDisplayTitle(groupID: item.bundleID)
+                        : AppContainerDirectoryHelper.displayName(for: item.bundleID)
+                    let opt = AdWhitelistContainerOption(
+                        bundleID: item.bundleID,
+                        displayTitle: title,
+                        isAppGroup: item.isGroup
+                    )
+                    mergedByID[opt.id] = opt
+                }
+                self.containerOptions = mergedByID.values.sorted {
+                    if $0.isAppGroup != $1.isAppGroup { return !$0.isAppGroup }
+                    return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
+                }
+                self.isLoadingContainers = false
+            }
+        }
+    }
+}
+
 struct AdCacheBlockerView: View {
     @State private var isScanning = false
     @State private var isStopping = false
@@ -435,11 +1064,13 @@ struct AdCacheBlockerView: View {
     @State private var locateTarget: LocateAdTarget?
     @State private var previewTarget: AdFilePreviewTarget?
     @State private var showAddCustomSheet = false
+    @State private var showWhitelistSheet = false
+    @State private var whitelistRulesCount = AdWhitelistStore.shared.rulesSnapshot().count
 
     private static var isEn: Bool { LocalizationManager.isEnglish }
     nonisolated private static let sentinelFileName = ".erosion_adlock"
 
-    nonisolated private static let protectedBundleIDs: Set<String> = [
+    nonisolated fileprivate static let protectedBundleIDs: Set<String> = [
         "com.jbdotparty.Erosion",
         "com.apple.PosterBoard",
         "com.apple.springboard",
@@ -447,7 +1078,7 @@ struct AdCacheBlockerView: View {
         "com.apple.mobilephone"
     ]
 
-    nonisolated private static let ignoredAppGroupPrefixes: [String] = [
+    nonisolated fileprivate static let ignoredAppGroupPrefixes: [String] = [
         "group.com.apple.",
         "systemgroup.",
         "group.com.jbdotparty.",
@@ -501,6 +1132,8 @@ struct AdCacheBlockerView: View {
             ("Library/Caches/XHSSplashAd", "小红书开屏广告", "Rednote Splash Ad")
         ],
         "com.taobao.taobao4iphone": [
+            ("Documents/TBDocuments/bootImagebiz", "淘宝开屏启动配置 (bootImagebiz)", "Taobao Boot Splash Config (bootImagebiz)"),
+            ("Documents/TBDocuments/bootImageDoc", "淘宝开屏启动缓存 (bootImageDoc)", "Taobao Boot Splash Assets (bootImageDoc)"),
             ("Library/Caches/TanxAd", "阿里妈妈 Tanx 广告", "Alimama Tanx Ad"),
             ("Library/Caches/TanxSDK", "阿里妈妈 Tanx SDK", "Alimama Tanx SDK"),
             ("Documents/SplashAd", "淘宝开屏广告", "Taobao Splash Ad")
@@ -707,14 +1340,26 @@ struct AdCacheBlockerView: View {
         detectedEntries.reduce(0) { $0 + $1.items.count }
     }
 
+    private var whitelistedTargetCount: Int {
+        detectedEntries.reduce(0) { acc, entry in
+            acc + entry.items.filter { $0.isWhitelisted }.count
+        }
+    }
+
+    private var activeTargetCount: Int {
+        totalAdFoldersCount - whitelistedTargetCount
+    }
+
     private var fullyLockedCount: Int {
         detectedEntries.reduce(0) { acc, entry in
-            acc + entry.items.filter { !$0.needsActionToLock }.count
+            acc + entry.items.filter { !$0.isWhitelisted && !$0.needsActionToLock }.count
         }
     }
 
     private var pendingLockOrHardenCount: Int {
-        totalAdFoldersCount - fullyLockedCount
+        detectedEntries.reduce(0) { acc, entry in
+            acc + entry.items.filter { $0.needsActionToLock }.count
+        }
     }
 
     private var unlockedOnlyCount: Int {
@@ -725,7 +1370,23 @@ struct AdCacheBlockerView: View {
 
     private var totalReclaimableAdBytes: Int64 {
         detectedEntries.reduce(0) { acc, entry in
-            acc + entry.items.filter { !$0.isLockedReadOnly }.reduce(0) { $0 + $1.cachedBytes }
+            acc + entry.items.filter { !$0.isWhitelisted && !$0.isLockedReadOnly }.reduce(0) { $0 + $1.cachedBytes }
+        }
+    }
+
+    private var discoveredContainerOptions: [AdWhitelistContainerOption] {
+        var byID: [String: AdWhitelistContainerOption] = [:]
+        for entry in allEntries {
+            let opt = AdWhitelistContainerOption(
+                bundleID: entry.bundleID,
+                displayTitle: entry.displayTitle,
+                isAppGroup: entry.isAppGroup
+            )
+            byID[opt.id] = opt
+        }
+        return byID.values.sorted {
+            if $0.isAppGroup != $1.isAppGroup { return !$0.isAppGroup }
+            return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
         }
     }
 
@@ -775,11 +1436,20 @@ struct AdCacheBlockerView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
-                            Text("\(fullyLockedCount) / \(totalAdFoldersCount)")
+                            Text("\(fullyLockedCount) / \(activeTargetCount)")
                                 .font(.subheadline.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(fullyLockedCount > 0 ? .green : .secondary)
                         }
                         .layoutPriority(1)
+                    }
+
+                    if whitelistedTargetCount > 0 {
+                        Text(Self.isEn
+                             ? "Skipping \(whitelistedTargetCount) whitelisted target(s)"
+                             : "已按白名单自动跳过 \(whitelistedTargetCount) 项")
+                            .font(.caption)
+                            .foregroundStyle(.teal)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if totalReclaimableAdBytes > 0 {
@@ -794,54 +1464,23 @@ struct AdCacheBlockerView: View {
                     Divider()
 
                     VStack(spacing: 10) {
-                        HStack(spacing: 12) {
-                            Button {
-                                scanAdFolders()
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.clockwise")
-                                    Text(Self.isEn ? "Rescan" : "重新扫描")
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
-                                }
-                                .font(.subheadline)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                overviewSecondaryActions
                             }
-                            .buttonStyle(.borderless)
-                            .disabled(isScanning || isOperating)
 
-                            Spacer(minLength: 8)
-
-                            if totalAdFoldersCount > 0 {
-                                Menu {
-                                    Button {
-                                        confirmBatchLockAll()
-                                    } label: {
-                                        Label(
-                                            Self.isEn ? "Lock / Harden All (Sentinel)" : "一键锁死 / 加固全部",
-                                            systemImage: "lock.fill"
-                                        )
-                                    }
-                                    .disabled(pendingLockOrHardenCount == 0)
-
-                                    Button {
-                                        batchUnlockAll()
-                                    } label: {
-                                        Label(
-                                            Self.isEn ? "Restore All Read-Write" : "全部恢复默认读写",
-                                            systemImage: "lock.open.fill"
-                                        )
-                                    }
-                                    .disabled(unlockedOnlyCount == 0)
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "ellipsis.circle")
-                                        Text(Self.isEn ? "Batch" : "批量操作")
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.85)
-                                    }
-                                    .font(.subheadline)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 12) {
+                                    overviewRescanButton
+                                    Spacer(minLength: 8)
+                                    overviewWhitelistButton
                                 }
-                                .disabled(isScanning || isOperating)
+                                if totalAdFoldersCount > 0 {
+                                    HStack {
+                                        Spacer(minLength: 0)
+                                        overviewBatchMenu
+                                    }
+                                }
                             }
                         }
 
@@ -963,9 +1602,20 @@ struct AdCacheBlockerView: View {
                     Section {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(entry.displayTitle)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(1)
+                                HStack(spacing: 5) {
+                                    Text(entry.displayTitle)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
+                                    if entry.isAppWhitelisted {
+                                        Text(Self.isEn ? "Whitelist" : "白名单")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.teal.opacity(0.15), in: Capsule())
+                                            .foregroundStyle(.teal)
+                                            .fixedSize()
+                                    }
+                                }
                                 Text(appStatusSubtitle(for: entry))
                                     .font(.caption2)
                                     .foregroundStyle(appStatusColor(for: entry))
@@ -973,41 +1623,96 @@ struct AdCacheBlockerView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                            Button {
-                                locateTarget = LocateAdTarget(containerURL: entry.containerURL, folderURL: nil)
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "folder")
-                                    Text(Self.isEn ? "Browse" : "看容器")
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
+                            Menu {
+                                Button {
+                                    locateTarget = LocateAdTarget(containerURL: entry.containerURL, folderURL: nil)
+                                } label: {
+                                    Label(Self.isEn ? "Browse Container" : "浏览容器目录", systemImage: "folder")
                                 }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+
+                                if entry.isAppWhitelisted {
+                                    Button {
+                                        AdWhitelistStore.shared.removeMatchingContainer(id: entry.bundleID, isAppGroup: entry.isAppGroup)
+                                        Haptic.shared.play(.soft)
+                                    } label: {
+                                        Label(Self.isEn ? "Remove App from Whitelist" : "移出应用白名单", systemImage: "shield.slash")
+                                    }
+                                } else {
+                                    Button {
+                                        whitelistApp(entry)
+                                    } label: {
+                                        Label(Self.isEn ? "Whitelist App (Skip Lock All)" : "加入应用白名单（防误锁）", systemImage: "checkmark.shield")
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 2)
                             }
                             .buttonStyle(.borderless)
                             .layoutPriority(1)
 
-                            if !entry.items.isEmpty {
-                                let hasPending = entry.items.contains { $0.needsActionToLock }
-                                Button {
-                                    toggleAllForApp(entry, lock: hasPending)
-                                } label: {
-                                    HStack(spacing: 3) {
-                                        Image(systemName: hasPending ? "lock.fill" : "lock.open.fill")
-                                        Text(hasPending
-                                             ? (Self.isEn ? "Lock All" : "全锁该组")
-                                             : (Self.isEn ? "Unlock All" : "全部恢复"))
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.85)
+                            if entry.isAppWhitelisted {
+                                if entry.items.contains(where: { $0.isLockedReadOnly }) {
+                                    Button {
+                                        toggleAllForApp(entry, lock: false)
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: "lock.open.fill")
+                                            Text(Self.isEn ? "Unlock All" : "全部恢复")
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.85)
+                                        }
+                                        .font(.caption.weight(.semibold))
                                     }
-                                    .font(.caption.weight(.semibold))
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .tint(.green)
+                                    .layoutPriority(1)
+                                    .disabled(isScanning || isOperating)
+                                } else {
+                                    Button {
+                                        AdWhitelistStore.shared.removeMatchingContainer(id: entry.bundleID, isAppGroup: entry.isAppGroup)
+                                        Haptic.shared.play(.soft)
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: "shield.slash")
+                                            Text(Self.isEn ? "Unwhitelist" : "移出白名单")
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.85)
+                                        }
+                                        .font(.caption.weight(.semibold))
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .tint(.teal)
+                                    .layoutPriority(1)
+                                    .disabled(isScanning || isOperating)
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .tint(hasPending ? .orange : .green)
-                                .layoutPriority(1)
-                                .disabled(isScanning || isOperating)
+                            } else if !entry.items.isEmpty {
+                                let hasPending = entry.items.contains { $0.needsActionToLock }
+                                let hasLocked = entry.items.contains { $0.isLockedReadOnly }
+                                if hasPending || hasLocked {
+                                    Button {
+                                        toggleAllForApp(entry, lock: hasPending)
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: hasPending ? "lock.fill" : "lock.open.fill")
+                                            Text(hasPending
+                                                 ? (Self.isEn ? "Lock All" : "全锁该组")
+                                                 : (Self.isEn ? "Unlock All" : "全部恢复"))
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.85)
+                                        }
+                                        .font(.caption.weight(.semibold))
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .tint(hasPending ? .orange : .green)
+                                    .layoutPriority(1)
+                                    .disabled(isScanning || isOperating)
+                                }
                             }
                         }
 
@@ -1024,6 +1729,9 @@ struct AdCacheBlockerView: View {
                                 onToggleLock: {
                                     toggleSingleFolder(item, in: entry)
                                 },
+                                onTogglePathWhitelist: (!item.isContainerWhitelisted || item.isPathWhitelisted) ? {
+                                    togglePathWhitelist(item, in: entry)
+                                } : nil,
                                 onRemoveCustom: item.isCustomRule ? {
                                     removeCustomItem(item, in: entry)
                                 } : nil
@@ -1041,7 +1749,14 @@ struct AdCacheBlockerView: View {
             prompt: Self.isEn ? "Search app, AppGroup, Bundle ID or SDK" : "搜索应用名、AppGroup 或广告特征"
         )
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showWhitelistSheet = true
+                } label: {
+                    ToolbarLabel(Self.isEn ? "Whitelist" : "白名单", symbol: "checkmark.shield")
+                }
+                .disabled(isOperating)
+
                 Button {
                     showAddCustomSheet = true
                 } label: {
@@ -1073,16 +1788,100 @@ struct AdCacheBlockerView: View {
                 scanAdFolders()
             }
         }
+        .sheet(isPresented: $showWhitelistSheet) {
+            AdWhitelistManagerSheet(initialContainers: discoveredContainerOptions)
+        }
         .onReceive(NotificationCenter.default.publisher(for: AdCustomWatchStore.didChangeNotification)) { _ in
             if !isScanning && !isOperating {
                 scanAdFolders()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: AdWhitelistStore.didChangeNotification)) { _ in
+            refreshWhitelistFlagsAndAutoUnlockIfNeeded()
+        }
         .onAppear {
+            whitelistRulesCount = AdWhitelistStore.shared.rulesSnapshot().count
             if allEntries.isEmpty && !isScanning && !isOperating {
                 scanAdFolders()
             }
         }
+    }
+
+    @ViewBuilder
+    private var overviewSecondaryActions: some View {
+        overviewRescanButton
+        Spacer(minLength: 8)
+        overviewWhitelistButton
+        if totalAdFoldersCount > 0 {
+            overviewBatchMenu
+        }
+    }
+
+    private var overviewRescanButton: some View {
+        Button {
+            scanAdFolders()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                Text(Self.isEn ? "Rescan" : "重新扫描")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .font(.subheadline)
+        }
+        .buttonStyle(.borderless)
+        .disabled(isScanning || isOperating)
+    }
+
+    private var overviewWhitelistButton: some View {
+        Button {
+            showWhitelistSheet = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.shield")
+                Text(Self.isEn ? "Whitelist (\(whitelistRulesCount))" : "白名单 (\(whitelistRulesCount))")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.teal)
+        }
+        .buttonStyle(.borderless)
+        .disabled(isOperating)
+    }
+
+    private var overviewBatchMenu: some View {
+        Menu {
+            Button {
+                confirmBatchLockAll()
+            } label: {
+                Label(
+                    Self.isEn ? "Lock / Harden All (Sentinel)" : "一键锁死 / 加固全部",
+                    systemImage: "lock.fill"
+                )
+            }
+            .disabled(pendingLockOrHardenCount == 0)
+
+            Button {
+                batchUnlockAll()
+            } label: {
+                Label(
+                    Self.isEn ? "Restore All Read-Write" : "全部恢复默认读写",
+                    systemImage: "lock.open.fill"
+                )
+            }
+            .disabled(unlockedOnlyCount == 0)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "ellipsis.circle")
+                Text(Self.isEn ? "Batch" : "批量操作")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .font(.subheadline)
+        }
+        .buttonStyle(.borderless)
+        .disabled(isScanning || isOperating)
     }
 
     private func canPreviewItem(_ item: AdCacheFolderItem) -> Bool {
@@ -1099,27 +1898,123 @@ struct AdCacheBlockerView: View {
     }
 
     private func appStatusSubtitle(for entry: AppAdCacheEntry) -> String {
+        if entry.isAppWhitelisted {
+            let lockedCount = entry.items.filter { $0.isLockedReadOnly }.count
+            if lockedCount > 0 {
+                return Self.isEn
+                    ? "Whitelisted · \(lockedCount) locked item(s) can be restored"
+                    : "已加入白名单 · 有 \(lockedCount) 项当前处于锁定状态可恢复"
+            }
+            return Self.isEn
+                ? "Whitelisted · Skipped by Lock All"
+                : "已加入白名单 · 自动跳过一键全锁"
+        }
         if entry.items.isEmpty {
             return Self.isEn
                 ? "0 auto-matched · tap Browse to inspect"
-                : "未匹配已知目录 · 可点「看容器」长按添加"
+                : "未匹配已知目录 · 可在菜单「浏览容器」长按添加"
         }
-        let fullyProtected = entry.items.filter { !$0.needsActionToLock }.count
-        let total = entry.items.count
+        let skippedCount = entry.items.filter { $0.isWhitelisted }.count
+        let lockableItems = entry.items.filter { !$0.isWhitelisted }
+        if lockableItems.isEmpty {
+            return Self.isEn
+                ? "All \(skippedCount) item(s) whitelisted"
+                : "全部 \(skippedCount) 项已按路径白名单跳过"
+        }
+        let fullyProtected = lockableItems.filter { !$0.needsActionToLock }.count
+        let total = lockableItems.count
         if fullyProtected == total {
             return Self.isEn
-                ? "All \(total) protected (sentinel / 0444)"
-                : "已全防重建锁死 (\(fullyProtected)/\(total))"
+                ? "All \(total) protected" + (skippedCount > 0 ? " · \(skippedCount) whitelisted" : " (sentinel / 0444)")
+                : "已全防重建锁死 (\(fullyProtected)/\(total))" + (skippedCount > 0 ? " · \(skippedCount) 项已加白" : "")
         }
         return Self.isEn
-            ? "\(total - fullyProtected) need lock/harden · \(fullyProtected) locked"
-            : "发现 \(total) 项（\(total - fullyProtected) 项待锁/可加固 · \(fullyProtected) 项已全锁）"
+            ? "\(total - fullyProtected) need lock · \(fullyProtected) locked" + (skippedCount > 0 ? " · \(skippedCount) whitelisted" : "")
+            : "发现 \(entry.items.count) 项（\(total - fullyProtected) 项待锁 · \(fullyProtected) 项已锁" + (skippedCount > 0 ? " · \(skippedCount) 项加白）" : "）")
     }
 
     private func appStatusColor(for entry: AppAdCacheEntry) -> Color {
+        if entry.isAppWhitelisted {
+            return entry.items.contains(where: { $0.isLockedReadOnly }) ? .orange : .teal
+        }
         if entry.items.isEmpty { return .secondary }
-        let fullyProtected = entry.items.filter { !$0.needsActionToLock }.count
-        return fullyProtected == entry.items.count ? .green : .orange
+        let lockableItems = entry.items.filter { !$0.isWhitelisted }
+        if lockableItems.isEmpty { return .teal }
+        let fullyProtected = lockableItems.filter { !$0.needsActionToLock }.count
+        return fullyProtected == lockableItems.count ? .green : .orange
+    }
+
+    private func whitelistApp(_ entry: AppAdCacheEntry) {
+        AdWhitelistStore.shared.addBundleRule(bundleOrGroupID: entry.bundleID, note: entry.displayTitle)
+        Haptic.shared.notify(.success)
+    }
+
+    private func togglePathWhitelist(_ item: AdCacheFolderItem, in entry: AppAdCacheEntry) {
+        if item.isPathWhitelisted {
+            AdWhitelistStore.shared.removeExactPath(item.fullPath)
+            Haptic.shared.play(.soft)
+        } else {
+            let note = "\(entry.displayTitle) · \(item.relativePath)"
+            AdWhitelistStore.shared.addPathRule(rawPath: item.fullPath, note: note)
+            Haptic.shared.notify(.success)
+        }
+    }
+
+    private func refreshWhitelistFlagsAndAutoUnlockIfNeeded() {
+        whitelistRulesCount = AdWhitelistStore.shared.rulesSnapshot().count
+        guard !allEntries.isEmpty else { return }
+
+        var unlockTargets: [(AppAdCacheEntry, AdCacheFolderItem)] = []
+        for i in allEntries.indices {
+            let appW = AdWhitelistStore.shared.isContainerWhitelisted(
+                id: allEntries[i].bundleID,
+                isAppGroup: allEntries[i].isAppGroup
+            )
+            allEntries[i].isAppWhitelisted = appW
+            for j in allEntries[i].items.indices {
+                let pathW = AdWhitelistStore.shared.isPathWhitelisted(allEntries[i].items[j].fullPath)
+                allEntries[i].items[j].isContainerWhitelisted = appW
+                allEntries[i].items[j].isPathWhitelisted = pathW
+                let item = allEntries[i].items[j]
+                if (appW || pathW) && (item.isLockedReadOnly || (item.isDirectory && item.hasSentinelLock)) {
+                    unlockTargets.append((allEntries[i], item))
+                }
+            }
+            allEntries[i].items.sort {
+                if $0.isCustomRule != $1.isCustomRule { return $0.isCustomRule }
+                if $0.needsActionToLock != $1.needsActionToLock { return $0.needsActionToLock }
+                if $0.cachedBytes != $1.cachedBytes { return $0.cachedBytes > $1.cachedBytes }
+                return $0.relativePath < $1.relativePath
+            }
+        }
+        allEntries = Self.sortedEntries(allEntries)
+
+        guard !unlockTargets.isEmpty, !isScanning, !isOperating else { return }
+        isOperating = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            var updates: [(appID: String, folderID: String, mode: Int, bytes: Int64, hasSentinel: Bool)] = []
+            for (entry, item) in unlockTargets {
+                let res = Self.setAdTargetLocked(item: item, containerURL: entry.containerURL, locked: false)
+                if res.ok {
+                    updates.append((entry.id, item.id, res.mode, res.bytes, res.hasSentinel))
+                }
+            }
+            DispatchQueue.main.async {
+                self.isOperating = false
+                for u in updates {
+                    self.updateFolderState(
+                        appID: u.appID,
+                        folderID: u.folderID,
+                        mode: u.mode,
+                        bytes: u.bytes,
+                        hasSentinel: u.hasSentinel
+                    )
+                }
+                if !updates.isEmpty {
+                    ErosionManager.shared.refreshFiles.toggle()
+                }
+            }
+        }
     }
 
     private func stopScan() {
@@ -1393,6 +2288,9 @@ struct AdCacheBlockerView: View {
             if lhs.items.isEmpty != rhs.items.isEmpty {
                 return !lhs.items.isEmpty
             }
+            if lhs.isAppWhitelisted != rhs.isAppWhitelisted {
+                return !lhs.isAppWhitelisted
+            }
             let lhsHasCustom = lhs.items.contains { $0.isCustomRule }
             let rhsHasCustom = rhs.items.contains { $0.isCustomRule }
             if lhsHasCustom != rhsHasCustom {
@@ -1408,7 +2306,7 @@ struct AdCacheBlockerView: View {
         }
     }
 
-    private static func formatGroupDisplayTitle(groupID: String) -> String {
+    fileprivate static func formatGroupDisplayTitle(groupID: String) -> String {
         let candidateBID = groupID.hasPrefix("group.") ? String(groupID.dropFirst("group.".count)) : groupID
         let appDisplay = AppContainerDirectoryHelper.displayName(for: candidateBID)
         let prefix = isEn ? "[AppGroup]" : "[共享组]"
@@ -1419,7 +2317,7 @@ struct AdCacheBlockerView: View {
         return "\(prefix) \(groupID)"
     }
 
-    private static func shouldIgnoreContainerID(_ id: String, isAppGroup: Bool, selfBID: String) -> Bool {
+    nonisolated fileprivate static func shouldIgnoreContainerID(_ id: String, isAppGroup: Bool, selfBID: String) -> Bool {
         guard !id.isEmpty, id != selfBID, !protectedBundleIDs.contains(id) else {
             return true
         }
@@ -1474,6 +2372,7 @@ struct AdCacheBlockerView: View {
         var items: [AdCacheFolderItem] = []
         var seenCanonicalItems: Set<String> = []
         let stdContainerRoot = CSStoreEngine.normalizeVarPath(url.standardizedFileURL.path)
+        let appWhitelisted = AdWhitelistStore.shared.isContainerWhitelisted(id: bid, isAppGroup: isAppGroup)
 
         // Pass A: Curated per-app known ad paths (Data/Application)
         if !isAppGroup, let specificSpecs = appSpecificAdPaths[bid] {
@@ -1488,6 +2387,7 @@ struct AdCacheBlockerView: View {
                         sdkZH: spec.zh,
                         sdkEN: spec.en,
                         isCustomRule: false,
+                        isContainerWhitelisted: appWhitelisted,
                         cancelFlag: cancelFlag
                       ) else {
                     continue
@@ -1507,6 +2407,7 @@ struct AdCacheBlockerView: View {
                     currentDepth: 1,
                     maxDepth: 2,
                     skipStandardTopSubdirs: true,
+                    isContainerWhitelisted: appWhitelisted,
                     seenCanonicalItems: &seenCanonicalItems,
                     results: &items,
                     cancelFlag: cancelFlag
@@ -1530,6 +2431,7 @@ struct AdCacheBlockerView: View {
                 currentDepth: 1,
                 maxDepth: 3,
                 skipStandardTopSubdirs: false,
+                isContainerWhitelisted: appWhitelisted,
                 seenCanonicalItems: &seenCanonicalItems,
                 results: &items,
                 cancelFlag: cancelFlag
@@ -1550,6 +2452,7 @@ struct AdCacheBlockerView: View {
             displayTitle: title,
             containerURL: url,
             isAppGroup: isAppGroup,
+            isAppWhitelisted: appWhitelisted,
             items: items
         )
     }
@@ -1592,6 +2495,7 @@ struct AdCacheBlockerView: View {
                     sdkZH: noteZH,
                     sdkEN: noteEN,
                     isCustomRule: true,
+                    isContainerWhitelisted: entries[entryIdx].isAppWhitelisted,
                     cancelFlag: cancelFlag
                 ) {
                     entries[entryIdx].items.insert(item, at: 0)
@@ -1600,12 +2504,14 @@ struct AdCacheBlockerView: View {
                 let bid = CSStoreEngine.shared.bundleID(forContainerPath: containerRoot, allowDiscovery: false)
                     ?? getBIDFromXattr(containerURL)
                     ?? containerID
+                let appWhitelisted = AdWhitelistStore.shared.isContainerWhitelisted(id: bid, isAppGroup: isGroup)
                 if let item = inspectMatchedAdTarget(
                     targetURL: targetURL,
                     containerRootStd: containerRoot,
                     sdkZH: noteZH,
                     sdkEN: noteEN,
                     isCustomRule: true,
+                    isContainerWhitelisted: appWhitelisted,
                     cancelFlag: cancelFlag
                 ) {
                     let title = isGroup ? formatGroupDisplayTitle(groupID: bid) : AppContainerDirectoryHelper.displayName(for: bid)
@@ -1615,6 +2521,7 @@ struct AdCacheBlockerView: View {
                         displayTitle: title,
                         containerURL: containerURL,
                         isAppGroup: isGroup,
+                        isAppWhitelisted: appWhitelisted,
                         items: [item]
                     ))
                 }
@@ -1628,6 +2535,7 @@ struct AdCacheBlockerView: View {
         currentDepth: Int,
         maxDepth: Int,
         skipStandardTopSubdirs: Bool,
+        isContainerWhitelisted: Bool,
         seenCanonicalItems: inout Set<String>,
         results: inout [AdCacheFolderItem],
         cancelFlag: AdScanCancellationFlag
@@ -1679,6 +2587,7 @@ struct AdCacheBlockerView: View {
                     sdkZH: fileMatch.zh,
                     sdkEN: fileMatch.en,
                     isCustomRule: false,
+                    isContainerWhitelisted: isContainerWhitelisted,
                     cancelFlag: cancelFlag
                    ) {
                     seenCanonicalItems.insert(canon)
@@ -1696,6 +2605,7 @@ struct AdCacheBlockerView: View {
                     sdkZH: match.zh,
                     sdkEN: match.en,
                     isCustomRule: false,
+                    isContainerWhitelisted: isContainerWhitelisted,
                     cancelFlag: cancelFlag
                 ) {
                     seenCanonicalItems.insert(canon)
@@ -1711,6 +2621,7 @@ struct AdCacheBlockerView: View {
                     currentDepth: currentDepth + 1,
                     maxDepth: maxDepth,
                     skipStandardTopSubdirs: false,
+                    isContainerWhitelisted: isContainerWhitelisted,
                     seenCanonicalItems: &seenCanonicalItems,
                     results: &results,
                     cancelFlag: cancelFlag
@@ -1725,6 +2636,7 @@ struct AdCacheBlockerView: View {
         sdkZH: String,
         sdkEN: String,
         isCustomRule: Bool,
+        isContainerWhitelisted: Bool,
         cancelFlag: AdScanCancellationFlag
     ) -> AdCacheFolderItem? {
         var st = stat()
@@ -1747,6 +2659,7 @@ struct AdCacheBlockerView: View {
         let targetStd = CSStoreEngine.normalizeVarPath(targetURL.standardizedFileURL.path)
         let prefix = containerRootStd + "/"
         let relPath = targetStd.hasPrefix(prefix) ? String(targetStd.dropFirst(prefix.count)) : targetURL.lastPathComponent
+        let pathWhitelisted = AdWhitelistStore.shared.isPathWhitelisted(targetStd)
 
         let sizeBytes: Int64
         let hasSentinel: Bool
@@ -1768,6 +2681,8 @@ struct AdCacheBlockerView: View {
             sdkNameEN: sdkEN,
             isDirectory: isDir,
             isCustomRule: isCustomRule,
+            isContainerWhitelisted: isContainerWhitelisted,
+            isPathWhitelisted: pathWhitelisted,
             cachedBytes: sizeBytes,
             posixMode: mode,
             hasSentinelLock: hasSentinel
@@ -2207,6 +3122,7 @@ private struct AdFolderRowView: View {
     let onLocate: () -> Void
     let onPreview: (() -> Void)?
     let onToggleLock: () -> Void
+    let onTogglePathWhitelist: (() -> Void)?
     let onRemoveCustom: (() -> Void)?
 
     private static var isEn: Bool { LocalizationManager.isEnglish }
@@ -2234,6 +3150,7 @@ private struct AdFolderRowView: View {
     }
 
     private var statusBadgeColor: Color {
+        if item.isWhitelisted && !item.isLockedReadOnly { return .teal }
         if !item.needsActionToLock { return .green }
         if item.isLockedReadOnly && item.isDirectory && !item.hasSentinelLock { return .yellow }
         return .orange
@@ -2266,6 +3183,16 @@ private struct AdFolderRowView: View {
                         .padding(.vertical, 2)
                         .background(Color.blue.opacity(0.15), in: Capsule())
                         .foregroundStyle(.blue)
+                        .fixedSize()
+                }
+
+                if item.isWhitelisted {
+                    Text(Self.isEn ? "Whitelisted" : "白名单")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.teal.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.teal)
                         .fixedSize()
                 }
 
@@ -2335,6 +3262,24 @@ private struct AdFolderRowView: View {
             .controlSize(.small)
         }
 
+        if let onTogglePathWhitelist {
+            Button(action: onTogglePathWhitelist) {
+                HStack(spacing: 3) {
+                    Image(systemName: item.isPathWhitelisted ? "shield.slash" : "checkmark.shield")
+                    Text(item.isPathWhitelisted
+                         ? (Self.isEn ? "Unignore" : "取消加白")
+                         : (Self.isEn ? "Ignore" : "加白"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(item.isPathWhitelisted ? .teal : .secondary)
+            .disabled(isBusy)
+        }
+
         if let onRemoveCustom {
             Button(role: .destructive, action: onRemoveCustom) {
                 Image(systemName: "trash")
@@ -2349,21 +3294,30 @@ private struct AdFolderRowView: View {
     @ViewBuilder
     private var lockActionButton: some View {
         if !item.needsActionToLock {
-            Button(action: onToggleLock) {
-                HStack(spacing: 3) {
-                    Image(systemName: "lock.open.fill")
-                    Text(Self.isEn
-                         ? (item.isDirectory ? "Unlock 0755" : "Unlock 0644")
-                         : "恢复读写")
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+            if item.isLockedReadOnly {
+                Button(action: onToggleLock) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "lock.open.fill")
+                        Text(Self.isEn
+                             ? (item.isDirectory ? "Unlock 0755" : "Unlock 0644")
+                             : "恢复读写")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    .font(.caption.weight(.semibold))
                 }
-                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.green)
+                .disabled(isBusy)
+            } else {
+                Text(Self.isEn ? "Skipped" : "自动跳过")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.teal)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.teal.opacity(0.12), in: Capsule())
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(.green)
-            .disabled(isBusy)
         } else {
             let isHardenOnly = item.isDirectory && item.isLockedReadOnly && !item.hasSentinelLock
             Button(action: onToggleLock) {
