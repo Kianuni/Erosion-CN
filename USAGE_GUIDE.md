@@ -108,4 +108,4 @@
 
 ---
 
-> 🛠️ **同作者苹果原生工具生态**：[Lokey · 落键（1:1 原生手感物理零联网输入法）](https://kianuni.github.io/Lokey-Audit/) · [AppleFlow（Apple 智能零 MitM 分流）](https://github.com/Kianuni/AppleFlow) · [AppleLens（macOS 观测排障）](https://github.com/Kianuni/AppleLens) · [Camlo（动态锁屏壁纸）](https://github.com/Kianuni/Camlo) · [WQGuard（侧载安全审计）](https://github.com/Kianuni/WQGuard)
+> 🛠️ **同作者苹果原生工具生态**：[Lokey（1:1 原生手感 · 纯离线物理零联网全拼/双拼输入法 · 落墨引擎）](https://kianuni.github.io/Lokey-Audit/) · [AppleFlow（Apple 智能零 MitM 分流）](https://github.com/Kianuni/AppleFlow) · [AppleLens（macOS 观测排障）](https://github.com/Kianuni/AppleLens) · [Camlo（动态锁屏壁纸）](https://github.com/Kianuni/Camlo) · [WQGuard（侧载安全审计）](https://github.com/Kianuni/WQGuard)

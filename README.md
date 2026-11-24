@@ -5,7 +5,7 @@
   <h1>Erosion-CN</h1>
   <p>基于 <a href="https://github.com/forcequitOS/worse_query">worse_query</a> 的 iOS / iPadOS 系统配置与 MobileGestalt 研究工具箱（中英双语 · 防白苹果安全加固版）</p>
   <p>支持 iOS / iPadOS 27.0 – 27.2 / 27.3 beta 1（完整支持）以及 iOS / iPadOS 26.x（部分支持）。</p>
-  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow 配套分流与排雷台</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens 观测与排障台</a> · <a href="https://kianuni.github.io/Lokey-Audit/">Lokey 原生手感零联网输入法</a></p>
+  <p><strong>简体中文</strong> · <a href="./README_EN.md">English Documentation</a> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow 配套分流与排雷台</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens 观测与排障台</a> · <a href="https://kianuni.github.io/Lokey-Audit/">Lokey 纯离线零联网输入法</a></p>
   <p>
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20%E4%B8%8B%E8%BD%BD%E9%87%8F"></a>
@@ -48,7 +48,7 @@
 
 > 📜 完整的技术改进说明与版本历史见 [CHANGELOG.md](./CHANGELOG.md)，各版本发布说明见 [Releases](https://github.com/Kianuni/Erosion-CN/releases)。  
 > 📖 外部独立底层架构解析：[《从 worse_query 逃逸到 MobileGestalt 运行时重构：深入 Erosion-CN 的防白苹果原位写入、双重金库与国行底层解锁架构》](https://lijianfei.com/post/erosion-cn-ios-system-configuration-mobilegestalt-architecture/)  
-> ⌨️ **同作者新作**：**[Lokey · 落键](https://kianuni.github.io/Lokey-Audit/)** —— 1:1 复刻 iOS 26 原生手感、零学习适应成本的物理零联网全拼/双拼输入法（[零联网源码可审计](https://github.com/Kianuni/Lokey-Audit) · [55 万词白霜扩展包](https://github.com/Kianuni/lokey-frost-pack)）。
+> ⌨️ **同作者新作**：**[Lokey](https://kianuni.github.io/Lokey-Audit/)** —— 1:1 原生手感（零学习适应成本）、纯离线物理级零联网的 iOS 26 键全拼与双拼中文输入法；内置自研「落墨 · Inkstone」输入引擎（26 键盲打热区自适应校准、双向神经网络长句语义、句内中英混输、OpenCC 词级简繁与本地自造词记忆），源码与二进制均不含任何网络框架或数据采集（[零联网源码审计仓](https://github.com/Kianuni/Lokey-Audit) · [55.3 万词白霜 `.lokeypack`](https://github.com/Kianuni/lokey-frost-pack)）。
 
 ---
 
@@ -220,7 +220,7 @@ chmod +x ipabuild.sh
 | **[AppleLens](https://github.com/Kianuni/AppleLens)** | 零 MitM、纯只读的 macOS 原生 Apple 智能三态雷达、USB 真机日志翻译排障、四路分流探针与透明报告解读工作台 | macOS 14.0+ 桌面端 / CLI / USB 连线 iPhone 排障 |
 | **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% 只读开源的沙盒越权检测、侧载 IPA 安全审查与固件 CVE 防护工具 | iOS / iPadOS 26.2+ – 27.x 侧载排雷与设备自检 |
 | **[Camlo](https://github.com/Kianuni/Camlo)** | **Camlo · 开幕** — 免电脑一键换上滑动解锁变身、裸眼 3D 与动态锁屏壁纸，让 iPhone 锁屏活起来 | iOS / iPadOS 26 – 27 个性化锁屏美化 |
-| **[Lokey · 落键](https://kianuni.github.io/Lokey-Audit/)** | 1:1 iOS 26 原生手感、零学习适应成本的物理零联网全拼/双拼输入法（[源码可审计](https://github.com/Kianuni/Lokey-Audit) · [55 万词白霜 `.lokeypack`](https://github.com/Kianuni/lokey-frost-pack)） | iOS 日常离线输入 / 盲打纠错与个人热区校准 |
+| **[Lokey](https://kianuni.github.io/Lokey-Audit/)** | 1:1 原生手感（零学习适应成本）、纯离线物理级零联网的 iOS 26 键全拼与双拼输入法；内置「落墨 · Inkstone」引擎（26 键盲打热区自适应校准、双向神经网络长句语义、句内中英混输、OpenCC 词级简繁与本地自造词记忆），源码与二进制不含任何网络框架或数据采集（[源码审计](https://github.com/Kianuni/Lokey-Audit) · [55.3 万词 `.lokeypack`](https://github.com/Kianuni/lokey-frost-pack)） | iOS 日常全拼 / 双拼纯离线输入 |
 | **[Enkard](https://github.com/Kianuni/Enkard)** | 纯离线、零云同步、绑定 Apple Secure Enclave 硬件安全芯片的 iPhone 银行级加密卡包 | 个人隐私卡券 / 敏感凭据本地加密收纳 |
 
 ---
