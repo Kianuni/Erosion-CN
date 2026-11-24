@@ -5,7 +5,7 @@
   <h1>Erosion-CN (Bilingual Edition)</h1>
   <p>An iOS / iPadOS System Customization, Cross-Container &amp; Bootloop-Hardened MobileGestalt Research Toolkit powered by <a href="https://github.com/forcequitOS/worse_query">worse_query</a></p>
   <p>Supports iOS / iPadOS 27.0 – 27.2.1 &amp; 27.3 beta 1 (Full Support) and iOS / iPadOS 26.x (Partial Support).</p>
-  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow Routing &amp; Config Doctor</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens macOS Inspector</a></p>
+  <p><a href="./README.md">简体中文文档</a> · <strong>English</strong> · <a href="https://github.com/Kianuni/AppleFlow">AppleFlow Routing &amp; Config Doctor</a> · <a href="https://github.com/Kianuni/AppleLens">AppleLens macOS Inspector</a> · <a href="https://kianuni.github.io/Lokey-Audit/">Lokey Offline Native Keyboard</a></p>
   <p>
     <a href="https://github.com/Kianuni/Erosion-CN/releases/latest"><img alt="GitHub Releases" src="https://img.shields.io/github/v/release/Kianuni/Erosion-CN?style=flat-square&color=CF7D46&label=Latest%20Release"></a>
     <a href="https://github.com/Kianuni/Erosion-CN/releases"><img alt="IPA Downloads" src="https://img.shields.io/github/downloads/Kianuni/Erosion-CN/total?style=flat-square&color=10B981&label=IPA%20Downloads"></a>
@@ -32,6 +32,8 @@
 While it began as a Simplified Chinese fork, it has evolved into an engineering-first overhaul with persistent in-place writes, runtime `libMobileGestalt.dylib` slot resolution, and dual-vault factory backups. Starting with **v0.9.0**, a single IPA ships with **full English + Simplified Chinese support**:
 - Automatically matches your device's system language out of the box (English for all non-Chinese system locales, Simplified Chinese for `zh*`).
 - Includes an instant **Language Switcher** in **Settings → App Language** (`Follow System` / `English` / `简体中文`).
+
+> ⌨️ **New by Kianuni**: **[Lokey · 落键](https://kianuni.github.io/Lokey-Audit/)** — 1:1 native iOS 26 ergonomics (zero learning curve) & physically zero-network Chinese Pinyin/Shuangpin keyboard ([Auditable Source](https://github.com/Kianuni/Lokey-Audit) · [553k Rime-Frost Pack](https://github.com/Kianuni/lokey-frost-pack)).
 
 > 📜 Full version history: [CHANGELOG.md](./CHANGELOG.md) · [Releases](https://github.com/Kianuni/Erosion-CN/releases)  
 > 📖 Independent Architecture Deep-Dive (zh-Hans, with SVG diagrams): [*From `worse_query` Escape to `MobileGestalt` Runtime Reconstruction: Inside Erosion-CN's Bootloop-Safe In-Place Write & Dual-Vault Architecture*](https://lijianfei.com/post/erosion-cn-ios-system-configuration-mobilegestalt-architecture/)
@@ -165,6 +167,7 @@ https://raw.githubusercontent.com/Kianuni/Erosion-CN/main/apps.json
 | **[AppleLens](https://github.com/Kianuni/AppleLens)** | Zero-MitM, read-only native macOS Tri-State AI Radar, USB iPhone log translator, 4-lane routing/QUIC probe & `Apple_Intelligence_Report.json` viewer | macOS 14.0+ App / CLI / USB iPhone Diagnostics |
 | **[WQGuard](https://github.com/Kianuni/WQGuard)** | 100% read-only iOS sandbox escape scanner, sideloaded IPA auditor & firmware CVE guard | iOS / iPadOS 26.2+ – 27.x security auditing |
 | **[Camlo](https://github.com/Kianuni/Camlo)** | Bring your iPhone lock screen to life: computer-free slide-to-unlock animations, glasses-free 3D & live wallpapers | iOS / iPadOS 26 – 27 lock screen customization |
+| **[Lokey · 落键](https://kianuni.github.io/Lokey-Audit/)** | 1:1 native iOS 26 Liquid Glass ergonomics (zero learning curve) & physically zero-network Chinese Pinyin/Shuangpin keyboard ([`Lokey-Audit`](https://github.com/Kianuni/Lokey-Audit) · [`lokey-frost-pack`](https://github.com/Kianuni/lokey-frost-pack)) | Everyday offline iOS typing with blind-type recovery |
 | **[Enkard](https://github.com/Kianuni/Enkard)** | Purely offline, zero-cloud encrypted iPhone card vault bound to Apple Secure Enclave hardware | Bank-grade local storage for sensitive cards & credentials |
 
 ---

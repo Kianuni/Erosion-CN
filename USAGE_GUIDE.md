@@ -105,3 +105,7 @@
    - 跨版本 OTA 更新系统后，iOS 会重建全新版本的 `MobileGestalt` 缓存。升级系统后打开本应用时，版本防呆机制会自动检测到 `CacheVersion` 变化并提示刷新对应新系统的原始备份，同时拦截将旧系统备份覆盖到新系统上的危险操作。
 3. **如何彻底恢复出厂默认状态？**
    - 直接点击主页快捷操作中的 **「一键恢复原机出厂参数」**（或 `MobileGestalt 修改` 页面顶部的 **「一键恢复原厂」**），即可在核对 `SHA-256`、系统版本、`CacheUUID` 与真实硬件型号后原位恢复原厂配置，并同步清空本地自定义键值、锁屏铭牌/伪监管残留与拨号盘缓存；若跨 iOS 版本升级导致旧备份不再适用，弹窗支持一键触发 **「重建系统纯净原厂缓存」**，在重启时由主板硬件熔丝重新生成 100% 纯净原厂文件（详见 [RESTORE_CHA.md](./RESTORE_CHA.md)）。
+
+---
+
+> 🛠️ **同作者苹果原生工具生态**：[Lokey · 落键（1:1 原生手感物理零联网输入法）](https://kianuni.github.io/Lokey-Audit/) · [AppleFlow（Apple 智能零 MitM 分流）](https://github.com/Kianuni/AppleFlow) · [AppleLens（macOS 观测排障）](https://github.com/Kianuni/AppleLens) · [Camlo（动态锁屏壁纸）](https://github.com/Kianuni/Camlo) · [WQGuard（侧载安全审计）](https://github.com/Kianuni/WQGuard)
