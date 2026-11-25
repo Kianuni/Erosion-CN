@@ -105,6 +105,16 @@
     - **通用「应用 / 路径白名单」与手动管理面板（`AdWhitelistStore` / `AdWhitelistManagerSheet`，感谢 [@appleoner](https://github.com/appleoner) 在 #56 提出）**：在「开屏广告缓存精准锁死」新增顶部/概览卡白名单管理入口，支持按 `Bundle ID` / `AppGroup ID`（可从本机已装容器快速点选或手动输入）及具体目录/文件路径添加白名单（亦可在页面内按容器菜单 / 单条「加白」或「文件浏览」长按添加/移出）；白名单目标自动跳过顶部「一键全锁 / 全部锁死」，并在新加入白名单时自动恢复原可读写权限与清除 `.erosion_adlock`；首次初始化默认内置 `什么值得买` (`com.smzdm.client.ios`) 防闪退保护规则且支持随时手动移出；
     - **内置手机淘宝开屏启动图与配置路径识别（`AdCacheBlockerView`，感谢 [@guestwrt](https://github.com/guestwrt) 在 #56 实测反馈）**：新增 `com.taobao.taobao4iphone` 专属 `Documents/TBDocuments/bootImagebiz` 与 `Documents/TBDocuments/bootImageDoc` 扫描词条，支持一键防重建锁死（`0555`/`0444`）或随时恢复；
     - **iPhone 15 系列及以上电池循环与生产日期原生支持提示（`GestaltHelpers` / `GestaltView`，感谢 [@guestwrt](https://github.com/guestwrt) 在 #55 反馈）**：在 `MobileGestalt` 实验开关中识别原生已在系统「设置 → 电池 → 电池健康」显示电池循环次数与生产日期的 iPhone 15 全系列及更新机型与新款 M2/M4+ iPad，自动标注无需开启并锁定防误改（若先前曾开启则会提示建议关闭）。
+22. **扩充主流应用内置开屏广告路径与 iOS Bundle ID 精准适配（`v1.0.7`）**
+    - 感谢 [@oooasis](https://github.com/oooasis) 与 [@itmubai](https://github.com/itmubai) 在 [#58](https://github.com/Kianuni/Erosion-CN/issues/58) 实测分享，在 `AdCacheBlockerView` 内置词典新增 7 款常用 App 的精准开屏/广告缓存路径（均仅针对对应应用容器生效，不包含通用 WebView/网络框架缓存，随时支持一键恢复读写或加白）：
+      - **淘宝 (`com.taobao.taobao4iphone`)**：补充 `Documents/TBDocuments/bootImagesDoc`（同时兼容 `bootImageDoc` 与 `bootImagesDoc`）；
+      - **京东 (`com.360buy.jdmobile`)**：修正 iOS App Store 官方 Bundle ID 识别并新增 `Library/Caches/startADImage`；
+      - **大众点评 (`com.dianping.dpscope`)**：新增 `Documents/splashes_new`；
+      - **中国移动 (`cn.10086.app`)**：新增 `Library/DownloadCenter`；
+      - **腾讯视频 (`com.tencent.live4iphone`)**：新增 `Library/Caches/QAD/PreloadImageAdOrderCache`、`QADWatchHistoryAdCache`、`maxViewAdCacheFolderName`、`Library/Caches/TAD/PushAdPendantCache` 与 `TADCache`；
+      - **番茄小说 (`com.dragon.read`)**：新增 `Documents/TTAdSplashSimpleCache`；
+      - **携程旅行 (`ctrip.com` / `ctrip.wireless`)**：新增 `Library/Caches/LoadingImages`。
+    - 同步在 `CSStoreEngine` 与 `AppDataBackupView` 补全上述应用的官方 iOS Bundle ID 中英文友好名称映射。
 
 ---
 
@@ -194,3 +204,13 @@
     - **General App/AppGroup & Exact-Path Whitelist (`AdWhitelistStore` / `AdWhitelistManagerSheet`, thanks to [@appleoner](https://github.com/appleoner) for suggesting #56)**: Added a dedicated **Whitelist** manager inside Splash Ad Blocker supporting manual `Bundle ID` / `AppGroup ID` input, quick-picking from installed third-party containers, manual container subpath input, per-app/per-row quick toggle buttons, and File Browser context-menu actions (`Add/Remove Ad Whitelist`). Whitelisted targets are skipped by global **Lock All** and automatically restored to writable permissions (clearing `.erosion_adlock`) when added; includes a removable first-run crash-guard entry for `com.smzdm.client.ios` (`SMZDM`);
     - **Built-In Taobao Splash Boot Paths (`AdCacheBlockerView`, thanks to [@guestwrt](https://github.com/guestwrt) in #56)**: Added `Documents/TBDocuments/bootImagebiz` and `Documents/TBDocuments/bootImageDoc` for `com.taobao.taobao4iphone` (`Taobao`) for one-tap `0555`/`0444` anti-recreate locking and restoration;
     - **Native Battery Cycle & Manufacture Date Guard on iPhone 15+ & Modern iPads (`GestaltHelpers` / `GestaltView`, thanks to [@guestwrt](https://github.com/guestwrt) in #55)**: Detects models that natively show Battery Cycle Count and Manufacture Date in iOS/iPadOS 17.4+ Settings (iPhone 15 series+ and M2/M4+ iPads), locking the legacy-hardware toggle when disabled or advising to turn it off if previously enabled.
+22. **Expanded Built-In Splash Ad Blocker Paths & Official iOS Bundle ID Mappings (`v1.0.7`)**
+    - **Curated Per-App Splash & Ad Paths (`AdCacheBlockerView`, thanks to [@oooasis](https://github.com/oooasis) and [@itmubai](https://github.com/itmubai) for testing and sharing in [#58](https://github.com/Kianuni/Erosion-CN/issues/58))**: Added verified splash/ad paths strictly scoped to 7 popular app containers (excluding generic WebView/networking caches, with full restore and whitelist support):
+      - **Taobao (`com.taobao.taobao4iphone`)**: Added `Documents/TBDocuments/bootImagesDoc` alongside `bootImageDoc` and `bootImagebiz`;
+      - **JD (`com.360buy.jdmobile`)**: Corrected the official iOS App Store Bundle ID mapping and added `Library/Caches/startADImage`;
+      - **Dianping (`com.dianping.dpscope`)**: Added `Documents/splashes_new`;
+      - **China Mobile (`cn.10086.app`)**: Added `Library/DownloadCenter`;
+      - **Tencent Video (`com.tencent.live4iphone`)**: Added `Library/Caches/QAD/PreloadImageAdOrderCache`, `QADWatchHistoryAdCache`, `maxViewAdCacheFolderName`, `Library/Caches/TAD/PushAdPendantCache`, and `TADCache`;
+      - **Fanqie Novel (`com.dragon.read`)**: Added `Documents/TTAdSplashSimpleCache`;
+      - **Trip.com / Ctrip (`ctrip.com` / `ctrip.wireless`)**: Added `Library/Caches/LoadingImages`.
+    - **Localized Bundle ID Display Names (`CSStoreEngine` & `AppDataBackupView`)**: Added English and Simplified Chinese display-name mappings for the corrected/new official iOS Bundle IDs above.

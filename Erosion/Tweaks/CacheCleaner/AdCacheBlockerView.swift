@@ -1134,6 +1134,7 @@ struct AdCacheBlockerView: View {
         "com.taobao.taobao4iphone": [
             ("Documents/TBDocuments/bootImagebiz", "淘宝开屏启动配置 (bootImagebiz)", "Taobao Boot Splash Config (bootImagebiz)"),
             ("Documents/TBDocuments/bootImageDoc", "淘宝开屏启动缓存 (bootImageDoc)", "Taobao Boot Splash Assets (bootImageDoc)"),
+            ("Documents/TBDocuments/bootImagesDoc", "淘宝开屏启动缓存 (bootImagesDoc)", "Taobao Boot Splash Assets (bootImagesDoc)"),
             ("Library/Caches/TanxAd", "阿里妈妈 Tanx 广告", "Alimama Tanx Ad"),
             ("Library/Caches/TanxSDK", "阿里妈妈 Tanx SDK", "Alimama Tanx SDK"),
             ("Documents/SplashAd", "淘宝开屏广告", "Taobao Splash Ad")
@@ -1142,7 +1143,13 @@ struct AdCacheBlockerView: View {
             ("Library/Caches/TanxAd", "闲鱼 Tanx 广告缓存", "Idlefish Tanx Ad"),
             ("Library/Caches/SplashAd", "闲鱼开屏广告", "Idlefish Splash Ad")
         ],
+        "com.360buy.jdmobile": [
+            ("Library/Caches/startADImage", "京东开屏广告图片 (startADImage)", "JD Splash Ad Images (startADImage)"),
+            ("Library/Caches/JADYun", "京东直投广告 SDK", "JD JADYun Ad SDK"),
+            ("Library/Caches/JDAdSDK", "京东广告 SDK", "JD Ad SDK")
+        ],
         "com.jingdong.app.mall": [
+            ("Library/Caches/startADImage", "京东开屏广告图片 (startADImage)", "JD Splash Ad Images (startADImage)"),
             ("Library/Caches/JADYun", "京东直投广告 SDK", "JD JADYun Ad SDK"),
             ("Library/Caches/JDAdSDK", "京东广告 SDK", "JD Ad SDK")
         ],
@@ -1151,8 +1158,29 @@ struct AdCacheBlockerView: View {
             ("Library/Caches/SplashAd", "美团开屏广告缓存", "Meituan Splash Cache")
         ],
         "com.dianping.dpscope": [
+            ("Documents/splashes_new", "大众点评开屏广告 (splashes_new)", "Dianping Splash Ads (splashes_new)"),
             ("Library/Caches/DPSplashAd", "大众点评开屏广告", "Dianping Splash Ad"),
             ("Library/Caches/SplashAd", "大众点评广告缓存", "Dianping Splash Cache")
+        ],
+        "cn.10086.app": [
+            ("Library/DownloadCenter", "中国移动开屏与推广素材 (DownloadCenter)", "China Mobile Splash & Promo Cache (DownloadCenter)")
+        ],
+        "com.tencent.live4iphone": [
+            ("Library/Caches/QAD/PreloadImageAdOrderCache", "腾讯视频 QAD 预加载广告", "Tencent Video QAD Preload Ads"),
+            ("Library/Caches/QAD/QADWatchHistoryAdCache", "腾讯视频 QAD 历史广告缓存", "Tencent Video QAD History Ad Cache"),
+            ("Library/Caches/QAD/maxViewAdCacheFolderName", "腾讯视频 QAD 开屏闪屏广告", "Tencent Video QAD MaxView Splash Ads"),
+            ("Library/Caches/TAD/PushAdPendantCache", "腾讯视频 TAD 挂件推送广告", "Tencent Video TAD Pendant Ads"),
+            ("Library/Caches/TADCache", "腾讯视频 TAD 广告缓存", "Tencent Video TAD Cache"),
+            ("Documents/TADCache", "腾讯视频 TAD 文档广告缓存", "Tencent Video TAD Documents Cache")
+        ],
+        "com.dragon.read": [
+            ("Documents/TTAdSplashSimpleCache", "番茄小说开屏广告缓存 (TTAdSplashSimpleCache)", "Fanqie Novel Splash Ad Cache (TTAdSplashSimpleCache)")
+        ],
+        "ctrip.com": [
+            ("Library/Caches/LoadingImages", "携程开屏启动图缓存 (LoadingImages)", "Ctrip Splash LoadingImages Cache")
+        ],
+        "ctrip.wireless": [
+            ("Library/Caches/LoadingImages", "携程开屏启动图缓存 (LoadingImages)", "Ctrip Splash LoadingImages Cache")
         ],
         "com.autonavi.amap": [
             ("Library/Caches/AmapSplashAd", "高德开屏广告", "Amap Splash Ad"),
@@ -1243,6 +1271,8 @@ struct AdCacheBlockerView: View {
         "octopusad": ("章鱼广告 (OctopusAd)", "Octopus Ad SDK"),
         "jadyun": ("京东直投广告 (JADYun)", "JD JADYun Ad SDK"),
         "jdadsdk": ("京东广告 SDK", "JD Ad SDK"),
+        "startadimage": ("开屏广告图片缓存 (startADImage)", "Splash Ad Image Cache (startADImage)"),
+        "ttadsplashsimplecache": ("穿山甲开屏广告缓存 (TTAdSplashSimpleCache)", "Pangle Splash Ad Cache (TTAdSplashSimpleCache)"),
         "sigmob": ("Sigmob 广告 SDK", "Sigmob Ad SDK"),
         "windadsdk": ("Sigmob / WindAd", "WindAd SDK"),
         "windad": ("WindAd 广告缓存", "WindAd Cache"),
