@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-
 import QuickLook
 import ZIPFoundation
 
@@ -15,6 +14,11 @@ struct FolderRow: View {
     var file: FileItem
     var shouldGrant: Bool
     var isContainer: Bool = false
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var measuredSize: Int64? = nil
+    var onToggleSelect: (() -> Void)? = nil
+    var onBusyChange: ((String?) -> Void)? = nil
     
     @State private var previewURL: URL?
     @State private var folderType: FolderType = .normal
@@ -23,27 +27,66 @@ struct FolderRow: View {
     @State private var showWiFiShare = false
     
     var body: some View {
-        NavigationLink(destination: FileBrowserView(path: file.destURL, shouldGrant: shouldGrant)) {
-            HStack(spacing: isSolariumUI() ? 12 : 10) {
-                Group {
-                    Image(systemName: "folder")
-                        .frame(width: 20, alignment: .center)
-                        .foregroundStyle(file.hidden ? .secondary : .primary)
-                    Text(file.name)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .foregroundStyle(file.hidden ? .secondary : .primary)
-                }
-                
-                Spacer()
-                
+        Group {
+            if isSelecting {
                 Button {
-                    showInfo.toggle()
+                    onToggleSelect?()
                 } label: {
-                    Image(systemName: "info.circle")
+                    HStack(spacing: isSolariumUI() ? 12 : 10) {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                            .frame(width: 24, alignment: .center)
+
+                        Image(systemName: "folder")
+                            .frame(width: 20, alignment: .center)
+                            .foregroundStyle(file.hidden ? .secondary : .primary)
+
+                        Text(file.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(file.hidden ? .secondary : .primary)
+
+                        Spacer()
+
+                        if let measuredSize {
+                            Text(ByteCountFormatter.string(fromByteCount: measuredSize, countStyle: .file))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(file.hidden ? .secondary : .primary)
+            } else {
+                NavigationLink(destination: FileBrowserView(path: file.destURL, shouldGrant: shouldGrant)) {
+                    HStack(spacing: isSolariumUI() ? 12 : 10) {
+                        Group {
+                            Image(systemName: "folder")
+                                .frame(width: 20, alignment: .center)
+                                .foregroundStyle(file.hidden ? .secondary : .primary)
+                            Text(file.name)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .foregroundStyle(file.hidden ? .secondary : .primary)
+                        }
+                        
+                        Spacer()
+
+                        if let measuredSize {
+                            Text(ByteCountFormatter.string(fromByteCount: measuredSize, countStyle: .file))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Button {
+                            showInfo.toggle()
+                        } label: {
+                            Image(systemName: "info.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(file.hidden ? .secondary : .primary)
+                    }
+                }
             }
         }
         .foregroundStyle(Color(.label))
@@ -58,7 +101,7 @@ struct FolderRow: View {
         }
         .quickLookPreview($previewURL)
         .contextMenu {
-            if !isContainer {
+            if !isContainer && !isSelecting {
                 Button {
                     previewURL = file.fileURL
                 } label: {
@@ -72,14 +115,17 @@ struct FolderRow: View {
                 } label: {
                     Label("显示简介", systemImage: "info.circle")
                 }
+
+                if !FileSafetyGuard.isContainerRootOrSystemRoot(file.fileURL) {
+                    Button {
+                        promptRename()
+                    } label: {
+                        Label("重命名", systemImage: "pencil")
+                    }
+                }
                 
                 Button {
-                    let res = zipFile(file.fileURL)
-                    if res {
-                        mgr.refreshFiles.toggle()
-                    } else {
-                        Alertinator.shared.alert(title: L("压缩文件夹失败！"), body: Errors.checkLogs)
-                    }
+                    runZip()
                 } label: {
                     Label("压缩为 ZIP", systemImage: "archivebox")
                 }
@@ -87,9 +133,7 @@ struct FolderRow: View {
                 Divider()
                 
                 Button {
-                    if let url = makeTemp(file.fileURL) {
-                        presentShareSheet(with: url)
-                    }
+                    runShare()
                 } label: {
                     Label("分享", systemImage: "square.and.arrow.up")
                 }
@@ -160,10 +204,126 @@ struct FolderRow: View {
                 Divider()
                 
                 Button(role: .destructive) {
-                    try? fm.removeItem(at: file.fileURL)
-                    mgr.refreshFiles.toggle()
+                    promptDelete()
                 } label: {
                     Label("删除", systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func promptRename() {
+        let targetURL = file.fileURL
+        if let reason = FileSafetyGuard.protectionReason(for: targetURL, operation: .rename) {
+            Alertinator.shared.alert(
+                title: LocalizationManager.isEnglish ? "Protected Folder" : "受保护目录",
+                body: reason
+            )
+            return
+        }
+        Alertinator.shared.prompt(
+            title: LocalizationManager.isEnglish ? "Enter new folder name:" : "请输入新的文件夹名称：",
+            placeholder: file.name,
+            text: file.name
+        ) { result in
+            guard let name = result?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
+            await MainActor.run {
+                onBusyChange?(LocalizationManager.isEnglish ? "Renaming folder..." : "正在重命名文件夹…")
+            }
+            let outcome = await Task.detached(priority: .userInitiated) {
+                await renameItemDetailed(targetURL, to: name)
+            }.value
+            await MainActor.run {
+                onBusyChange?(nil)
+                switch outcome {
+                case .success:
+                    Haptic.shared.notify(.success)
+                    mgr.refreshFiles.toggle()
+                case .failure(let error):
+                    Haptic.shared.notify(.error)
+                    Alertinator.shared.alert(
+                        title: LocalizationManager.isEnglish ? "Failed to Rename Folder" : "重命名文件夹失败！",
+                        body: error.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+
+    private func runZip() {
+        let sourceURL = file.fileURL
+        let parentDir = sourceURL.deletingLastPathComponent()
+        onBusyChange?(LocalizationManager.isEnglish ? "Compressing \(file.name)..." : "正在压缩 \(file.name)…")
+        Task.detached(priority: .userInitiated) {
+            let outcome = await zipItemsDetailed([sourceURL], in: parentDir)
+            await MainActor.run {
+                onBusyChange?(nil)
+                switch outcome {
+                case .success:
+                    Haptic.shared.notify(.success)
+                    mgr.refreshFiles.toggle()
+                case .failure(let error):
+                    Haptic.shared.notify(.error)
+                    Alertinator.shared.alert(title: L("压缩文件夹失败！"), body: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func runShare() {
+        let sourceURL = file.fileURL
+        onBusyChange?(LocalizationManager.isEnglish ? "Preparing folder to share..." : "正在打包准备分享…")
+        Task.detached(priority: .userInitiated) {
+            let res = makeTempItems([sourceURL])
+            await MainActor.run {
+                onBusyChange?(nil)
+                switch res {
+                case .success(let urls):
+                    presentShareSheet(with: urls)
+                case .failure(let error):
+                    Alertinator.shared.alert(
+                        title: LocalizationManager.isEnglish ? "Share Failed" : "分享失败",
+                        body: error.localizedDescription
+                    )
+                }
+            }
+        }
+    }
+
+    private func promptDelete() {
+        let targetURL = file.fileURL
+        if let reason = FileSafetyGuard.protectionReason(for: targetURL, operation: .delete) {
+            Alertinator.shared.alert(
+                title: LocalizationManager.isEnglish ? "Protected Folder" : "受保护目录",
+                body: reason
+            )
+            return
+        }
+
+        Alertinator.shared.confirmDestructive(
+            title: LocalizationManager.isEnglish ? "Delete Folder?" : "确认删除文件夹？",
+            body: LocalizationManager.isEnglish
+                ? "Permanently delete \"\(file.name)\" and all files inside it? This action cannot be undone."
+                : "确定要永久删除文件夹「\(file.name)」及其内部全部内容吗？此操作无法撤销。",
+            destructiveLabel: LocalizationManager.isEnglish ? "Delete" : "删除"
+        ) {
+            onBusyChange?(LocalizationManager.isEnglish ? "Deleting \(file.name)..." : "正在删除 \(file.name)…")
+            Task.detached(priority: .userInitiated) {
+                let report = await deleteItemsDetailed([targetURL])
+                await MainActor.run {
+                    onBusyChange?(nil)
+                    if report.hasFailures {
+                        Haptic.shared.notify(.error)
+                        Alertinator.shared.alert(
+                            title: LocalizationManager.isEnglish ? "Failed to Delete Folder" : "删除文件夹失败！",
+                            body: report.failures.first?.reason ?? Errors.checkLogs
+                        )
+                    } else {
+                        Haptic.shared.notify(.success)
+                        mgr.refreshFiles.toggle()
+                    }
                 }
             }
         }

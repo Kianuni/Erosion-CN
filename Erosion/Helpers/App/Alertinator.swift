@@ -45,10 +45,55 @@ public class Alertinator {
             self.enqueue(alert)
         }
     }
-    
-    public func prompt(title: String, placeholder: String = "", text: String = "", showCancel: Bool = true, completion: @escaping (String?) async -> Void) {
+
+    public func confirmDestructive(
+        title: String,
+        body: String,
+        destructiveLabel: String,
+        cancelLabel: String? = nil,
+        action: @escaping () -> Void
+    ) {
         Task { @MainActor in
-            let alert = UIAlertController(title: title.loc, message: nil, preferredStyle: .alert)
+            let alert = UIAlertController(title: title.loc, message: body.loc, preferredStyle: .alert)
+            alert.addAction(.init(title: (cancelLabel ?? L("取消")).loc, style: .cancel) { _ in
+                self.scheduleNextDrain()
+            })
+            alert.addAction(.init(title: destructiveLabel.loc, style: .destructive) { _ in
+                action()
+                self.scheduleNextDrain()
+            })
+            alert.view.tintColor = UIColor(named: "AccentColor")
+            self.enqueue(alert)
+        }
+    }
+
+    public func choose(
+        title: String,
+        body: String,
+        actions: [(title: String, style: UIAlertAction.Style, handler: () -> Void)],
+        cancelLabel: String? = nil,
+        onCancel: (() -> Void)? = nil
+    ) {
+        Task { @MainActor in
+            let alert = UIAlertController(title: title.loc, message: body.loc, preferredStyle: .alert)
+            for item in actions {
+                alert.addAction(.init(title: item.title.loc, style: item.style) { _ in
+                    item.handler()
+                    self.scheduleNextDrain()
+                })
+            }
+            alert.addAction(.init(title: (cancelLabel ?? L("取消")).loc, style: .cancel) { _ in
+                onCancel?()
+                self.scheduleNextDrain()
+            })
+            alert.view.tintColor = UIColor(named: "AccentColor")
+            self.enqueue(alert)
+        }
+    }
+    
+    public func prompt(title: String, message: String? = nil, placeholder: String = "", text: String = "", showCancel: Bool = true, completion: @escaping (String?) async -> Void) {
+        Task { @MainActor in
+            let alert = UIAlertController(title: title.loc, message: message?.loc, preferredStyle: .alert)
             alert.addTextField { field in
                 if !placeholder.isEmpty {
                     field.placeholder = placeholder.loc

@@ -115,6 +115,16 @@
       - **番茄小说 (`com.dragon.read`)**：新增 `Documents/TTAdSplashSimpleCache`；
       - **携程旅行 (`ctrip.com` / `ctrip.wireless`)**：新增 `Library/Caches/LoadingImages`。
     - 同步在 `CSStoreEngine` 与 `AppDataBackupView` 补全上述应用的官方 iOS Bundle ID 中英文友好名称映射。
+23. **文件管理器全面升级：文件夹/多文件导入、多选批量操作、删除/解压确认与底层安全护栏（`v1.0.8`）**
+    - **实现 [#75](https://github.com/Kianuni/Erosion-CN/issues/75) 全部 4 项文件管理体验建议（感谢 [@leopoldchou](https://github.com/leopoldchou)）**：
+      1. **拆分「导入文件（多选）」与「导入文件夹（递归复制）」**：在文件浏览器右上角菜单提供独立的文件与文件夹导入入口，采用流式安全复制（避免大文件内存暴涨）与自动写入授权申请，同名冲突时弹窗选择 **保留两者（自动编号重命名）** 或 **覆盖替换**；
+      2. **多选模式与批量操作栏**：右上角操作菜单新增 **「选择文件…」**，进入后支持顶部 **全选 / 取消全选** 与底部操作栏一键 **批量分享**、**批量打包 ZIP** 及 **批量删除（含二次确认与逐项失败汇总）**；
+      3. **单文件 / 文件夹 / 批量删除二次确认弹窗**：点击删除时明确展示目标名称或数量与不可撤销警告，删除失败时直接弹窗呈现真实错误原因；
+      4. **ZIP 解压缩确认与详细报错提示**：轻点 `.zip` 文件或长按选择「解压缩」均先弹窗确认，支持 **「解压到当前目录」** 与 **「解压到同名文件夹」** 双选项，后台异步解压并在失败时弹窗显示具体原因（不再仅靠振动提示或跳日志排查），同时为重命名、打包、创建副本与新建项目补全真实错误提示及原文件名预填。
+    - **文件管理器底层安全与交互细节增强**：
+      - **容器根目录与关键文件防呆保护**：拦截删除、重命名或覆盖应用/系统容器根目录、容器元数据文件、原厂安全备份金库、`.erosion_adlock` 占位锁与 `com.apple.MobileGestalt.plist`，并校验 ZIP 内符号链接越界；
+      - **SQLite 数据库伴随文件（`-wal` / `-shm` / `-journal`）联动保护与占用检测**：通过无侵入 `fcntl(F_GETLK)` 与 10 秒活跃写入检测拦截正在被 App/小组件占用的数据库操作，支持删除/重命名/保留两者导入时自动保持伴随文件成组同步，并将 `errno 35 (EAGAIN)` / `EBUSY` / `EACCES` / `ENOSPC` 翻译为清晰中英双语提示；
+      - **新增文件夹重命名、空目录 / 无搜索结果占位视图与可选异步文件夹体积显示**：支持在「浏览设置」开启 **「显示文件夹大小」**（后台 POSIX 异步计算并参与按大小排序），使用稳定路径标识避免刷新丢状态。
 
 ---
 
@@ -214,3 +224,13 @@
       - **Fanqie Novel (`com.dragon.read`)**: Added `Documents/TTAdSplashSimpleCache`;
       - **Trip.com / Ctrip (`ctrip.com` / `ctrip.wireless`)**: Added `Library/Caches/LoadingImages`.
     - **Localized Bundle ID Display Names (`CSStoreEngine` & `AppDataBackupView`)**: Added English and Simplified Chinese display-name mappings for the corrected/new official iOS Bundle IDs above.
+23. **Major File Manager Upgrade: Folder/Multi-File Import, Multi-Select Batch Actions, Delete/Unzip Confirmations & Safety Guardrails (`v1.0.8`)**
+    - **Implemented all 4 File Manager feature requests from [#75](https://github.com/Kianuni/Erosion-CN/issues/75) (thanks to [@leopoldchou](https://github.com/leopoldchou))**:
+      1. **Dedicated "Import Files" (Multi-Select) & "Import Folder" (Recursive Copy)**: Split into separate pickers in the top-right menu with automatic container write-access grants, streaming copy without memory spikes, and a collision dialog (**Keep Both** auto-renaming vs **Replace**);
+      2. **Multi-Select Mode & Batch Action Bar**: Added **Select Items…** in the toolbar menu with **Select All / Deselect All** and a bottom glass action bar for **Batch Share**, **Batch Zip**, and **Batch Delete** (with destructive confirmation and per-item failure summaries);
+      3. **Destructive Delete Confirmations**: Added confirmation dialogs displaying exact item names/counts before deleting any file, folder, or batch selection, surfacing real error reasons on failure;
+      4. **Unzip Confirmation & Actionable Error Alerts**: Tapping or long-pressing a `.zip` file now prompts with **Extract to Current Folder** or **Extract to Subfolder** (preventing name collisions), extracts asynchronously off the main thread, and shows exact failure reasons in an alert (alongside real error alerts and pre-filled filenames for Rename, Zip, Duplicate, and Create).
+    - **File Manager Safety & UX Hardening**:
+      - **Container Root & Critical Path Guard**: Blocks deleting, renaming, or overwriting app/system container roots, container metadata plists, factory backup vault files, `.erosion_adlock` sentinels, and `com.apple.MobileGestalt.plist`, plus validates archive symlinks against directory escape;
+      - **SQLite Companion Set (`-wal` / `-shm` / `-journal`) Protection & Active-Lock Detection**: Uses non-invasive `fcntl(F_GETLK)` and 10-second WAL write checks to block modifying in-use databases, keeps companions synchronized on delete/rename/Keep-Both imports, and translates POSIX `EAGAIN (35)` / `EBUSY` / `EACCES` / `ENOSPC` errors into clear bilingual guidance;
+      - **Folder Rename, Empty/No-Results Placeholders & Optional Async Folder Sizes**: Added guarded folder renaming, `ContentUnavailableView` empty/search states, stable path-based item IDs, and an optional **Show Folder Sizes** toggle in Browser Settings (computed asynchronously via POSIX `fstatat` and integrated with Size sorting).

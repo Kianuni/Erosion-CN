@@ -9,7 +9,7 @@ import Foundation
 import UniformTypeIdentifiers
 
 struct FileItem: Identifiable {
-    let id = UUID()
+    nonisolated var id: String { FMNavigationStore.canonicalPath(fileURL.standardizedFileURL.path) }
     var name: String
     var fileURL: URL
     var destURL: URL

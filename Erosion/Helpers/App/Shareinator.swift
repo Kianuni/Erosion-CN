@@ -10,9 +10,15 @@ import UIKit
 
 @MainActor
 public func presentShareSheet(with url: URL) {
+    presentShareSheet(with: [url])
+}
+
+@MainActor
+public func presentShareSheet(with urls: [URL]) {
+    guard !urls.isEmpty else { return }
     Alertinator.shared.runWhenPresentationIdle {
         guard let topController = Alertinator.resolveActivePresenter() else { return }
-        let activityViewController = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        let activityViewController = UIActivityViewController(activityItems: urls, applicationActivities: nil)
         if let popover = activityViewController.popoverPresentationController {
             popover.sourceView = topController.view
             popover.sourceRect = CGRect(x: topController.view.bounds.midX, y: topController.view.bounds.midY, width: 1, height: 1)
@@ -21,4 +27,3 @@ public func presentShareSheet(with url: URL) {
         topController.present(activityViewController, animated: true)
     }
 }
-
